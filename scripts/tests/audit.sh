@@ -106,11 +106,13 @@ sec "2. Esteira — 15 etapas + 99"
 # ============================================================================
 # Etapa fechada move de $ROADMAP para $ROADMAP/concluidas — procurar nos dois
 # é o que faz esta seção continuar válida depois que a esteira anda.
+# 18 = 15 originais + 99 + 13.5 (reconciliação) + 16 (lacunas do PDF).
+# A esteira cresceu na reconciliação pós-auditoria; ver CLAUDE.md § 10.
 N_STEPS=$(ls "$ROADMAP"/[0-9]*.md "$ROADMAP/concluidas"/[0-9]*.md 2>/dev/null | wc -l)
-if [ "$N_STEPS" -eq 16 ]; then ok A2.1 "16 arquivos de etapa (15 + 99)"
-else bad A2.1 "esperava 16 arquivos de etapa, achei $N_STEPS"; fi
+if [ "$N_STEPS" -eq 18 ]; then ok A2.1 "18 arquivos de etapa (15 + 99 + 13.5 + 16)"
+else bad A2.1 "esperava 18 arquivos de etapa, achei $N_STEPS"; fi
 
-for n in 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 99; do
+for n in 01 02 03 04 05 06 07 08 09 10 11 12 13 13.5 14 15 16 99; do
   f=$(ls "$ROADMAP/$n"-*.md "$ROADMAP/concluidas/$n"-*.md 2>/dev/null | head -1)
   if [ -z "$f" ]; then bad "A2.$n" "etapa $n ausente"; continue; fi
 
@@ -146,7 +148,7 @@ has_impeditivo_ficha() {
 }
 
 BLOQ_NASCENTE=0
-for n in 05 06 07 08 12 13 99; do
+for n in 05 06 07 08 12 13 13.5 99; do
   f=$(ls "$ROADMAP/$n"-*.md "$ROADMAP/concluidas/$n"-*.md 2>/dev/null | head -1)
   if has_impeditivo_ficha "$f"; then
     BLOQ_NASCENTE=$((BLOQ_NASCENTE + 1))
@@ -154,16 +156,16 @@ for n in 05 06 07 08 12 13 99; do
     bad "A2.i$n" "etapa $n sem o impeditivo da ficha"
   fi
 done
-if [ "$BLOQ_NASCENTE" -eq 7 ]; then ok A2.b "7 etapas nascem BLOQUEADA (impeditivo da ficha presente)"
-else bad A2.b "esperava 7 etapas com o impeditivo da ficha, achei $BLOQ_NASCENTE"; fi
+if [ "$BLOQ_NASCENTE" -eq 8 ]; then ok A2.b "8 etapas nascem BLOQUEADA (impeditivo da ficha presente)"
+else bad A2.b "esperava 8 etapas com o impeditivo da ficha, achei $BLOQ_NASCENTE"; fi
 
 # Nenhuma etapa fora das 7 pode ter herdado o impeditivo por engano
 OUTRAS_COM_IMPEDITIVO=0
 for f in "$ROADMAP"/[0-9]*.md "$ROADMAP/concluidas"/[0-9]*.md; do
   has_impeditivo_ficha "$f" && OUTRAS_COM_IMPEDITIVO=$((OUTRAS_COM_IMPEDITIVO + 1))
 done
-if [ "$OUTRAS_COM_IMPEDITIVO" -eq 7 ]; then ok A2.b2 "impeditivo da ficha só nas 7 etapas certas"
-else bad A2.b2 "impeditivo da ficha em $OUTRAS_COM_IMPEDITIVO etapas, esperava exatamente 7"; fi
+if [ "$OUTRAS_COM_IMPEDITIVO" -eq 8 ]; then ok A2.b2 "impeditivo da ficha só nas 8 etapas certas"
+else bad A2.b2 "impeditivo da ficha em $OUTRAS_COM_IMPEDITIVO etapas, esperava exatamente 8"; fi
 
 # ============================================================================
 sec "3. Decisões travadas (não podem ter se perdido)"
@@ -222,15 +224,15 @@ grep_file A4.5 "$(step_file 10)" 'parâmetros de configuração|institution_conf
   "§3.2 B.1: tabela de configs do legado (origem do Dictionary)"
 
 # § 5.2 A.1 — backup dos TRÊS bancos
-grep_file A4.6 "$(step_file 15)" 'três bancos|3 bancos' \
+grep_file A4.6 "$(step_file 13.5)" 'três bancos|3 bancos' \
   "§5.2 A.1: backup dos três bancos"
-grep_file A4.7 "$(step_file 15)" 'legado' \
+grep_file A4.7 "$(step_file 13.5)" 'legado' \
   "§5.2 A.1: legado incluído no backup"
-grep_file A4.8 "$(step_file 15)" 'lifecycle|cross-region' \
+grep_file A4.8 "$(step_file 13.5)" 'lifecycle|cross-region' \
   "§5.2 A.1: destino AWS de produção documentado"
 
 # § 5.2 A.2 — as três contagens do recovery
-grep_file A4.9 "$(step_file 15)" '3 contagens|três contagens' \
+grep_file A4.9 "$(step_file 13.5)" '3 contagens|três contagens' \
   "§5.2 A.2: recovery com as 3 contagens"
 
 # § 5.2 B.2 — alertas integrados ao CloudWatch/SNS

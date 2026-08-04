@@ -64,16 +64,32 @@ SELECT pg_drop_replication_slot('trio_slot') WHERE EXISTS (
 > Ajustar os nomes ao que a etapa de fato criou. Não apaga dado do ClickHouse.
 
 ## STATUS
-Estado: BLOQUEADA
+Estado: **DESCARTADA** — abordagem inviável, causa-raiz provada. Substituída pela etapa 13.5 (sync-worker por watermark).
+
 Premissas assumidas: —
-Desvios do plano: —
+
+Desvios do plano: a etapa inteira foi descartada, não executada. Motivo: `publish_via_partition_root` **não funciona sobre hypertable** — ela não é tabela particionada nativa do PostgreSQL (`relkind='r'`, chunk com `relispartition='f'`), então o parâmetro não tem relação pai/filho sobre a qual agir e escritas em chunk nunca entram na publication.
+
+Prova experimental, isolando a decodificação lógica **sem o Debezium no circuito**:
+```
+pg_logical_slot_peek_binary_changes        -> 0 mudanças
+ALTER PUBLICATION ... ADD TABLE <o chunk>  -> 6 mudanças imediatamente
+```
+
+O evento que chegou ao tópico na primeira tentativa passou pelo RegexRouter (rotulado "rede de segurança"), que era na verdade **o único mecanismo funcionando**. Ao restringir `table.include.list` para só `public.transactions`, esse caminho foi cortado e o pipeline parou.
+
+Diagnóstico completo em `AUDITORIA-E-REPLANEJAMENTO.md` §§ 2.3, 2.4 e 4.1.
+
+**O Debezium nunca foi requisito do PDF.** O § 2.2 diz "sinta-se livre para adicionar"; o § 4.2 A.1 lista 4 abordagens em pé de igualdade, incluindo micro-batch, e cobra apenas a **justificativa escrita**. O trabalho feito aqui vira o insumo dessa justificativa no ADR (etapa 14).
+
+**O que foi aproveitado:** `sink.py`, `metrics.py`, `config.py` migraram para o sync-worker da etapa 13.5. O consumidor CDC e o `demo-mutation.sh` ficam no repositório como artefato da decisão, no profile `cdc-experimento`.
 
 ## FECHAMENTO
-- [ ] Critérios atendidos
-- [ ] Testes no run_all.sh
-- [ ] run_all.sh sem FAIL
-- [ ] ESTADO HERDADO da próxima preenchido
-- [ ] Bloco no LOG-EXECUCAO.md
-- [ ] Desvio? → atualizar 99-validacao-final.md
-- [ ] Commit checkpoint
-- [ ] Mover pra concluidas/. Marcar [x] no CLAUDE.md
+- [x] Critérios atendidos — n/a, etapa descartada
+- [x] Testes no run_all.sh — os testes 13.x não se aplicam; cobertura equivalente nos testes da 13.5
+- [x] run_all.sh sem FAIL
+- [x] ESTADO HERDADO da próxima preenchido (13.5)
+- [x] Bloco no LOG-EXECUCAO.md
+- [x] Desvio? → registrado em `99-validacao-final.md`
+- [x] Commit checkpoint (`328e8a9`)
+- [x] Mover pra concluidas/. Marcar [x] no CLAUDE.md
