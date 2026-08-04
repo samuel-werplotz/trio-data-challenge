@@ -9,20 +9,23 @@ help:            ## mostra esta ajuda
 	 awk 'BEGIN {FS=":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 ## ---------- ciclo de vida ----------
-up:              ## sobe o ambiente completo (perfil full)
-	$(COMPOSE) --profile full up -d
+# Sem --profile: os 13 serviços do caminho principal sobem por padrão, para que
+# o comando literal do PDF (`docker compose up -d`) funcione. Só o
+# `cdc-experimento` é opt-in — ver `make up-cdc-experimento`.
+up:              ## sobe o ambiente completo (13 serviços)
+	$(COMPOSE) up -d
 	@$(MAKE) wait-healthy
 
-up-core:         ## sobe só o essencial (máquinas menores)
-	$(COMPOSE) --profile core up -d
+up-cdc-experimento: ## sobe também Redpanda/Debezium (artefato da decisão, ver ADR)
+	$(COMPOSE) --profile cdc-experimento up -d
 	@$(MAKE) wait-healthy
 
 down:            ## derruba mantendo os dados
-	$(COMPOSE) --profile full down
+	$(COMPOSE) --profile cdc-experimento down
 
 nuke:            ## APAGA TUDO, inclusive volumes
-	$(COMPOSE) --profile full down -v
-	@echo "volumes removidos — o próximo 'make seed' leva ~20 min"
+	$(COMPOSE) --profile cdc-experimento down -v
+	@echo "volumes removidos — o próximo 'make seed' leva ~2 min"
 
 wait-healthy:    ## aguarda todos os healthchecks
 	@./scripts/wait-healthy.sh

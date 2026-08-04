@@ -4,8 +4,13 @@
 #
 #  Uso:
 #    cp .env.example .env
-#    docker compose --profile core up -d   # essencial (schema, seed, api)
-#    docker compose --profile full up -d   # ambiente completo (+ pipeline CDC, observabilidade)
+#    docker compose up -d                          # os 13 servicos do caminho principal
+#    docker compose --profile cdc-experimento up -d  # + Redpanda/Debezium (artefato)
+#
+#  Os servicos do caminho principal NAO declaram `profiles`: em Compose, servico
+#  sem profile sempre sobe, e e isso que faz o comando literal do criterio de
+#  aceite nº 1 do PDF funcionar. Poe-los atras de um profile fazia
+#  `docker compose up -d` responder "no service selected" e subir zero container.
 #
 #  MinIO publica na 9002, não 9000: a 9000 é a porta nativa do ClickHouse.
 #  Dentro da rede Docker os dois continuam em 9000 — só o mapeamento externo muda.
