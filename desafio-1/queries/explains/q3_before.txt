@@ -1,0 +1,1105 @@
+-- Query: q3
+-- Arquivo fonte: q3_top_instituicoes.sql
+-- Protocolo: 4 execuções, 1ª descartada (aquece cache), mediana das 3 seguintes = 1284.883ms
+-- Tempos das 3 execuções medidas (ms): 1284.883 1289.126 1244.084
+-- EXPLAIN abaixo é da última execução (cache já quente, mesmo plano)
+--
+                                                                                                                                                                 QUERY PLAN                                                                                                                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=120614.37..120614.41 rows=15 width=108) (actual time=1171.997..1183.209 rows=15 loops=1)
+   Output: transactions.source_institution, (count(*)), (sum(transactions.amount)), (avg(EXTRACT(epoch FROM (transactions.settled_at - transactions.created_at)))), (((count(*) FILTER (WHERE (transactions.status = 'failed'::transaction_status)))::numeric / (count(*))::numeric))
+   Buffers: shared hit=53407
+   ->  Sort  (cost=120614.37..120614.41 rows=15 width=108) (actual time=799.513..810.722 rows=15 loops=1)
+         Output: transactions.source_institution, (count(*)), (sum(transactions.amount)), (avg(EXTRACT(epoch FROM (transactions.settled_at - transactions.created_at)))), (((count(*) FILTER (WHERE (transactions.status = 'failed'::transaction_status)))::numeric / (count(*))::numeric))
+         Sort Key: (sum(transactions.amount)) DESC
+         Sort Method: quicksort  Memory: 26kB
+         Buffers: shared hit=53407
+         ->  Finalize HashAggregate  (cost=120613.74..120614.08 rows=15 width=108) (actual time=799.431..810.646 rows=15 loops=1)
+               Output: transactions.source_institution, count(*), sum(transactions.amount), avg(EXTRACT(epoch FROM (transactions.settled_at - transactions.created_at))), ((count(*) FILTER (WHERE (transactions.status = 'failed'::transaction_status)))::numeric / (count(*))::numeric)
+               Group Key: transactions.source_institution
+               Batches: 1  Memory Usage: 144kB
+               Buffers: shared hit=53404
+               ->  Gather  (cost=1000.29..120565.93 rows=2732 width=84) (actual time=342.831..809.265 rows=1410 loops=1)
+                     Output: transactions.source_institution, (PARTIAL count(*)), (PARTIAL sum(transactions.amount)), (PARTIAL avg(EXTRACT(epoch FROM (transactions.settled_at - transactions.created_at)))), (PARTIAL count(*) FILTER (WHERE (transactions.status = 'failed'::transaction_status)))
+                     Workers Planned: 2
+                     Workers Launched: 2
+                     Buffers: shared hit=53404
+                     ->  Parallel Custom Scan (ChunkAppend) on public.transactions  (cost=0.29..119292.73 rows=1366 width=84) (actual time=394.853..741.781 rows=470 loops=3)
+                           Output: transactions.source_institution, (PARTIAL count(*)), (PARTIAL sum(transactions.amount)), (PARTIAL avg(EXTRACT(epoch FROM (transactions.settled_at - transactions.created_at)))), (PARTIAL count(*) FILTER (WHERE (transactions.status = 'failed'::transaction_status)))
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 1
+                           Buffers: shared hit=53404
+                           Worker 0:  actual time=426.474..715.736 rows=405 loops=1
+                             JIT:
+                               Functions: 728
+                               Options: Inlining false, Optimization false, Expressions true, Deforming true
+                               Timing: Generation 46.484 ms, Inlining 0.000 ms, Optimization 16.308 ms, Emission 386.552 ms, Total 449.344 ms
+                             Buffers: shared hit=11393
+                           Worker 1:  actual time=419.243..716.948 rows=450 loops=1
+                             JIT:
+                               Functions: 728
+                               Options: Inlining false, Optimization false, Expressions true, Deforming true
+                               Timing: Generation 43.849 ms, Inlining 0.000 ms, Optimization 14.923 ms, Emission 383.520 ms, Total 442.292 ms
+                             Buffers: shared hit=12460
+                           ->  Partial HashAggregate  (cost=24915.44..24915.66 rows=15 width=84) (actual time=338.839..338.846 rows=15 loops=1)
+                                 Output: _hyper_1_1115_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1115_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1115_chunk.settled_at - _hyper_1_1115_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1115_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1115_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=12760
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1115_chunk  (cost=0.00..18432.54 rows=324145 width=30) (actual time=0.049..143.198 rows=777948 loops=1)
+                                       Output: _hyper_1_1115_chunk.source_institution, _hyper_1_1115_chunk.amount, _hyper_1_1115_chunk.settled_at, _hyper_1_1115_chunk.created_at, _hyper_1_1115_chunk.status
+                                       Filter: (_hyper_1_1115_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=12760
+                           ->  Partial HashAggregate  (cost=2074.11..2074.33 rows=15 width=84) (actual time=419.240..419.245 rows=15 loops=1)
+                                 Output: _hyper_1_906_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_906_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_906_chunk.settled_at - _hyper_1_906_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_906_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_906_chunk.source_institution
+                                 Buffers: shared hit=896
+                                 Worker 1:  actual time=419.240..419.245 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=896
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_906_chunk  (cost=0.00..1445.79 rows=31416 width=30) (actual time=397.591..406.491 rows=53408 loops=1)
+                                       Output: _hyper_1_906_chunk.source_institution, _hyper_1_906_chunk.amount, _hyper_1_906_chunk.settled_at, _hyper_1_906_chunk.created_at, _hyper_1_906_chunk.status
+                                       Filter: (_hyper_1_906_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=896
+                                       Worker 1:  actual time=397.591..406.491 rows=53408 loops=1
+                                         Buffers: shared hit=896
+                           ->  Partial HashAggregate  (cost=2010.14..2010.37 rows=15 width=84) (actual time=426.471..426.476 rows=15 loops=1)
+                                 Output: _hyper_1_1102_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1102_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1102_chunk.settled_at - _hyper_1_1102_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1102_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1102_chunk.source_institution
+                                 Buffers: shared hit=864
+                                 Worker 0:  actual time=426.471..426.476 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=864
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1102_chunk  (cost=0.00..1398.86 rows=30564 width=30) (actual time=402.030..411.961 rows=51958 loops=1)
+                                       Output: _hyper_1_1102_chunk.source_institution, _hyper_1_1102_chunk.amount, _hyper_1_1102_chunk.settled_at, _hyper_1_1102_chunk.created_at, _hyper_1_1102_chunk.status
+                                       Filter: (_hyper_1_1102_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=864
+                                       Worker 0:  actual time=402.030..411.961 rows=51958 loops=1
+                                         Buffers: shared hit=864
+                           ->  Partial HashAggregate  (cost=1931.00..1931.22 rows=15 width=84) (actual time=21.936..21.941 rows=15 loops=1)
+                                 Output: _hyper_1_950_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_950_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_950_chunk.settled_at - _hyper_1_950_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_950_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_950_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=824
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_950_chunk  (cost=0.00..1340.60 rows=29520 width=30) (actual time=0.018..9.157 rows=50184 loops=1)
+                                       Output: _hyper_1_950_chunk.source_institution, _hyper_1_950_chunk.amount, _hyper_1_950_chunk.settled_at, _hyper_1_950_chunk.created_at, _hyper_1_950_chunk.status
+                                       Filter: (_hyper_1_950_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=824
+                           ->  Partial HashAggregate  (cost=1304.67..1304.89 rows=15 width=84) (actual time=13.680..13.687 rows=15 loops=1)
+                                 Output: _hyper_1_914_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_914_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_914_chunk.settled_at - _hyper_1_914_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_914_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_914_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=564
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_914_chunk  (cost=0.00..909.65 rows=19751 width=30) (actual time=0.010..5.718 rows=33577 loops=1)
+                                       Output: _hyper_1_914_chunk.source_institution, _hyper_1_914_chunk.amount, _hyper_1_914_chunk.settled_at, _hyper_1_914_chunk.created_at, _hyper_1_914_chunk.status
+                                       Filter: (_hyper_1_914_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=564
+                           ->  Partial HashAggregate  (cost=1301.81..1302.03 rows=15 width=84) (actual time=16.168..16.174 rows=15 loops=1)
+                                 Output: _hyper_1_925_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_925_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_925_chunk.settled_at - _hyper_1_925_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_925_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_925_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=561
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_925_chunk  (cost=0.00..906.71 rows=19755 width=30) (actual time=0.034..6.912 rows=33583 loops=1)
+                                       Output: _hyper_1_925_chunk.source_institution, _hyper_1_925_chunk.amount, _hyper_1_925_chunk.settled_at, _hyper_1_925_chunk.created_at, _hyper_1_925_chunk.status
+                                       Filter: (_hyper_1_925_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=561
+                           ->  Partial HashAggregate  (cost=1301.86..1302.09 rows=15 width=84) (actual time=16.257..16.261 rows=15 loops=1)
+                                 Output: _hyper_1_913_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_913_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_913_chunk.settled_at - _hyper_1_913_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_913_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_913_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=560
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_913_chunk  (cost=0.00..906.20 rows=19783 width=30) (actual time=0.023..7.095 rows=33631 loops=1)
+                                       Output: _hyper_1_913_chunk.source_institution, _hyper_1_913_chunk.amount, _hyper_1_913_chunk.settled_at, _hyper_1_913_chunk.created_at, _hyper_1_913_chunk.status
+                                       Filter: (_hyper_1_913_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=560
+                           ->  Partial HashAggregate  (cost=1298.78..1299.00 rows=15 width=84) (actual time=13.525..13.530 rows=15 loops=1)
+                                 Output: _hyper_1_908_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_908_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_908_chunk.settled_at - _hyper_1_908_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_908_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_908_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=561
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_908_chunk  (cost=0.00..905.30 rows=19674 width=30) (actual time=0.008..5.988 rows=33446 loops=1)
+                                       Output: _hyper_1_908_chunk.source_institution, _hyper_1_908_chunk.amount, _hyper_1_908_chunk.settled_at, _hyper_1_908_chunk.created_at, _hyper_1_908_chunk.status
+                                       Filter: (_hyper_1_908_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=561
+                           ->  Partial HashAggregate  (cost=1296.09..1296.32 rows=15 width=84) (actual time=14.458..14.464 rows=15 loops=1)
+                                 Output: _hyper_1_907_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_907_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_907_chunk.settled_at - _hyper_1_907_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_907_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_907_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=560
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_907_chunk  (cost=0.00..903.51 rows=19629 width=30) (actual time=0.020..6.076 rows=33370 loops=1)
+                                       Output: _hyper_1_907_chunk.source_institution, _hyper_1_907_chunk.amount, _hyper_1_907_chunk.settled_at, _hyper_1_907_chunk.created_at, _hyper_1_907_chunk.status
+                                       Filter: (_hyper_1_907_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=560
+                           ->  Partial HashAggregate  (cost=1296.78..1297.00 rows=15 width=84) (actual time=14.308..14.313 rows=15 loops=1)
+                                 Output: _hyper_1_912_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_912_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_912_chunk.settled_at - _hyper_1_912_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_912_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_912_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=559
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_912_chunk  (cost=0.00..903.30 rows=19674 width=30) (actual time=0.013..5.757 rows=33446 loops=1)
+                                       Output: _hyper_1_912_chunk.source_institution, _hyper_1_912_chunk.amount, _hyper_1_912_chunk.settled_at, _hyper_1_912_chunk.created_at, _hyper_1_912_chunk.status
+                                       Filter: (_hyper_1_912_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=559
+                           ->  Partial HashAggregate  (cost=1289.10..1289.32 rows=15 width=84) (actual time=14.183..14.201 rows=15 loops=1)
+                                 Output: _hyper_1_923_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_923_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_923_chunk.settled_at - _hyper_1_923_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_923_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_923_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=560
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_923_chunk  (cost=0.00..903.17 rows=19296 width=30) (actual time=0.009..6.164 rows=32814 loops=1)
+                                       Output: _hyper_1_923_chunk.source_institution, _hyper_1_923_chunk.amount, _hyper_1_923_chunk.settled_at, _hyper_1_923_chunk.created_at, _hyper_1_923_chunk.status
+                                       Filter: (_hyper_1_923_chunk.created_at >= (now() - '90 days'::interval))
+                                       Rows Removed by Filter: 523
+                                       Buffers: shared hit=560
+                           ->  Partial HashAggregate  (cost=1294.14..1294.36 rows=15 width=84) (actual time=14.419..14.424 rows=15 loops=1)
+                                 Output: _hyper_1_905_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_905_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_905_chunk.settled_at - _hyper_1_905_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_905_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_905_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=557
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_905_chunk  (cost=0.00..901.00 rows=19657 width=30) (actual time=0.021..6.210 rows=33417 loops=1)
+                                       Output: _hyper_1_905_chunk.source_institution, _hyper_1_905_chunk.amount, _hyper_1_905_chunk.settled_at, _hyper_1_905_chunk.created_at, _hyper_1_905_chunk.status
+                                       Filter: (_hyper_1_905_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=557
+                           ->  Partial HashAggregate  (cost=1292.90..1293.13 rows=15 width=84) (actual time=14.624..14.631 rows=15 loops=1)
+                                 Output: _hyper_1_915_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_915_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_915_chunk.settled_at - _hyper_1_915_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_915_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_915_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=557
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_915_chunk  (cost=0.00..900.42 rows=19624 width=30) (actual time=0.009..6.459 rows=33361 loops=1)
+                                       Output: _hyper_1_915_chunk.source_institution, _hyper_1_915_chunk.amount, _hyper_1_915_chunk.settled_at, _hyper_1_915_chunk.created_at, _hyper_1_915_chunk.status
+                                       Filter: (_hyper_1_915_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=557
+                           ->  Partial HashAggregate  (cost=1292.09..1292.32 rows=15 width=84) (actual time=12.435..12.440 rows=15 loops=1)
+                                 Output: _hyper_1_921_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_921_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_921_chunk.settled_at - _hyper_1_921_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_921_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_921_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=556
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_921_chunk  (cost=0.00..899.51 rows=19629 width=30) (actual time=0.010..5.413 rows=33370 loops=1)
+                                       Output: _hyper_1_921_chunk.source_institution, _hyper_1_921_chunk.amount, _hyper_1_921_chunk.settled_at, _hyper_1_921_chunk.created_at, _hyper_1_921_chunk.status
+                                       Filter: (_hyper_1_921_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=556
+                           ->  Partial HashAggregate  (cost=1290.27..1290.49 rows=15 width=84) (actual time=15.361..15.366 rows=15 loops=1)
+                                 Output: _hyper_1_926_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_926_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_926_chunk.settled_at - _hyper_1_926_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_926_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_926_chunk.source_institution
+                                 Buffers: shared hit=557
+                                 Worker 1:  actual time=15.361..15.366 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=557
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_926_chunk  (cost=0.00..899.19 rows=19554 width=30) (actual time=0.016..6.582 rows=33241 loops=1)
+                                       Output: _hyper_1_926_chunk.source_institution, _hyper_1_926_chunk.amount, _hyper_1_926_chunk.settled_at, _hyper_1_926_chunk.created_at, _hyper_1_926_chunk.status
+                                       Filter: (_hyper_1_926_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=557
+                                       Worker 1:  actual time=0.016..6.582 rows=33241 loops=1
+                                         Buffers: shared hit=557
+                           ->  Partial HashAggregate  (cost=1289.42..1289.64 rows=15 width=84) (actual time=17.320..17.324 rows=15 loops=1)
+                                 Output: _hyper_1_933_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_933_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_933_chunk.settled_at - _hyper_1_933_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_933_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_933_chunk.source_institution
+                                 Buffers: shared hit=556
+                                 Worker 0:  actual time=17.320..17.324 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=556
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_933_chunk  (cost=0.00..898.26 rows=19558 width=30) (actual time=0.017..7.811 rows=33248 loops=1)
+                                       Output: _hyper_1_933_chunk.source_institution, _hyper_1_933_chunk.amount, _hyper_1_933_chunk.settled_at, _hyper_1_933_chunk.created_at, _hyper_1_933_chunk.status
+                                       Filter: (_hyper_1_933_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=556
+                                       Worker 0:  actual time=0.017..7.811 rows=33248 loops=1
+                                         Buffers: shared hit=556
+                           ->  Partial HashAggregate  (cost=1288.82..1289.05 rows=15 width=84) (actual time=16.270..16.275 rows=15 loops=1)
+                                 Output: _hyper_1_910_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_910_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_910_chunk.settled_at - _hyper_1_910_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_910_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_910_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=556
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_910_chunk  (cost=0.00..897.98 rows=19542 width=30) (actual time=0.010..7.108 rows=33221 loops=1)
+                                       Output: _hyper_1_910_chunk.source_institution, _hyper_1_910_chunk.amount, _hyper_1_910_chunk.settled_at, _hyper_1_910_chunk.created_at, _hyper_1_910_chunk.status
+                                       Filter: (_hyper_1_910_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=556
+                           ->  Partial HashAggregate  (cost=1288.57..1288.80 rows=15 width=84) (actual time=13.322..13.326 rows=15 loops=1)
+                                 Output: _hyper_1_924_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_924_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_924_chunk.settled_at - _hyper_1_924_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_924_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_924_chunk.source_institution
+                                 Buffers: shared hit=555
+                                 Worker 1:  actual time=13.322..13.326 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=555
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_924_chunk  (cost=0.00..897.33 rows=19562 width=30) (actual time=0.020..5.955 rows=33255 loops=1)
+                                       Output: _hyper_1_924_chunk.source_institution, _hyper_1_924_chunk.amount, _hyper_1_924_chunk.settled_at, _hyper_1_924_chunk.created_at, _hyper_1_924_chunk.status
+                                       Filter: (_hyper_1_924_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=555
+                                       Worker 1:  actual time=0.020..5.955 rows=33255 loops=1
+                                         Buffers: shared hit=555
+                           ->  Partial HashAggregate  (cost=1285.54..1285.77 rows=15 width=84) (actual time=16.001..16.006 rows=15 loops=1)
+                                 Output: _hyper_1_931_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_931_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_931_chunk.settled_at - _hyper_1_931_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_931_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_931_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=554
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_931_chunk  (cost=0.00..895.38 rows=19508 width=30) (actual time=0.012..6.889 rows=33163 loops=1)
+                                       Output: _hyper_1_931_chunk.source_institution, _hyper_1_931_chunk.amount, _hyper_1_931_chunk.settled_at, _hyper_1_931_chunk.created_at, _hyper_1_931_chunk.status
+                                       Filter: (_hyper_1_931_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=554
+                           ->  Partial HashAggregate  (cost=1285.33..1285.56 rows=15 width=84) (actual time=12.480..12.485 rows=15 loops=1)
+                                 Output: _hyper_1_922_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_922_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_922_chunk.settled_at - _hyper_1_922_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_922_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_922_chunk.source_institution
+                                 Buffers: shared hit=554
+                                 Worker 0:  actual time=12.480..12.485 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=554
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_922_chunk  (cost=0.00..895.29 rows=19502 width=30) (actual time=0.017..5.456 rows=33154 loops=1)
+                                       Output: _hyper_1_922_chunk.source_institution, _hyper_1_922_chunk.amount, _hyper_1_922_chunk.settled_at, _hyper_1_922_chunk.created_at, _hyper_1_922_chunk.status
+                                       Filter: (_hyper_1_922_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=554
+                                       Worker 0:  actual time=0.017..5.456 rows=33154 loops=1
+                                         Buffers: shared hit=554
+                           ->  Partial HashAggregate  (cost=1281.40..1281.63 rows=15 width=84) (actual time=13.300..13.305 rows=15 loops=1)
+                                 Output: _hyper_1_927_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_927_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_927_chunk.settled_at - _hyper_1_927_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_927_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_927_chunk.source_institution
+                                 Buffers: shared hit=553
+                                 Worker 1:  actual time=13.300..13.305 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=553
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_927_chunk  (cost=0.00..892.92 rows=19424 width=30) (actual time=0.013..6.017 rows=33021 loops=1)
+                                       Output: _hyper_1_927_chunk.source_institution, _hyper_1_927_chunk.amount, _hyper_1_927_chunk.settled_at, _hyper_1_927_chunk.created_at, _hyper_1_927_chunk.status
+                                       Filter: (_hyper_1_927_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=553
+                                       Worker 1:  actual time=0.013..6.017 rows=33021 loops=1
+                                         Buffers: shared hit=553
+                           ->  Partial HashAggregate  (cost=1271.18..1271.40 rows=15 width=84) (actual time=12.869..12.875 rows=15 loops=1)
+                                 Output: _hyper_1_1085_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1085_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1085_chunk.settled_at - _hyper_1_1085_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1085_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1085_chunk.source_institution
+                                 Buffers: shared hit=549
+                                 Worker 0:  actual time=12.869..12.875 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=549
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1085_chunk  (cost=0.00..886.02 rows=19258 width=30) (actual time=0.021..5.588 rows=32739 loops=1)
+                                       Output: _hyper_1_1085_chunk.source_institution, _hyper_1_1085_chunk.amount, _hyper_1_1085_chunk.settled_at, _hyper_1_1085_chunk.created_at, _hyper_1_1085_chunk.status
+                                       Filter: (_hyper_1_1085_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=549
+                                       Worker 0:  actual time=0.021..5.588 rows=32739 loops=1
+                                         Buffers: shared hit=549
+                           ->  Partial HashAggregate  (cost=1269.53..1269.76 rows=15 width=84) (actual time=15.020..15.024 rows=15 loops=1)
+                                 Output: _hyper_1_1086_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1086_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1086_chunk.settled_at - _hyper_1_1086_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1086_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1086_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=548
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1086_chunk  (cost=0.00..884.71 rows=19241 width=30) (actual time=0.018..6.653 rows=32709 loops=1)
+                                       Output: _hyper_1_1086_chunk.source_institution, _hyper_1_1086_chunk.amount, _hyper_1_1086_chunk.settled_at, _hyper_1_1086_chunk.created_at, _hyper_1_1086_chunk.status
+                                       Filter: (_hyper_1_1086_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=548
+                           ->  Partial HashAggregate  (cost=1266.65..1266.88 rows=15 width=84) (actual time=13.291..13.297 rows=15 loops=1)
+                                 Output: _hyper_1_1100_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1100_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1100_chunk.settled_at - _hyper_1_1100_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1100_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1100_chunk.source_institution
+                                 Buffers: shared hit=548
+                                 Worker 1:  actual time=13.291..13.297 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=548
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1100_chunk  (cost=0.00..883.37 rows=19164 width=30) (actual time=0.019..5.700 rows=32579 loops=1)
+                                       Output: _hyper_1_1100_chunk.source_institution, _hyper_1_1100_chunk.amount, _hyper_1_1100_chunk.settled_at, _hyper_1_1100_chunk.created_at, _hyper_1_1100_chunk.status
+                                       Filter: (_hyper_1_1100_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=548
+                                       Worker 1:  actual time=0.019..5.700 rows=32579 loops=1
+                                         Buffers: shared hit=548
+                           ->  Partial HashAggregate  (cost=1266.57..1266.80 rows=15 width=84) (actual time=14.395..14.400 rows=15 loops=1)
+                                 Output: _hyper_1_1098_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1098_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1098_chunk.settled_at - _hyper_1_1098_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1098_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1098_chunk.source_institution
+                                 Buffers: shared hit=548
+                                 Worker 0:  actual time=14.395..14.400 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=548
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1098_chunk  (cost=0.00..883.33 rows=19162 width=30) (actual time=0.018..6.115 rows=32575 loops=1)
+                                       Output: _hyper_1_1098_chunk.source_institution, _hyper_1_1098_chunk.amount, _hyper_1_1098_chunk.settled_at, _hyper_1_1098_chunk.created_at, _hyper_1_1098_chunk.status
+                                       Filter: (_hyper_1_1098_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=548
+                                       Worker 0:  actual time=0.018..6.115 rows=32575 loops=1
+                                         Buffers: shared hit=548
+                           ->  Partial HashAggregate  (cost=1267.00..1267.23 rows=15 width=84) (actual time=13.507..13.512 rows=15 loops=1)
+                                 Output: _hyper_1_1103_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1103_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1103_chunk.settled_at - _hyper_1_1103_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1103_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1103_chunk.source_institution
+                                 Buffers: shared hit=547
+                                 Worker 1:  actual time=13.507..13.512 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=547
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1103_chunk  (cost=0.00..883.00 rows=19200 width=30) (actual time=0.019..5.782 rows=32640 loops=1)
+                                       Output: _hyper_1_1103_chunk.source_institution, _hyper_1_1103_chunk.amount, _hyper_1_1103_chunk.settled_at, _hyper_1_1103_chunk.created_at, _hyper_1_1103_chunk.status
+                                       Filter: (_hyper_1_1103_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=547
+                                       Worker 1:  actual time=0.019..5.782 rows=32640 loops=1
+                                         Buffers: shared hit=547
+                           ->  Partial HashAggregate  (cost=1265.79..1266.02 rows=15 width=84) (actual time=12.090..12.099 rows=15 loops=1)
+                                 Output: _hyper_1_1116_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1116_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1116_chunk.settled_at - _hyper_1_1116_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1116_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1116_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=548
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1116_chunk  (cost=0.00..882.97 rows=19141 width=30) (actual time=0.015..5.131 rows=32540 loops=1)
+                                       Output: _hyper_1_1116_chunk.source_institution, _hyper_1_1116_chunk.amount, _hyper_1_1116_chunk.settled_at, _hyper_1_1116_chunk.created_at, _hyper_1_1116_chunk.status
+                                       Filter: (_hyper_1_1116_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=548
+                           ->  Partial HashAggregate  (cost=1266.25..1266.48 rows=15 width=84) (actual time=13.124..13.131 rows=15 loops=1)
+                                 Output: _hyper_1_1105_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1105_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1105_chunk.settled_at - _hyper_1_1105_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1105_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1105_chunk.source_institution
+                                 Buffers: shared hit=547
+                                 Worker 0:  actual time=13.124..13.131 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=547
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1105_chunk  (cost=0.00..882.65 rows=19180 width=30) (actual time=0.014..5.457 rows=32606 loops=1)
+                                       Output: _hyper_1_1105_chunk.source_institution, _hyper_1_1105_chunk.amount, _hyper_1_1105_chunk.settled_at, _hyper_1_1105_chunk.created_at, _hyper_1_1105_chunk.status
+                                       Filter: (_hyper_1_1105_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=547
+                                       Worker 0:  actual time=0.014..5.457 rows=32606 loops=1
+                                         Buffers: shared hit=547
+                           ->  Partial HashAggregate  (cost=1265.99..1266.21 rows=15 width=84) (actual time=15.971..15.976 rows=15 loops=1)
+                                 Output: _hyper_1_1101_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1101_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1101_chunk.settled_at - _hyper_1_1101_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1101_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1101_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=547
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1101_chunk  (cost=0.00..882.53 rows=19173 width=30) (actual time=0.136..6.745 rows=32594 loops=1)
+                                       Output: _hyper_1_1101_chunk.source_institution, _hyper_1_1101_chunk.amount, _hyper_1_1101_chunk.settled_at, _hyper_1_1101_chunk.created_at, _hyper_1_1101_chunk.status
+                                       Filter: (_hyper_1_1101_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=547
+                           ->  Partial HashAggregate  (cost=1265.32..1265.55 rows=15 width=84) (actual time=17.885..17.892 rows=15 loops=1)
+                                 Output: _hyper_1_1106_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1106_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1106_chunk.settled_at - _hyper_1_1106_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1106_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1106_chunk.source_institution
+                                 Buffers: shared hit=546
+                                 Worker 1:  actual time=17.885..17.892 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=546
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1106_chunk  (cost=0.00..881.68 rows=19182 width=30) (actual time=0.023..7.518 rows=32609 loops=1)
+                                       Output: _hyper_1_1106_chunk.source_institution, _hyper_1_1106_chunk.amount, _hyper_1_1106_chunk.settled_at, _hyper_1_1106_chunk.created_at, _hyper_1_1106_chunk.status
+                                       Filter: (_hyper_1_1106_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=546
+                                       Worker 1:  actual time=0.023..7.518 rows=32609 loops=1
+                                         Buffers: shared hit=546
+                           ->  Partial HashAggregate  (cost=1262.18..1262.41 rows=15 width=84) (actual time=16.338..16.344 rows=15 loops=1)
+                                 Output: _hyper_1_1091_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1091_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1091_chunk.settled_at - _hyper_1_1091_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1091_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1091_chunk.source_institution
+                                 Buffers: shared hit=545
+                                 Worker 0:  actual time=16.338..16.344 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=545
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1091_chunk  (cost=0.00..879.68 rows=19125 width=30) (actual time=0.033..7.104 rows=32512 loops=1)
+                                       Output: _hyper_1_1091_chunk.source_institution, _hyper_1_1091_chunk.amount, _hyper_1_1091_chunk.settled_at, _hyper_1_1091_chunk.created_at, _hyper_1_1091_chunk.status
+                                       Filter: (_hyper_1_1091_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=545
+                                       Worker 0:  actual time=0.033..7.104 rows=32512 loops=1
+                                         Buffers: shared hit=545
+                           ->  Partial HashAggregate  (cost=1260.68..1260.91 rows=15 width=84) (actual time=17.992..17.998 rows=15 loops=1)
+                                 Output: _hyper_1_1097_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1097_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1097_chunk.settled_at - _hyper_1_1097_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1097_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1097_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=545
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1097_chunk  (cost=0.00..878.98 rows=19085 width=30) (actual time=0.023..7.768 rows=32444 loops=1)
+                                       Output: _hyper_1_1097_chunk.source_institution, _hyper_1_1097_chunk.amount, _hyper_1_1097_chunk.settled_at, _hyper_1_1097_chunk.created_at, _hyper_1_1097_chunk.status
+                                       Filter: (_hyper_1_1097_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=545
+                           ->  Partial HashAggregate  (cost=1259.56..1259.78 rows=15 width=84) (actual time=13.484..13.490 rows=15 loops=1)
+                                 Output: _hyper_1_1104_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1104_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1104_chunk.settled_at - _hyper_1_1104_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1104_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1104_chunk.source_institution
+                                 Buffers: shared hit=545
+                                 Worker 1:  actual time=13.484..13.490 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=545
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1104_chunk  (cost=0.00..878.46 rows=19055 width=30) (actual time=0.027..5.725 rows=32393 loops=1)
+                                       Output: _hyper_1_1104_chunk.source_institution, _hyper_1_1104_chunk.amount, _hyper_1_1104_chunk.settled_at, _hyper_1_1104_chunk.created_at, _hyper_1_1104_chunk.status
+                                       Filter: (_hyper_1_1104_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=545
+                                       Worker 1:  actual time=0.027..5.725 rows=32393 loops=1
+                                         Buffers: shared hit=545
+                           ->  Partial HashAggregate  (cost=1260.48..1260.71 rows=15 width=84) (actual time=13.140..13.145 rows=15 loops=1)
+                                 Output: _hyper_1_1109_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1109_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1109_chunk.settled_at - _hyper_1_1109_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1109_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1109_chunk.source_institution
+                                 Buffers: shared hit=544
+                                 Worker 0:  actual time=13.140..13.145 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=544
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1109_chunk  (cost=0.00..878.36 rows=19106 width=30) (actual time=0.020..5.595 rows=32481 loops=1)
+                                       Output: _hyper_1_1109_chunk.source_institution, _hyper_1_1109_chunk.amount, _hyper_1_1109_chunk.settled_at, _hyper_1_1109_chunk.created_at, _hyper_1_1109_chunk.status
+                                       Filter: (_hyper_1_1109_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=544
+                                       Worker 0:  actual time=0.020..5.595 rows=32481 loops=1
+                                         Buffers: shared hit=544
+                           ->  Partial HashAggregate  (cost=1260.44..1260.67 rows=15 width=84) (actual time=14.376..14.381 rows=15 loops=1)
+                                 Output: _hyper_1_1089_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1089_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1089_chunk.settled_at - _hyper_1_1089_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1089_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1089_chunk.source_institution
+                                 Buffers: shared hit=544
+                                 Worker 1:  actual time=14.376..14.381 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=544
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1089_chunk  (cost=0.00..878.34 rows=19105 width=30) (actual time=0.018..6.073 rows=32479 loops=1)
+                                       Output: _hyper_1_1089_chunk.source_institution, _hyper_1_1089_chunk.amount, _hyper_1_1089_chunk.settled_at, _hyper_1_1089_chunk.created_at, _hyper_1_1089_chunk.status
+                                       Filter: (_hyper_1_1089_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=544
+                                       Worker 1:  actual time=0.018..6.073 rows=32479 loops=1
+                                         Buffers: shared hit=544
+                           ->  Partial HashAggregate  (cost=1258.61..1258.83 rows=15 width=84) (actual time=16.985..16.991 rows=15 loops=1)
+                                 Output: _hyper_1_1090_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1090_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1090_chunk.settled_at - _hyper_1_1090_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1090_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1090_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=544
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1090_chunk  (cost=0.00..877.49 rows=19056 width=30) (actual time=0.022..7.225 rows=32396 loops=1)
+                                       Output: _hyper_1_1090_chunk.source_institution, _hyper_1_1090_chunk.amount, _hyper_1_1090_chunk.settled_at, _hyper_1_1090_chunk.created_at, _hyper_1_1090_chunk.status
+                                       Filter: (_hyper_1_1090_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=544
+                           ->  Partial HashAggregate  (cost=1257.44..1257.67 rows=15 width=84) (actual time=16.156..16.161 rows=15 loops=1)
+                                 Output: _hyper_1_1096_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1096_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1096_chunk.settled_at - _hyper_1_1096_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1096_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1096_chunk.source_institution
+                                 Buffers: shared hit=544
+                                 Worker 0:  actual time=16.156..16.161 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=544
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1096_chunk  (cost=0.00..876.94 rows=19025 width=30) (actual time=0.019..6.956 rows=32343 loops=1)
+                                       Output: _hyper_1_1096_chunk.source_institution, _hyper_1_1096_chunk.amount, _hyper_1_1096_chunk.settled_at, _hyper_1_1096_chunk.created_at, _hyper_1_1096_chunk.status
+                                       Filter: (_hyper_1_1096_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=544
+                                       Worker 0:  actual time=0.019..6.956 rows=32343 loops=1
+                                         Buffers: shared hit=544
+                           ->  Partial HashAggregate  (cost=1256.58..1256.81 rows=15 width=84) (actual time=14.400..14.405 rows=15 loops=1)
+                                 Output: _hyper_1_1110_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1110_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1110_chunk.settled_at - _hyper_1_1110_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1110_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1110_chunk.source_institution
+                                 Buffers: shared hit=544
+                                 Worker 1:  actual time=14.400..14.405 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=544
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1110_chunk  (cost=0.00..876.54 rows=19002 width=30) (actual time=0.017..6.035 rows=32304 loops=1)
+                                       Output: _hyper_1_1110_chunk.source_institution, _hyper_1_1110_chunk.amount, _hyper_1_1110_chunk.settled_at, _hyper_1_1110_chunk.created_at, _hyper_1_1110_chunk.status
+                                       Filter: (_hyper_1_1110_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=544
+                                       Worker 1:  actual time=0.017..6.035 rows=32304 loops=1
+                                         Buffers: shared hit=544
+                           ->  Partial HashAggregate  (cost=1255.64..1255.86 rows=15 width=84) (actual time=14.153..14.159 rows=15 loops=1)
+                                 Output: _hyper_1_1107_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1107_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1107_chunk.settled_at - _hyper_1_1107_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1107_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1107_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=544
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1107_chunk  (cost=0.00..876.10 rows=18977 width=30) (actual time=0.019..6.252 rows=32261 loops=1)
+                                       Output: _hyper_1_1107_chunk.source_institution, _hyper_1_1107_chunk.amount, _hyper_1_1107_chunk.settled_at, _hyper_1_1107_chunk.created_at, _hyper_1_1107_chunk.status
+                                       Filter: (_hyper_1_1107_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=544
+                           ->  Partial HashAggregate  (cost=1254.78..1255.00 rows=15 width=84) (actual time=12.927..12.932 rows=15 loops=1)
+                                 Output: _hyper_1_1108_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1108_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1108_chunk.settled_at - _hyper_1_1108_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1108_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1108_chunk.source_institution
+                                 Buffers: shared hit=544
+                                 Worker 0:  actual time=12.927..12.932 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=544
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1108_chunk  (cost=0.00..875.70 rows=18954 width=30) (actual time=0.022..5.566 rows=32222 loops=1)
+                                       Output: _hyper_1_1108_chunk.source_institution, _hyper_1_1108_chunk.amount, _hyper_1_1108_chunk.settled_at, _hyper_1_1108_chunk.created_at, _hyper_1_1108_chunk.status
+                                       Filter: (_hyper_1_1108_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=544
+                                       Worker 0:  actual time=0.022..5.566 rows=32222 loops=1
+                                         Buffers: shared hit=544
+                           ->  Partial HashAggregate  (cost=1244.10..1244.32 rows=15 width=84) (actual time=11.653..11.657 rows=15 loops=1)
+                                 Output: _hyper_1_1092_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1092_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1092_chunk.settled_at - _hyper_1_1092_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1092_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1092_chunk.source_institution
+                                 Buffers: shared hit=531
+                                 Worker 1:  actual time=11.653..11.657 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=531
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1092_chunk  (cost=0.00..863.78 rows=19016 width=30) (actual time=0.017..4.960 rows=32327 loops=1)
+                                       Output: _hyper_1_1092_chunk.source_institution, _hyper_1_1092_chunk.amount, _hyper_1_1092_chunk.settled_at, _hyper_1_1092_chunk.created_at, _hyper_1_1092_chunk.status
+                                       Filter: (_hyper_1_1092_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=531
+                                       Worker 1:  actual time=0.017..4.960 rows=32327 loops=1
+                                         Buffers: shared hit=531
+                           ->  Partial HashAggregate  (cost=1237.65..1237.88 rows=15 width=84) (actual time=13.925..13.931 rows=15 loops=1)
+                                 Output: _hyper_1_1093_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1093_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1093_chunk.settled_at - _hyper_1_1093_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1093_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1093_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=528
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1093_chunk  (cost=0.00..859.17 rows=18924 width=30) (actual time=0.018..5.935 rows=32171 loops=1)
+                                       Output: _hyper_1_1093_chunk.source_institution, _hyper_1_1093_chunk.amount, _hyper_1_1093_chunk.settled_at, _hyper_1_1093_chunk.created_at, _hyper_1_1093_chunk.status
+                                       Filter: (_hyper_1_1093_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=528
+                           ->  Partial HashAggregate  (cost=1237.01..1237.24 rows=15 width=84) (actual time=12.799..12.804 rows=15 loops=1)
+                                 Output: _hyper_1_1088_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1088_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1088_chunk.settled_at - _hyper_1_1088_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1088_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1088_chunk.source_institution
+                                 Buffers: shared hit=528
+                                 Worker 0:  actual time=12.799..12.804 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=528
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1088_chunk  (cost=0.00..858.87 rows=18907 width=30) (actual time=0.020..5.400 rows=32142 loops=1)
+                                       Output: _hyper_1_1088_chunk.source_institution, _hyper_1_1088_chunk.amount, _hyper_1_1088_chunk.settled_at, _hyper_1_1088_chunk.created_at, _hyper_1_1088_chunk.status
+                                       Filter: (_hyper_1_1088_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=528
+                                       Worker 0:  actual time=0.020..5.400 rows=32142 loops=1
+                                         Buffers: shared hit=528
+                           ->  Partial HashAggregate  (cost=1224.38..1224.60 rows=15 width=84) (actual time=11.887..11.893 rows=15 loops=1)
+                                 Output: _hyper_1_949_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_949_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_949_chunk.settled_at - _hyper_1_949_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_949_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_949_chunk.source_institution
+                                 Buffers: shared hit=528
+                                 Worker 1:  actual time=11.887..11.893 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=528
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_949_chunk  (cost=0.00..852.98 rows=18570 width=30) (actual time=0.021..4.866 rows=31569 loops=1)
+                                       Output: _hyper_1_949_chunk.source_institution, _hyper_1_949_chunk.amount, _hyper_1_949_chunk.settled_at, _hyper_1_949_chunk.created_at, _hyper_1_949_chunk.status
+                                       Filter: (_hyper_1_949_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=528
+                                       Worker 1:  actual time=0.021..4.866 rows=31569 loops=1
+                                         Buffers: shared hit=528
+                           ->  Partial HashAggregate  (cost=1222.46..1222.68 rows=15 width=84) (actual time=13.198..13.203 rows=15 loops=1)
+                                 Output: _hyper_1_941_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_941_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_941_chunk.settled_at - _hyper_1_941_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_941_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_941_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=528
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_941_chunk  (cost=0.00..852.08 rows=18519 width=30) (actual time=0.020..5.505 rows=31482 loops=1)
+                                       Output: _hyper_1_941_chunk.source_institution, _hyper_1_941_chunk.amount, _hyper_1_941_chunk.settled_at, _hyper_1_941_chunk.created_at, _hyper_1_941_chunk.status
+                                       Filter: (_hyper_1_941_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=528
+                           ->  Partial HashAggregate  (cost=1222.39..1222.61 rows=15 width=84) (actual time=12.308..12.314 rows=15 loops=1)
+                                 Output: _hyper_1_955_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_955_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_955_chunk.settled_at - _hyper_1_955_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_955_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_955_chunk.source_institution
+                                 Buffers: shared hit=528
+                                 Worker 0:  actual time=12.308..12.314 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=528
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_955_chunk  (cost=0.00..852.05 rows=18517 width=30) (actual time=0.018..5.210 rows=31479 loops=1)
+                                       Output: _hyper_1_955_chunk.source_institution, _hyper_1_955_chunk.amount, _hyper_1_955_chunk.settled_at, _hyper_1_955_chunk.created_at, _hyper_1_955_chunk.status
+                                       Filter: (_hyper_1_955_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=528
+                                       Worker 0:  actual time=0.018..5.210 rows=31479 loops=1
+                                         Buffers: shared hit=528
+                           ->  Partial HashAggregate  (cost=1222.12..1222.35 rows=15 width=84) (actual time=11.243..11.248 rows=15 loops=1)
+                                 Output: _hyper_1_947_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_947_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_947_chunk.settled_at - _hyper_1_947_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_947_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_947_chunk.source_institution
+                                 Buffers: shared hit=528
+                                 Worker 1:  actual time=11.243..11.248 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=528
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_947_chunk  (cost=0.00..851.92 rows=18510 width=30) (actual time=0.023..4.805 rows=31467 loops=1)
+                                       Output: _hyper_1_947_chunk.source_institution, _hyper_1_947_chunk.amount, _hyper_1_947_chunk.settled_at, _hyper_1_947_chunk.created_at, _hyper_1_947_chunk.status
+                                       Filter: (_hyper_1_947_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=528
+                                       Worker 1:  actual time=0.023..4.805 rows=31467 loops=1
+                                         Buffers: shared hit=528
+                           ->  Partial HashAggregate  (cost=1221.38..1221.60 rows=15 width=84) (actual time=12.824..12.828 rows=15 loops=1)
+                                 Output: _hyper_1_961_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_961_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_961_chunk.settled_at - _hyper_1_961_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_961_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_961_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=528
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_961_chunk  (cost=0.00..851.58 rows=18490 width=30) (actual time=0.026..5.591 rows=31433 loops=1)
+                                       Output: _hyper_1_961_chunk.source_institution, _hyper_1_961_chunk.amount, _hyper_1_961_chunk.settled_at, _hyper_1_961_chunk.created_at, _hyper_1_961_chunk.status
+                                       Filter: (_hyper_1_961_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=528
+                           ->  Partial HashAggregate  (cost=1221.26..1221.49 rows=15 width=84) (actual time=12.986..12.991 rows=15 loops=1)
+                                 Output: _hyper_1_940_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_940_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_940_chunk.settled_at - _hyper_1_940_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_940_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_940_chunk.source_institution
+                                 Buffers: shared hit=528
+                                 Worker 0:  actual time=12.986..12.991 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=528
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_940_chunk  (cost=0.00..851.52 rows=18487 width=30) (actual time=0.019..5.399 rows=31428 loops=1)
+                                       Output: _hyper_1_940_chunk.source_institution, _hyper_1_940_chunk.amount, _hyper_1_940_chunk.settled_at, _hyper_1_940_chunk.created_at, _hyper_1_940_chunk.status
+                                       Filter: (_hyper_1_940_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=528
+                                       Worker 0:  actual time=0.019..5.399 rows=31428 loops=1
+                                         Buffers: shared hit=528
+                           ->  Partial HashAggregate  (cost=1219.84..1220.07 rows=15 width=84) (actual time=13.198..13.205 rows=15 loops=1)
+                                 Output: _hyper_1_944_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_944_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_944_chunk.settled_at - _hyper_1_944_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_944_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_944_chunk.source_institution
+                                 Buffers: shared hit=528
+                                 Worker 1:  actual time=13.198..13.205 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=528
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_944_chunk  (cost=0.00..850.86 rows=18449 width=30) (actual time=0.014..5.296 rows=31364 loops=1)
+                                       Output: _hyper_1_944_chunk.source_institution, _hyper_1_944_chunk.amount, _hyper_1_944_chunk.settled_at, _hyper_1_944_chunk.created_at, _hyper_1_944_chunk.status
+                                       Filter: (_hyper_1_944_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=528
+                                       Worker 1:  actual time=0.014..5.296 rows=31364 loops=1
+                                         Buffers: shared hit=528
+                           ->  Partial HashAggregate  (cost=1218.67..1218.89 rows=15 width=84) (actual time=20.290..20.295 rows=15 loops=1)
+                                 Output: _hyper_1_958_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_958_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_958_chunk.settled_at - _hyper_1_958_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_958_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_958_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=528
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_958_chunk  (cost=0.00..850.31 rows=18418 width=30) (actual time=0.018..8.618 rows=31310 loops=1)
+                                       Output: _hyper_1_958_chunk.source_institution, _hyper_1_958_chunk.amount, _hyper_1_958_chunk.settled_at, _hyper_1_958_chunk.created_at, _hyper_1_958_chunk.status
+                                       Filter: (_hyper_1_958_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=528
+                           ->  Partial HashAggregate  (cost=1216.91..1217.13 rows=15 width=84) (actual time=20.927..20.933 rows=15 loops=1)
+                                 Output: _hyper_1_938_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_938_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_938_chunk.settled_at - _hyper_1_938_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_938_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_938_chunk.source_institution
+                                 Buffers: shared hit=528
+                                 Worker 0:  actual time=20.927..20.933 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=528
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_938_chunk  (cost=0.00..849.49 rows=18371 width=30) (actual time=0.019..8.706 rows=31230 loops=1)
+                                       Output: _hyper_1_938_chunk.source_institution, _hyper_1_938_chunk.amount, _hyper_1_938_chunk.settled_at, _hyper_1_938_chunk.created_at, _hyper_1_938_chunk.status
+                                       Filter: (_hyper_1_938_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=528
+                                       Worker 0:  actual time=0.019..8.706 rows=31230 loops=1
+                                         Buffers: shared hit=528
+                           ->  Partial HashAggregate  (cost=1216.79..1217.02 rows=15 width=84) (actual time=12.326..12.331 rows=15 loops=1)
+                                 Output: _hyper_1_964_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_964_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_964_chunk.settled_at - _hyper_1_964_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_964_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_964_chunk.source_institution
+                                 Buffers: shared hit=528
+                                 Worker 1:  actual time=12.326..12.331 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=528
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_964_chunk  (cost=0.00..849.43 rows=18368 width=30) (actual time=0.021..5.185 rows=31225 loops=1)
+                                       Output: _hyper_1_964_chunk.source_institution, _hyper_1_964_chunk.amount, _hyper_1_964_chunk.settled_at, _hyper_1_964_chunk.created_at, _hyper_1_964_chunk.status
+                                       Filter: (_hyper_1_964_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=528
+                                       Worker 1:  actual time=0.021..5.185 rows=31225 loops=1
+                                         Buffers: shared hit=528
+                           ->  Partial HashAggregate  (cost=1216.76..1216.99 rows=15 width=84) (actual time=11.992..11.997 rows=15 loops=1)
+                                 Output: _hyper_1_937_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_937_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_937_chunk.settled_at - _hyper_1_937_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_937_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_937_chunk.source_institution
+                                 Buffers: shared hit=528
+                                 Worker 1:  actual time=11.992..11.997 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=528
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_937_chunk  (cost=0.00..849.42 rows=18367 width=30) (actual time=0.011..5.125 rows=31224 loops=1)
+                                       Output: _hyper_1_937_chunk.source_institution, _hyper_1_937_chunk.amount, _hyper_1_937_chunk.settled_at, _hyper_1_937_chunk.created_at, _hyper_1_937_chunk.status
+                                       Filter: (_hyper_1_937_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=528
+                                       Worker 1:  actual time=0.011..5.125 rows=31224 loops=1
+                                         Buffers: shared hit=528
+                           ->  Partial HashAggregate  (cost=1216.58..1216.81 rows=15 width=84) (actual time=11.572..11.577 rows=15 loops=1)
+                                 Output: _hyper_1_935_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_935_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_935_chunk.settled_at - _hyper_1_935_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_935_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_935_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=528
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_935_chunk  (cost=0.00..849.34 rows=18362 width=30) (actual time=0.019..4.720 rows=31216 loops=1)
+                                       Output: _hyper_1_935_chunk.source_institution, _hyper_1_935_chunk.amount, _hyper_1_935_chunk.settled_at, _hyper_1_935_chunk.created_at, _hyper_1_935_chunk.status
+                                       Filter: (_hyper_1_935_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=528
+                           ->  Partial HashAggregate  (cost=1218.63..1218.85 rows=15 width=84) (actual time=13.424..13.429 rows=15 loops=1)
+                                 Output: _hyper_1_939_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_939_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_939_chunk.settled_at - _hyper_1_939_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_939_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_939_chunk.source_institution
+                                 Buffers: shared hit=520
+                                 Worker 0:  actual time=13.424..13.429 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=520
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_939_chunk  (cost=0.00..846.03 rows=18630 width=30) (actual time=0.020..5.735 rows=31671 loops=1)
+                                       Output: _hyper_1_939_chunk.source_institution, _hyper_1_939_chunk.amount, _hyper_1_939_chunk.settled_at, _hyper_1_939_chunk.created_at, _hyper_1_939_chunk.status
+                                       Filter: (_hyper_1_939_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=520
+                                       Worker 0:  actual time=0.020..5.735 rows=31671 loops=1
+                                         Buffers: shared hit=520
+                           ->  Partial HashAggregate  (cost=1218.40..1218.63 rows=15 width=84) (actual time=16.977..16.986 rows=15 loops=1)
+                                 Output: _hyper_1_953_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_953_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_953_chunk.settled_at - _hyper_1_953_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_953_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_953_chunk.source_institution
+                                 Buffers: shared hit=520
+                                 Worker 1:  actual time=16.977..16.986 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=520
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_953_chunk  (cost=0.00..845.92 rows=18624 width=30) (actual time=0.017..7.025 rows=31661 loops=1)
+                                       Output: _hyper_1_953_chunk.source_institution, _hyper_1_953_chunk.amount, _hyper_1_953_chunk.settled_at, _hyper_1_953_chunk.created_at, _hyper_1_953_chunk.status
+                                       Filter: (_hyper_1_953_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=520
+                                       Worker 1:  actual time=0.017..7.025 rows=31661 loops=1
+                                         Buffers: shared hit=520
+                           ->  Partial HashAggregate  (cost=1217.35..1217.57 rows=15 width=84) (actual time=12.428..12.434 rows=15 loops=1)
+                                 Output: _hyper_1_948_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_948_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_948_chunk.settled_at - _hyper_1_948_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_948_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_948_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=520
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_948_chunk  (cost=0.00..845.43 rows=18596 width=30) (actual time=0.018..5.275 rows=31613 loops=1)
+                                       Output: _hyper_1_948_chunk.source_institution, _hyper_1_948_chunk.amount, _hyper_1_948_chunk.settled_at, _hyper_1_948_chunk.created_at, _hyper_1_948_chunk.status
+                                       Filter: (_hyper_1_948_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=520
+                           ->  Partial HashAggregate  (cost=1217.24..1217.46 rows=15 width=84) (actual time=22.184..22.189 rows=15 loops=1)
+                                 Output: _hyper_1_952_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_952_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_952_chunk.settled_at - _hyper_1_952_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_952_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_952_chunk.source_institution
+                                 Buffers: shared hit=520
+                                 Worker 0:  actual time=22.184..22.189 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=520
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_952_chunk  (cost=0.00..845.38 rows=18593 width=30) (actual time=0.019..9.419 rows=31608 loops=1)
+                                       Output: _hyper_1_952_chunk.source_institution, _hyper_1_952_chunk.amount, _hyper_1_952_chunk.settled_at, _hyper_1_952_chunk.created_at, _hyper_1_952_chunk.status
+                                       Filter: (_hyper_1_952_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=520
+                                       Worker 0:  actual time=0.019..9.419 rows=31608 loops=1
+                                         Buffers: shared hit=520
+                           ->  Partial HashAggregate  (cost=1215.28..1215.51 rows=15 width=84) (actual time=24.292..24.302 rows=15 loops=1)
+                                 Output: _hyper_1_951_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_951_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_951_chunk.settled_at - _hyper_1_951_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_951_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_951_chunk.source_institution
+                                 Buffers: shared hit=520
+                                 Worker 1:  actual time=24.292..24.302 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=520
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_951_chunk  (cost=0.00..844.46 rows=18541 width=30) (actual time=0.027..10.433 rows=31519 loops=1)
+                                       Output: _hyper_1_951_chunk.source_institution, _hyper_1_951_chunk.amount, _hyper_1_951_chunk.settled_at, _hyper_1_951_chunk.created_at, _hyper_1_951_chunk.status
+                                       Filter: (_hyper_1_951_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=520
+                                       Worker 1:  actual time=0.027..10.433 rows=31519 loops=1
+                                         Buffers: shared hit=520
+                           ->  Partial HashAggregate  (cost=1214.80..1215.03 rows=15 width=84) (actual time=12.622..12.631 rows=15 loops=1)
+                                 Output: _hyper_1_946_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_946_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_946_chunk.settled_at - _hyper_1_946_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_946_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_946_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=520
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_946_chunk  (cost=0.00..844.24 rows=18528 width=30) (actual time=0.015..5.270 rows=31498 loops=1)
+                                       Output: _hyper_1_946_chunk.source_institution, _hyper_1_946_chunk.amount, _hyper_1_946_chunk.settled_at, _hyper_1_946_chunk.created_at, _hyper_1_946_chunk.status
+                                       Filter: (_hyper_1_946_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=520
+                           ->  Partial HashAggregate  (cost=1200.50..1200.73 rows=15 width=84) (actual time=18.458..18.462 rows=15 loops=1)
+                                 Output: _hyper_1_936_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_936_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_936_chunk.settled_at - _hyper_1_936_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_936_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_936_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=512
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_936_chunk  (cost=0.00..833.30 rows=18360 width=30) (actual time=0.016..7.876 rows=31212 loops=1)
+                                       Output: _hyper_1_936_chunk.source_institution, _hyper_1_936_chunk.amount, _hyper_1_936_chunk.settled_at, _hyper_1_936_chunk.created_at, _hyper_1_936_chunk.status
+                                       Filter: (_hyper_1_936_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=512
+                           ->  Partial HashAggregate  (cost=1200.47..1200.69 rows=15 width=84) (actual time=11.081..11.086 rows=15 loops=1)
+                                 Output: _hyper_1_934_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_934_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_934_chunk.settled_at - _hyper_1_934_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_934_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_934_chunk.source_institution
+                                 Buffers: shared hit=512
+                                 Worker 0:  actual time=11.081..11.086 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=512
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_934_chunk  (cost=0.00..833.29 rows=18359 width=30) (actual time=0.017..4.705 rows=31211 loops=1)
+                                       Output: _hyper_1_934_chunk.source_institution, _hyper_1_934_chunk.amount, _hyper_1_934_chunk.settled_at, _hyper_1_934_chunk.created_at, _hyper_1_934_chunk.status
+                                       Filter: (_hyper_1_934_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=512
+                                       Worker 0:  actual time=0.017..4.705 rows=31211 loops=1
+                                         Buffers: shared hit=512
+                           ->  Partial HashAggregate  (cost=1199.90..1200.13 rows=15 width=84) (actual time=13.132..13.138 rows=15 loops=1)
+                                 Output: _hyper_1_956_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_956_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_956_chunk.settled_at - _hyper_1_956_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_956_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_956_chunk.source_institution
+                                 Buffers: shared hit=512
+                                 Worker 1:  actual time=13.132..13.138 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=512
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_956_chunk  (cost=0.00..833.02 rows=18344 width=30) (actual time=0.031..5.811 rows=31185 loops=1)
+                                       Output: _hyper_1_956_chunk.source_institution, _hyper_1_956_chunk.amount, _hyper_1_956_chunk.settled_at, _hyper_1_956_chunk.created_at, _hyper_1_956_chunk.status
+                                       Filter: (_hyper_1_956_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=512
+                                       Worker 1:  actual time=0.031..5.811 rows=31185 loops=1
+                                         Buffers: shared hit=512
+                           ->  Partial HashAggregate  (cost=1198.47..1198.70 rows=15 width=84) (actual time=12.519..12.523 rows=15 loops=1)
+                                 Output: _hyper_1_942_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_942_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_942_chunk.settled_at - _hyper_1_942_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_942_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_942_chunk.source_institution
+                                 Buffers: shared hit=512
+                                 Worker 0:  actual time=12.519..12.523 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=512
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_942_chunk  (cost=0.00..832.35 rows=18306 width=30) (actual time=0.010..5.448 rows=31120 loops=1)
+                                       Output: _hyper_1_942_chunk.source_institution, _hyper_1_942_chunk.amount, _hyper_1_942_chunk.settled_at, _hyper_1_942_chunk.created_at, _hyper_1_942_chunk.status
+                                       Filter: (_hyper_1_942_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=512
+                                       Worker 0:  actual time=0.010..5.448 rows=31120 loops=1
+                                         Buffers: shared hit=512
+                           ->  Partial HashAggregate  (cost=901.86..902.09 rows=15 width=84) (actual time=8.178..8.184 rows=15 loops=1)
+                                 Output: _hyper_1_1094_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1094_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1094_chunk.settled_at - _hyper_1_1094_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1094_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1094_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=385
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1094_chunk  (cost=0.00..626.20 rows=13783 width=30) (actual time=0.011..3.351 rows=23431 loops=1)
+                                       Output: _hyper_1_1094_chunk.source_institution, _hyper_1_1094_chunk.amount, _hyper_1_1094_chunk.settled_at, _hyper_1_1094_chunk.created_at, _hyper_1_1094_chunk.status
+                                       Filter: (_hyper_1_1094_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=385
+                           ->  Partial HashAggregate  (cost=578.18..578.41 rows=15 width=84) (actual time=7.795..7.805 rows=15 loops=1)
+                                 Output: _hyper_1_909_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_909_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_909_chunk.settled_at - _hyper_1_909_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_909_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_909_chunk.source_institution
+                                 Buffers: shared hit=248
+                                 Worker 0:  actual time=7.795..7.805 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=248
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_909_chunk  (cost=0.00..402.08 rows=8805 width=30) (actual time=0.010..3.396 rows=14968 loops=1)
+                                       Output: _hyper_1_909_chunk.source_institution, _hyper_1_909_chunk.amount, _hyper_1_909_chunk.settled_at, _hyper_1_909_chunk.created_at, _hyper_1_909_chunk.status
+                                       Filter: (_hyper_1_909_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=248
+                                       Worker 0:  actual time=0.010..3.396 rows=14968 loops=1
+                                         Buffers: shared hit=248
+                           ->  Partial HashAggregate  (cost=577.62..577.85 rows=15 width=84) (actual time=6.126..6.132 rows=15 loops=1)
+                                 Output: _hyper_1_919_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_919_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_919_chunk.settled_at - _hyper_1_919_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_919_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_919_chunk.source_institution
+                                 Buffers: shared hit=248
+                                 Worker 1:  actual time=6.126..6.132 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=248
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_919_chunk  (cost=0.00..401.82 rows=8790 width=30) (actual time=0.014..2.550 rows=14943 loops=1)
+                                       Output: _hyper_1_919_chunk.source_institution, _hyper_1_919_chunk.amount, _hyper_1_919_chunk.settled_at, _hyper_1_919_chunk.created_at, _hyper_1_919_chunk.status
+                                       Filter: (_hyper_1_919_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=248
+                                       Worker 1:  actual time=0.014..2.550 rows=14943 loops=1
+                                         Buffers: shared hit=248
+                           ->  Partial HashAggregate  (cost=576.68..576.91 rows=15 width=84) (actual time=9.450..9.459 rows=15 loops=1)
+                                 Output: _hyper_1_928_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_928_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_928_chunk.settled_at - _hyper_1_928_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_928_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_928_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=248
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_928_chunk  (cost=0.00..401.38 rows=8765 width=30) (actual time=0.011..3.830 rows=14900 loops=1)
+                                       Output: _hyper_1_928_chunk.source_institution, _hyper_1_928_chunk.amount, _hyper_1_928_chunk.settled_at, _hyper_1_928_chunk.created_at, _hyper_1_928_chunk.status
+                                       Filter: (_hyper_1_928_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=248
+                           ->  Partial HashAggregate  (cost=572.23..572.46 rows=15 width=84) (actual time=5.586..5.590 rows=15 loops=1)
+                                 Output: _hyper_1_1114_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1114_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1114_chunk.settled_at - _hyper_1_1114_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1114_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1114_chunk.source_institution
+                                 Buffers: shared hit=248
+                                 Worker 1:  actual time=5.586..5.590 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=248
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1114_chunk  (cost=0.00..399.31 rows=8646 width=30) (actual time=0.011..2.258 rows=14699 loops=1)
+                                       Output: _hyper_1_1114_chunk.source_institution, _hyper_1_1114_chunk.amount, _hyper_1_1114_chunk.settled_at, _hyper_1_1114_chunk.created_at, _hyper_1_1114_chunk.status
+                                       Filter: (_hyper_1_1114_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=248
+                                       Worker 1:  actual time=0.011..2.258 rows=14699 loops=1
+                                         Buffers: shared hit=248
+                           ->  Partial HashAggregate  (cost=571.36..571.59 rows=15 width=84) (actual time=11.450..11.459 rows=15 loops=1)
+                                 Output: _hyper_1_1117_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1117_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1117_chunk.settled_at - _hyper_1_1117_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1117_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1117_chunk.source_institution
+                                 Buffers: shared hit=248
+                                 Worker 0:  actual time=11.450..11.459 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=248
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1117_chunk  (cost=0.00..398.90 rows=8623 width=30) (actual time=0.017..4.940 rows=14659 loops=1)
+                                       Output: _hyper_1_1117_chunk.source_institution, _hyper_1_1117_chunk.amount, _hyper_1_1117_chunk.settled_at, _hyper_1_1117_chunk.created_at, _hyper_1_1117_chunk.status
+                                       Filter: (_hyper_1_1117_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=248
+                                       Worker 0:  actual time=0.017..4.940 rows=14659 loops=1
+                                         Buffers: shared hit=248
+                           ->  Partial HashAggregate  (cost=570.93..571.15 rows=15 width=84) (actual time=10.256..10.261 rows=15 loops=1)
+                                 Output: _hyper_1_916_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_916_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_916_chunk.settled_at - _hyper_1_916_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_916_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_916_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=244
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_916_chunk  (cost=0.00..396.57 rows=8718 width=30) (actual time=0.012..4.155 rows=14821 loops=1)
+                                       Output: _hyper_1_916_chunk.source_institution, _hyper_1_916_chunk.amount, _hyper_1_916_chunk.settled_at, _hyper_1_916_chunk.created_at, _hyper_1_916_chunk.status
+                                       Filter: (_hyper_1_916_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=244
+                           ->  Partial HashAggregate  (cost=561.33..561.56 rows=15 width=84) (actual time=5.297..5.302 rows=15 loops=1)
+                                 Output: _hyper_1_1099_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1099_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1099_chunk.settled_at - _hyper_1_1099_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1099_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1099_chunk.source_institution
+                                 Buffers: shared hit=240
+                                 Worker 1:  actual time=5.297..5.302 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=240
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1099_chunk  (cost=0.00..389.95 rows=8569 width=30) (actual time=0.008..2.135 rows=14567 loops=1)
+                                       Output: _hyper_1_1099_chunk.source_institution, _hyper_1_1099_chunk.amount, _hyper_1_1099_chunk.settled_at, _hyper_1_1099_chunk.created_at, _hyper_1_1099_chunk.status
+                                       Filter: (_hyper_1_1099_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=240
+                                       Worker 1:  actual time=0.008..2.135 rows=14567 loops=1
+                                         Buffers: shared hit=240
+                           ->  Partial HashAggregate  (cost=561.30..561.53 rows=15 width=84) (actual time=5.086..5.091 rows=15 loops=1)
+                                 Output: _hyper_1_1087_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1087_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1087_chunk.settled_at - _hyper_1_1087_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1087_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1087_chunk.source_institution
+                                 Buffers: shared hit=240
+                                 Worker 1:  actual time=5.086..5.091 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=240
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1087_chunk  (cost=0.00..389.94 rows=8568 width=30) (actual time=0.009..2.086 rows=14566 loops=1)
+                                       Output: _hyper_1_1087_chunk.source_institution, _hyper_1_1087_chunk.amount, _hyper_1_1087_chunk.settled_at, _hyper_1_1087_chunk.created_at, _hyper_1_1087_chunk.status
+                                       Filter: (_hyper_1_1087_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=240
+                                       Worker 1:  actual time=0.009..2.086 rows=14566 loops=1
+                                         Buffers: shared hit=240
+                           ->  Partial HashAggregate  (cost=548.70..548.92 rows=15 width=84) (actual time=6.400..6.405 rows=15 loops=1)
+                                 Output: _hyper_1_945_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_945_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_945_chunk.settled_at - _hyper_1_945_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_945_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_945_chunk.source_institution
+                                 Buffers: shared hit=234
+                                 Worker 0:  actual time=6.400..6.405 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=234
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_945_chunk  (cost=0.00..380.86 rows=8392 width=30) (actual time=0.015..2.614 rows=14266 loops=1)
+                                       Output: _hyper_1_945_chunk.source_institution, _hyper_1_945_chunk.amount, _hyper_1_945_chunk.settled_at, _hyper_1_945_chunk.created_at, _hyper_1_945_chunk.status
+                                       Filter: (_hyper_1_945_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=234
+                                       Worker 0:  actual time=0.015..2.614 rows=14266 loops=1
+                                         Buffers: shared hit=234
+                           ->  Partial HashAggregate  (cost=540.43..540.66 rows=15 width=84) (actual time=4.887..4.892 rows=15 loops=1)
+                                 Output: _hyper_1_943_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_943_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_943_chunk.settled_at - _hyper_1_943_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_943_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_943_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=232
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_943_chunk  (cost=0.00..375.93 rows=8225 width=30) (actual time=0.015..1.957 rows=13982 loops=1)
+                                       Output: _hyper_1_943_chunk.source_institution, _hyper_1_943_chunk.amount, _hyper_1_943_chunk.settled_at, _hyper_1_943_chunk.created_at, _hyper_1_943_chunk.status
+                                       Filter: (_hyper_1_943_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=232
+                           ->  Partial HashAggregate  (cost=540.14..540.36 rows=15 width=84) (actual time=4.725..4.729 rows=15 loops=1)
+                                 Output: _hyper_1_959_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_959_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_959_chunk.settled_at - _hyper_1_959_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_959_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_959_chunk.source_institution
+                                 Buffers: shared hit=232
+                                 Worker 1:  actual time=4.725..4.729 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=232
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_959_chunk  (cost=0.00..375.80 rows=8217 width=30) (actual time=0.016..1.960 rows=13969 loops=1)
+                                       Output: _hyper_1_959_chunk.source_institution, _hyper_1_959_chunk.amount, _hyper_1_959_chunk.settled_at, _hyper_1_959_chunk.created_at, _hyper_1_959_chunk.status
+                                       Filter: (_hyper_1_959_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=232
+                                       Worker 1:  actual time=0.016..1.960 rows=13969 loops=1
+                                         Buffers: shared hit=232
+                           ->  Partial HashAggregate  (cost=534.68..534.90 rows=15 width=84) (actual time=5.521..5.525 rows=15 loops=1)
+                                 Output: _hyper_1_960_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_960_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_960_chunk.settled_at - _hyper_1_960_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_960_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_960_chunk.source_institution
+                                 Buffers: shared hit=228
+                                 Worker 0:  actual time=5.521..5.525 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=228
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_960_chunk  (cost=0.00..371.12 rows=8178 width=30) (actual time=0.009..2.241 rows=13903 loops=1)
+                                       Output: _hyper_1_960_chunk.source_institution, _hyper_1_960_chunk.amount, _hyper_1_960_chunk.settled_at, _hyper_1_960_chunk.created_at, _hyper_1_960_chunk.status
+                                       Filter: (_hyper_1_960_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=228
+                                       Worker 0:  actual time=0.009..2.241 rows=13903 loops=1
+                                         Buffers: shared hit=228
+                           ->  Partial HashAggregate  (cost=484.79..485.02 rows=15 width=84) (actual time=4.525..4.530 rows=15 loops=1)
+                                 Output: _hyper_1_957_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_957_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_957_chunk.settled_at - _hyper_1_957_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_957_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_957_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=208
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_957_chunk  (cost=0.00..337.17 rows=7381 width=30) (actual time=0.008..1.803 rows=12548 loops=1)
+                                       Output: _hyper_1_957_chunk.source_institution, _hyper_1_957_chunk.amount, _hyper_1_957_chunk.settled_at, _hyper_1_957_chunk.created_at, _hyper_1_957_chunk.status
+                                       Filter: (_hyper_1_957_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=208
+                           ->  Partial HashAggregate  (cost=324.93..325.16 rows=15 width=84) (actual time=3.064..3.069 rows=15 loops=1)
+                                 Output: _hyper_1_917_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_917_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_917_chunk.settled_at - _hyper_1_917_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_917_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_917_chunk.source_institution
+                                 Buffers: shared hit=141
+                                 Worker 1:  actual time=3.064..3.069 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=141
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_917_chunk  (cost=0.00..226.83 rows=4905 width=30) (actual time=0.010..1.227 rows=8338 loops=1)
+                                       Output: _hyper_1_917_chunk.source_institution, _hyper_1_917_chunk.amount, _hyper_1_917_chunk.settled_at, _hyper_1_917_chunk.created_at, _hyper_1_917_chunk.status
+                                       Filter: (_hyper_1_917_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=141
+                                       Worker 1:  actual time=0.010..1.227 rows=8338 loops=1
+                                         Buffers: shared hit=141
+                           ->  Partial HashAggregate  (cost=324.42..324.64 rows=15 width=84) (actual time=2.698..2.702 rows=15 loops=1)
+                                 Output: _hyper_1_932_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_932_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_932_chunk.settled_at - _hyper_1_932_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_932_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_932_chunk.source_institution
+                                 Buffers: shared hit=140
+                                 Worker 1:  actual time=2.698..2.702 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=140
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_932_chunk  (cost=0.00..226.06 rows=4918 width=30) (actual time=0.009..1.100 rows=8360 loops=1)
+                                       Output: _hyper_1_932_chunk.source_institution, _hyper_1_932_chunk.amount, _hyper_1_932_chunk.settled_at, _hyper_1_932_chunk.created_at, _hyper_1_932_chunk.status
+                                       Filter: (_hyper_1_932_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=140
+                                       Worker 1:  actual time=0.009..1.100 rows=8360 loops=1
+                                         Buffers: shared hit=140
+                           ->  Partial HashAggregate  (cost=323.58..323.81 rows=15 width=84) (actual time=3.305..3.310 rows=15 loops=1)
+                                 Output: _hyper_1_929_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_929_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_929_chunk.settled_at - _hyper_1_929_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_929_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_929_chunk.source_institution
+                                 Buffers: shared hit=139
+                                 Worker 0:  actual time=3.305..3.310 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=139
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_929_chunk  (cost=0.00..225.14 rows=4922 width=30) (actual time=0.009..1.522 rows=8368 loops=1)
+                                       Output: _hyper_1_929_chunk.source_institution, _hyper_1_929_chunk.amount, _hyper_1_929_chunk.settled_at, _hyper_1_929_chunk.created_at, _hyper_1_929_chunk.status
+                                       Filter: (_hyper_1_929_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=139
+                                       Worker 0:  actual time=0.009..1.522 rows=8368 loops=1
+                                         Buffers: shared hit=139
+                           ->  Partial HashAggregate  (cost=320.69..320.92 rows=15 width=84) (actual time=2.830..2.835 rows=15 loops=1)
+                                 Output: _hyper_1_1113_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1113_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1113_chunk.settled_at - _hyper_1_1113_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1113_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1113_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=139
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1113_chunk  (cost=0.00..223.79 rows=4845 width=30) (actual time=0.009..1.161 rows=8237 loops=1)
+                                       Output: _hyper_1_1113_chunk.source_institution, _hyper_1_1113_chunk.amount, _hyper_1_1113_chunk.settled_at, _hyper_1_1113_chunk.created_at, _hyper_1_1113_chunk.status
+                                       Filter: (_hyper_1_1113_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=139
+                           ->  Partial HashAggregate  (cost=319.61..319.83 rows=15 width=84) (actual time=2.807..2.811 rows=15 loops=1)
+                                 Output: _hyper_1_1118_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1118_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1118_chunk.settled_at - _hyper_1_1118_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1118_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1118_chunk.source_institution
+                                 Buffers: shared hit=139
+                                 Worker 1:  actual time=2.807..2.811 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=139
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1118_chunk  (cost=0.00..223.29 rows=4816 width=30) (actual time=0.007..1.120 rows=8188 loops=1)
+                                       Output: _hyper_1_1118_chunk.source_institution, _hyper_1_1118_chunk.amount, _hyper_1_1118_chunk.settled_at, _hyper_1_1118_chunk.created_at, _hyper_1_1118_chunk.status
+                                       Filter: (_hyper_1_1118_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=139
+                                       Worker 1:  actual time=0.007..1.120 rows=8188 loops=1
+                                         Buffers: shared hit=139
+                           ->  Partial HashAggregate  (cost=317.77..317.99 rows=15 width=84) (actual time=3.103..3.108 rows=15 loops=1)
+                                 Output: _hyper_1_918_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_918_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_918_chunk.settled_at - _hyper_1_918_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_918_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_918_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=138
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_918_chunk  (cost=0.00..221.89 rows=4794 width=30) (actual time=0.008..1.280 rows=8149 loops=1)
+                                       Output: _hyper_1_918_chunk.source_institution, _hyper_1_918_chunk.amount, _hyper_1_918_chunk.settled_at, _hyper_1_918_chunk.created_at, _hyper_1_918_chunk.status
+                                       Filter: (_hyper_1_918_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=138
+                           ->  Partial HashAggregate  (cost=317.69..317.92 rows=15 width=84) (actual time=3.424..3.430 rows=15 loops=1)
+                                 Output: _hyper_1_1095_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1095_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1095_chunk.settled_at - _hyper_1_1095_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1095_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1095_chunk.source_institution
+                                 Buffers: shared hit=136
+                                 Worker 0:  actual time=3.424..3.430 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=136
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1095_chunk  (cost=0.00..220.79 rows=4845 width=30) (actual time=0.013..1.520 rows=8237 loops=1)
+                                       Output: _hyper_1_1095_chunk.source_institution, _hyper_1_1095_chunk.amount, _hyper_1_1095_chunk.settled_at, _hyper_1_1095_chunk.created_at, _hyper_1_1095_chunk.status
+                                       Filter: (_hyper_1_1095_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=136
+                                       Worker 0:  actual time=0.013..1.520 rows=8237 loops=1
+                                         Buffers: shared hit=136
+                           ->  Partial HashAggregate  (cost=311.97..312.20 rows=15 width=84) (actual time=3.367..3.370 rows=15 loops=1)
+                                 Output: _hyper_1_1111_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1111_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1111_chunk.settled_at - _hyper_1_1111_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1111_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1111_chunk.source_institution
+                                 Buffers: shared hit=134
+                                 Worker 1:  actual time=3.367..3.370 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=134
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1111_chunk  (cost=0.00..217.05 rows=4746 width=30) (actual time=0.010..1.438 rows=8068 loops=1)
+                                       Output: _hyper_1_1111_chunk.source_institution, _hyper_1_1111_chunk.amount, _hyper_1_1111_chunk.settled_at, _hyper_1_1111_chunk.created_at, _hyper_1_1111_chunk.status
+                                       Filter: (_hyper_1_1111_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=134
+                                       Worker 1:  actual time=0.010..1.438 rows=8068 loops=1
+                                         Buffers: shared hit=134
+                           ->  Partial HashAggregate  (cost=310.45..310.67 rows=15 width=84) (actual time=3.006..3.011 rows=15 loops=1)
+                                 Output: _hyper_1_1112_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_1112_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_1112_chunk.settled_at - _hyper_1_1112_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_1112_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_1112_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=133
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1112_chunk  (cost=0.00..215.81 rows=4732 width=30) (actual time=0.008..1.223 rows=8044 loops=1)
+                                       Output: _hyper_1_1112_chunk.source_institution, _hyper_1_1112_chunk.amount, _hyper_1_1112_chunk.settled_at, _hyper_1_1112_chunk.created_at, _hyper_1_1112_chunk.status
+                                       Filter: (_hyper_1_1112_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=133
+                           ->  Partial HashAggregate  (cost=309.03..309.26 rows=15 width=84) (actual time=2.900..2.904 rows=15 loops=1)
+                                 Output: _hyper_1_962_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_962_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_962_chunk.settled_at - _hyper_1_962_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_962_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_962_chunk.source_institution
+                                 Buffers: shared hit=132
+                                 Worker 0:  actual time=2.900..2.904 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=132
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_962_chunk  (cost=0.00..214.61 rows=4721 width=30) (actual time=0.013..1.162 rows=8025 loops=1)
+                                       Output: _hyper_1_962_chunk.source_institution, _hyper_1_962_chunk.amount, _hyper_1_962_chunk.settled_at, _hyper_1_962_chunk.created_at, _hyper_1_962_chunk.status
+                                       Filter: (_hyper_1_962_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=132
+                                       Worker 0:  actual time=0.013..1.162 rows=8025 loops=1
+                                         Buffers: shared hit=132
+                           ->  Partial HashAggregate  (cost=305.97..306.19 rows=15 width=84) (actual time=1.400..1.404 rows=15 loops=2)
+                                 Output: _hyper_1_963_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_963_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_963_chunk.settled_at - _hyper_1_963_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_963_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_963_chunk.source_institution
+                                 Buffers: shared hit=132
+                                 Worker 0:  actual time=0.487..0.491 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=23
+                                 Worker 1:  actual time=2.314..2.318 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=109
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_963_chunk  (cost=0.00..213.19 rows=4639 width=30) (actual time=0.010..0.564 rows=3944 loops=2)
+                                       Output: _hyper_1_963_chunk.source_institution, _hyper_1_963_chunk.amount, _hyper_1_963_chunk.settled_at, _hyper_1_963_chunk.created_at, _hyper_1_963_chunk.status
+                                       Filter: (_hyper_1_963_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=132
+                                       Worker 0:  actual time=0.009..0.191 rows=1281 loops=1
+                                         Buffers: shared hit=23
+                                       Worker 1:  actual time=0.011..0.937 rows=6606 loops=1
+                                         Buffers: shared hit=109
+                           ->  Partial HashAggregate  (cost=305.07..305.29 rows=15 width=84) (actual time=0.920..0.925 rows=15 loops=3)
+                                 Output: _hyper_1_954_chunk.source_institution, PARTIAL count(*), PARTIAL sum(_hyper_1_954_chunk.amount), PARTIAL avg(EXTRACT(epoch FROM (_hyper_1_954_chunk.settled_at - _hyper_1_954_chunk.created_at))), PARTIAL count(*) FILTER (WHERE (_hyper_1_954_chunk.status = 'failed'::transaction_status))
+                                 Group Key: _hyper_1_954_chunk.source_institution
+                                 Batches: 1  Memory Usage: 32kB
+                                 Buffers: shared hit=132
+                                 Worker 0:  actual time=0.714..0.718 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=34
+                                 Worker 1:  actual time=0.698..0.702 rows=15 loops=1
+                                   Batches: 1  Memory Usage: 32kB
+                                   Buffers: shared hit=31
+                                 ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_954_chunk  (cost=0.00..212.77 rows=4615 width=30) (actual time=0.007..0.373 rows=2615 loops=3)
+                                       Output: _hyper_1_954_chunk.source_institution, _hyper_1_954_chunk.amount, _hyper_1_954_chunk.settled_at, _hyper_1_954_chunk.created_at, _hyper_1_954_chunk.status
+                                       Filter: (_hyper_1_954_chunk.created_at >= (now() - '90 days'::interval))
+                                       Buffers: shared hit=132
+                                       Worker 0:  actual time=0.006..0.285 rows=1968 loops=1
+                                         Buffers: shared hit=34
+                                       Worker 1:  actual time=0.008..0.279 rows=1830 loops=1
+                                         Buffers: shared hit=31
+ Query Identifier: 2514583614285894908
+ Planning:
+   Buffers: shared hit=8282
+ Planning Time: 42.762 ms
+ JIT:
+   Functions: 2189
+   Options: Inlining false, Optimization false, Expressions true, Deforming true
+   Timing: Generation 129.667 ms, Inlining 0.000 ms, Optimization 45.488 ms, Emission 1129.800 ms, Total 1304.955 ms
+ Execution Time: 1244.084 ms
+(1096 rows)

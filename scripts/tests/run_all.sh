@@ -194,6 +194,28 @@ else
   skip 05.7 "seed não concluído"
 fi
 
+# --- 06 queries-antes-indices ---
+check 06.1 "q1..q4_before.txt existem" bash -c \
+  'test -f desafio-1/queries/explains/q1_before.txt -a -f desafio-1/queries/explains/q2_before.txt -a -f desafio-1/queries/explains/q3_before.txt -a -f desafio-1/queries/explains/q4_before.txt'
+
+N_BUF=$(grep -l 'Buffers:' desafio-1/queries/explains/*_before.txt 2>/dev/null | wc -l)
+[ "$N_BUF" = "4" ] && ok 06.2 "4 arquivos com Buffers:" || fail 06.2 "esperava 4, achei $N_BUF"
+
+if seed_done; then
+  N_IDX_06=$(psql_ts "SELECT count(*) FROM pg_indexes WHERE tablename='transactions'")
+  [ "$N_IDX_06" = "2" ] && ok 06.3 "sem índice extra em transactions" \
+    || fail 06.3 "esperava 2 (implícitos), achei ${N_IDX_06:-erro}"
+
+  N_CAGG=$(psql_ts "SELECT count(*) FROM timescaledb_information.continuous_aggregates")
+  [ "$N_CAGG" = "0" ] && ok 06.4 "nenhum continuous aggregate ainda" \
+    || fail 06.4 "esperava 0 CAggs, achei ${N_CAGG:-erro}"
+else
+  skip 06.3 "seed não concluído"
+  skip 06.4 "seed não concluído"
+fi
+
+check 06.5 "MEDICOES.md menciona mediana" grep -q "mediana" desafio-1/queries/MEDICOES.md
+
 # ===========================================================================
 
 echo "----"

@@ -7,7 +7,15 @@
 - [ ] ficha `scripts/ambiente/DOCKER-LOCAL.md` tem campo `<PREENCHER>` → preencher e confirmar seed concluído
 
 ## ESTADO HERDADO
-<preenchido pela etapa 06 ao fechar>
+Verificado ao fechar a etapa 06:
+- `desafio-1/queries/q1_volume_por_tipo_status.sql`, `q2_divergencias_reconciliacao.sql`, `q3_top_instituicoes.sql`, `q4_deteccao_duplicatas.sql` — versões ingênuas literais de S06, sem alteração pendente para as etapas seguintes reescreverem por cima (Q2/Q3/Q4 mudam aqui; Q1 só muda na 08 com CAgg).
+- `desafio-1/queries/explains/q{1,2,3,4}_before.txt` gravados e intactos — **não sobrescrever**. Medianas: Q1 12.115ms, Q2 8.103ms, Q3 1.285ms, Q4 2.814ms (self-join). `desafio-1/queries/MEDICOES.md` documenta o protocolo e observações por query.
+- `desafio-1/queries/run-explains.sh` automatiza o ritual de medição (4 execuções, descarta 1ª, mediana das 3, salva `Buffers:`) — reutilizável para gerar os `_after.txt`, mas precisa apontar para os arquivos `_optimized.sql`/reescritos desta etapa, não os `_before` de novo.
+- **Nenhum índice extra em `transactions`** (só os 2 implícitos), **nenhum CAgg** — confirmado antes de fechar a 06. Pré-condição intacta para esta etapa criar `03_indexes.sql`.
+- `docker-compose.yml`: `timescaledb` ganhou `shm_size: "1gb"` (era o default de 64MB do Docker) — Q4 self-join estourava `/dev/shm` sem essa folga. Mudança de infra, container foi recriado preservando o volume de dados (10M intactos, confirmado). Se as etapas seguintes também fizerem hash join grande, essa folga já existe.
+- Dataset: 10M transactions, 500k accounts, 1.442.199 reconciliation_events, 338 chunks. `ANALYZE` rodado. `seed_control.finished_at` preenchido — `make seed` é no-op sem `--force`.
+- `run_all.sh`: blocos 01-06, 34 pass / 0 fail / 4 skip. `audit.sh` mantém os FAILs conhecidos de `concluidas/` (script de auditoria do plano não escala com o roadmap avançando — não é regressão de arquitetura/PDF, documentado desde a etapa 02).
+- Containers de pé: `timescaledb` (recriado com novo `shm_size`, healthy) e `postgres-legado` (healthy).
 
 ## ESCOPO
 Faz: `init/timescaledb/03_indexes.sql` (índice parcial, covering com `INCLUDE`, apoio à detecção de duplicatas), versões otimizadas de Q1–Q4, `qN_after.txt`, query bônus de gapfill de 48h com `locf`/`interpolate`, e a tabela antes/depois do `REPORT.md` com número real.

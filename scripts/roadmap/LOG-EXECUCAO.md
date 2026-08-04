@@ -28,3 +28,7 @@ Decidido: volume do timescaledb recriado 2x (schema inicial + correção do seed
 ## 05 · 2026-08-04
 Quebrou: `COPY BINARY` com `float`/sem `set_types` corrompia o stream binário (NUMERIC e CHAR(3)); timestamps do mês corrente geravam dado no futuro. Todos corrigidos antes do seed real rodar.
 Decidido: seed real de 10M rodou em 1m57s (vs ~20min estimado em S02) — 6 workers, COPY BINARY em lotes de 50k. 12 meses do dataset terminam no mês corrente para a janela de pending/48h cair dentro do range.
+
+## 06 · 2026-08-04
+Quebrou: Q4 (self-join) estourava `/dev/shm` (64MB default) — nosso volume em 7 dias é ~5x a referência de S06.
+Decidido: `shm_size: 1gb` no serviço timescaledb (docker-compose.yml). Medianas registradas: Q1 12.115ms, Q2 8.103ms, Q3 1.285ms, Q4 2.814ms (self-join mais rápido que o esperado — planejador usou Parallel Hash Join).

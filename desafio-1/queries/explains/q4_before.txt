@@ -1,0 +1,1470 @@
+-- Query: q4
+-- Arquivo fonte: q4_deteccao_duplicatas.sql
+-- Protocolo: 4 execuções, 1ª descartada (aquece cache), mediana das 3 seguintes = 2813.611ms
+-- Tempos das 3 execuções medidas (ms): 2713.758 2842.265 2813.611
+-- EXPLAIN abaixo é da última execução (cache já quente, mesmo plano)
+--
+                                                                                        QUERY PLAN                                                                                         
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Gather  (cost=31861.88..339160.15 rows=1 width=38) (actual time=2741.244..2754.992 rows=0 loops=1)
+   Output: a.id, b.id, a.amount, a.created_at, b.created_at
+   Workers Planned: 2
+   Workers Launched: 2
+   Buffers: shared hit=31712 read=150693
+   ->  Parallel Hash Join  (cost=30861.88..338160.05 rows=1 width=38) (actual time=2666.084..2666.138 rows=0 loops=3)
+         Output: a.id, b.id, a.amount, a.created_at, b.created_at
+         Hash Cond: ((b.amount = a.amount) AND (b.source_account_id = a.source_account_id) AND (b.destination_account_id = a.destination_account_id))
+         Join Filter: ((b.created_at >= a.created_at) AND (a.id < b.id) AND (b.created_at <= (a.created_at + '00:05:00'::interval)))
+         Rows Removed by Join Filter: 319645
+         Buffers: shared hit=31712 read=150693
+         Worker 0:  actual time=2634.568..2634.601 rows=0 loops=1
+           JIT:
+             Functions: 720
+             Options: Inlining false, Optimization false, Expressions true, Deforming true
+             Timing: Generation 43.178 ms, Inlining 0.000 ms, Optimization 19.075 ms, Emission 426.387 ms, Total 488.640 ms
+           Buffers: shared hit=17829 read=41701
+         Worker 1:  actual time=2632.074..2632.112 rows=0 loops=1
+           JIT:
+             Functions: 720
+             Options: Inlining false, Optimization false, Expressions true, Deforming true
+             Timing: Generation 42.727 ms, Inlining 0.000 ms, Optimization 18.459 ms, Emission 426.873 ms, Total 488.059 ms
+           Buffers: shared hit=4175 read=55524
+         ->  Parallel Append  (cost=0.00..244798.15 rows=4166667 width=38) (actual time=0.067..650.651 rows=3333333 loops=3)
+               Buffers: shared hit=15783 read=150693
+               Worker 0:  actual time=0.053..628.875 rows=3305256 loops=1
+                 Buffers: shared hit=13308 read=41701
+               Worker 1:  actual time=0.097..668.035 rows=3330156 loops=1
+                 Buffers: shared read=55524
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1115_chunk b_335  (cost=0.00..16001.45 rows=324145 width=38) (actual time=0.051..74.899 rows=777948 loops=1)
+                     Output: b_335.id, b_335.created_at, b_335.amount, b_335.source_account_id, b_335.destination_account_id
+                     Buffers: shared hit=12760
+                     Worker 0:  actual time=0.051..74.899 rows=777948 loops=1
+                       Buffers: shared hit=12760
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_976_chunk b_196  (cost=0.00..1248.16 rows=32816 width=38) (actual time=0.095..9.059 rows=55787 loops=1)
+                     Output: b_196.id, b_196.created_at, b_196.amount, b_196.source_account_id, b_196.destination_account_id
+                     Buffers: shared read=920
+                     Worker 1:  actual time=0.095..9.059 rows=55787 loops=1
+                       Buffers: shared read=920
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_981_chunk b_201  (cost=0.00..1238.65 rows=32665 width=38) (actual time=0.056..7.385 rows=55531 loops=1)
+                     Output: b_201.id, b_201.created_at, b_201.amount, b_201.source_account_id, b_201.destination_account_id
+                     Buffers: shared read=912
+                     Worker 1:  actual time=0.056..7.385 rows=55531 loops=1
+                       Buffers: shared read=912
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_817_chunk b_37  (cost=0.00..1238.41 rows=31841 width=38) (actual time=0.054..7.208 rows=54130 loops=1)
+                     Output: b_37.id, b_37.created_at, b_37.amount, b_37.source_account_id, b_37.destination_account_id
+                     Buffers: shared read=920
+                     Worker 1:  actual time=0.054..7.208 rows=54130 loops=1
+                       Buffers: shared read=920
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_906_chunk b_126  (cost=0.00..1210.16 rows=31416 width=38) (actual time=0.120..8.788 rows=53408 loops=1)
+                     Output: b_126.id, b_126.created_at, b_126.amount, b_126.source_account_id, b_126.destination_account_id
+                     Buffers: shared read=896
+                     Worker 1:  actual time=0.120..8.788 rows=53408 loops=1
+                       Buffers: shared read=896
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_833_chunk b_53  (cost=0.00..1205.81 rows=31781 width=38) (actual time=0.068..7.124 rows=54027 loops=1)
+                     Output: b_53.id, b_53.created_at, b_53.amount, b_53.source_account_id, b_53.destination_account_id
+                     Buffers: shared read=888
+                     Worker 1:  actual time=0.068..7.124 rows=54027 loops=1
+                       Buffers: shared read=888
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_904_chunk b_124  (cost=0.00..1194.52 rows=31452 width=38) (actual time=0.063..7.078 rows=53468 loops=1)
+                     Output: b_124.id, b_124.created_at, b_124.amount, b_124.source_account_id, b_124.destination_account_id
+                     Buffers: shared read=880
+                     Worker 1:  actual time=0.063..7.078 rows=53468 loops=1
+                       Buffers: shared read=880
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1078_chunk b_298  (cost=0.00..1193.76 rows=31376 width=38) (actual time=0.061..7.190 rows=53340 loops=1)
+                     Output: b_298.id, b_298.created_at, b_298.amount, b_298.source_account_id, b_298.destination_account_id
+                     Buffers: shared read=880
+                     Worker 1:  actual time=0.061..7.190 rows=53340 loops=1
+                       Buffers: shared read=880
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1102_chunk b_322  (cost=0.00..1169.64 rows=30564 width=38) (actual time=0.060..6.760 rows=51958 loops=1)
+                     Output: b_322.id, b_322.created_at, b_322.amount, b_322.source_account_id, b_322.destination_account_id
+                     Buffers: shared read=864
+                     Worker 1:  actual time=0.060..6.760 rows=51958 loops=1
+                       Buffers: shared read=864
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_845_chunk b_65  (cost=0.00..1162.70 rows=30670 width=38) (actual time=0.060..7.727 rows=52139 loops=1)
+                     Output: b_65.id, b_65.created_at, b_65.amount, b_65.source_account_id, b_65.destination_account_id
+                     Buffers: shared read=856
+                     Worker 1:  actual time=0.060..7.727 rows=52139 loops=1
+                       Buffers: shared read=856
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_786_chunk b_6  (cost=0.00..1158.64 rows=30264 width=38) (actual time=0.061..7.842 rows=51449 loops=1)
+                     Output: b_6.id, b_6.created_at, b_6.amount, b_6.source_account_id, b_6.destination_account_id
+                     Buffers: shared read=856
+                     Worker 1:  actual time=0.061..7.842 rows=51449 loops=1
+                       Buffers: shared read=856
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_798_chunk b_18  (cost=0.00..1152.12 rows=30412 width=38) (actual time=0.071..6.950 rows=51701 loops=1)
+                     Output: b_18.id, b_18.created_at, b_18.amount, b_18.source_account_id, b_18.destination_account_id
+                     Buffers: shared read=848
+                     Worker 1:  actual time=0.071..6.950 rows=51701 loops=1
+                       Buffers: shared read=848
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_997_chunk b_217  (cost=0.00..1150.29 rows=30229 width=38) (actual time=0.061..7.646 rows=51389 loops=1)
+                     Output: b_217.id, b_217.created_at, b_217.amount, b_217.source_account_id, b_217.destination_account_id
+                     Buffers: shared read=848
+                     Worker 1:  actual time=0.061..7.646 rows=51389 loops=1
+                       Buffers: shared read=848
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_875_chunk b_95  (cost=0.00..1138.06 rows=29806 width=38) (actual time=0.059..7.185 rows=50670 loops=1)
+                     Output: b_95.id, b_95.created_at, b_95.amount, b_95.source_account_id, b_95.destination_account_id
+                     Buffers: shared read=840
+                     Worker 1:  actual time=0.059..7.185 rows=50670 loops=1
+                       Buffers: shared read=840
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_881_chunk b_101  (cost=0.00..1137.11 rows=29911 width=38) (actual time=0.064..8.298 rows=50848 loops=1)
+                     Output: b_101.id, b_101.created_at, b_101.amount, b_101.source_account_id, b_101.destination_account_id
+                     Buffers: shared read=838
+                     Worker 1:  actual time=0.064..8.298 rows=50848 loops=1
+                       Buffers: shared read=838
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1039_chunk b_259  (cost=0.00..1130.55 rows=29455 width=38) (actual time=0.060..7.339 rows=50073 loops=1)
+                     Output: b_259.id, b_259.created_at, b_259.amount, b_259.source_account_id, b_259.destination_account_id
+                     Buffers: shared read=836
+                     Worker 1:  actual time=0.060..7.339 rows=50073 loops=1
+                       Buffers: shared read=836
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_950_chunk b_170  (cost=0.00..1119.20 rows=29520 width=38) (actual time=0.081..6.425 rows=50184 loops=1)
+                     Output: b_170.id, b_170.created_at, b_170.amount, b_170.source_account_id, b_170.destination_account_id
+                     Buffers: shared read=824
+                     Worker 1:  actual time=0.081..6.425 rows=50184 loops=1
+                       Buffers: shared read=824
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_970_chunk b_190  (cost=0.00..791.40 rows=20540 width=38) (actual time=0.075..4.840 rows=34918 loops=1)
+                     Output: b_190.id, b_190.created_at, b_190.amount, b_190.source_account_id, b_190.destination_account_id
+                     Buffers: shared read=586
+                     Worker 0:  actual time=0.075..4.840 rows=34918 loops=1
+                       Buffers: shared read=586
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_979_chunk b_199  (cost=0.00..789.39 rows=20539 width=38) (actual time=0.061..5.211 rows=34916 loops=1)
+                     Output: b_199.id, b_199.created_at, b_199.amount, b_199.source_account_id, b_199.destination_account_id
+                     Buffers: shared read=584
+                     Worker 1:  actual time=0.061..5.211 rows=34916 loops=1
+                       Buffers: shared read=584
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_984_chunk b_204  (cost=0.00..788.69 rows=20469 width=38) (actual time=0.045..5.264 rows=34798 loops=1)
+                     Output: b_204.id, b_204.created_at, b_204.amount, b_204.source_account_id, b_204.destination_account_id
+                     Buffers: shared read=584
+                     Worker 0:  actual time=0.045..5.264 rows=34798 loops=1
+                       Buffers: shared read=584
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_971_chunk b_191  (cost=0.00..787.59 rows=20559 width=38) (actual time=0.107..5.056 rows=34951 loops=1)
+                     Output: b_191.id, b_191.created_at, b_191.amount, b_191.source_account_id, b_191.destination_account_id
+                     Buffers: shared read=582
+                     Worker 1:  actual time=0.107..5.056 rows=34951 loops=1
+                       Buffers: shared read=582
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_968_chunk b_188  (cost=0.00..785.55 rows=20555 width=38) (actual time=0.046..5.228 rows=34944 loops=1)
+                     Output: b_188.id, b_188.created_at, b_188.amount, b_188.source_account_id, b_188.destination_account_id
+                     Buffers: shared read=580
+                     Worker 0:  actual time=0.046..5.228 rows=34944 loops=1
+                       Buffers: shared read=580
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_974_chunk b_194  (cost=0.00..785.00 rows=20500 width=38) (actual time=0.057..4.662 rows=34850 loops=1)
+                     Output: b_194.id, b_194.created_at, b_194.amount, b_194.source_account_id, b_194.destination_account_id
+                     Buffers: shared read=580
+                     Worker 1:  actual time=0.057..4.662 rows=34850 loops=1
+                       Buffers: shared read=580
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_967_chunk b_187  (cost=0.00..784.21 rows=20421 width=38) (actual time=0.044..4.799 rows=34716 loops=1)
+                     Output: b_187.id, b_187.created_at, b_187.amount, b_187.source_account_id, b_187.destination_account_id
+                     Buffers: shared read=580
+                     Worker 0:  actual time=0.044..4.799 rows=34716 loops=1
+                       Buffers: shared read=580
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_965_chunk b_185  (cost=0.00..782.71 rows=20471 width=38) (actual time=0.061..4.722 rows=34800 loops=1)
+                     Output: b_185.id, b_185.created_at, b_185.amount, b_185.source_account_id, b_185.destination_account_id
+                     Buffers: shared read=578
+                     Worker 1:  actual time=0.061..4.722 rows=34800 loops=1
+                       Buffers: shared read=578
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_966_chunk b_186  (cost=0.00..782.22 rows=20422 width=38) (actual time=0.054..5.035 rows=34718 loops=1)
+                     Output: b_186.id, b_186.created_at, b_186.amount, b_186.source_account_id, b_186.destination_account_id
+                     Buffers: shared read=578
+                     Worker 0:  actual time=0.054..5.035 rows=34718 loops=1
+                       Buffers: shared read=578
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_975_chunk b_195  (cost=0.00..780.04 rows=20404 width=38) (actual time=0.063..4.612 rows=34686 loops=1)
+                     Output: b_195.id, b_195.created_at, b_195.amount, b_195.source_account_id, b_195.destination_account_id
+                     Buffers: shared read=576
+                     Worker 1:  actual time=0.063..4.612 rows=34686 loops=1
+                       Buffers: shared read=576
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_988_chunk b_208  (cost=0.00..779.82 rows=20382 width=38) (actual time=0.061..4.724 rows=34649 loops=1)
+                     Output: b_208.id, b_208.created_at, b_208.amount, b_208.source_account_id, b_208.destination_account_id
+                     Buffers: shared read=576
+                     Worker 0:  actual time=0.061..4.724 rows=34649 loops=1
+                       Buffers: shared read=576
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_986_chunk b_206  (cost=0.00..779.69 rows=20369 width=38) (actual time=0.057..4.913 rows=34627 loops=1)
+                     Output: b_206.id, b_206.created_at, b_206.amount, b_206.source_account_id, b_206.destination_account_id
+                     Buffers: shared read=576
+                     Worker 1:  actual time=0.057..4.913 rows=34627 loops=1
+                       Buffers: shared read=576
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_972_chunk b_192  (cost=0.00..779.46 rows=20346 width=38) (actual time=0.092..4.871 rows=34589 loops=1)
+                     Output: b_192.id, b_192.created_at, b_192.amount, b_192.source_account_id, b_192.destination_account_id
+                     Buffers: shared read=576
+                     Worker 0:  actual time=0.092..4.871 rows=34589 loops=1
+                       Buffers: shared read=576
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_969_chunk b_189  (cost=0.00..779.36 rows=20336 width=38) (actual time=0.067..5.202 rows=34571 loops=1)
+                     Output: b_189.id, b_189.created_at, b_189.amount, b_189.source_account_id, b_189.destination_account_id
+                     Buffers: shared read=576
+                     Worker 1:  actual time=0.067..5.202 rows=34571 loops=1
+                       Buffers: shared read=576
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_978_chunk b_198  (cost=0.00..779.25 rows=20325 width=38) (actual time=0.046..5.451 rows=34553 loops=1)
+                     Output: b_198.id, b_198.created_at, b_198.amount, b_198.source_account_id, b_198.destination_account_id
+                     Buffers: shared read=576
+                     Worker 0:  actual time=0.046..5.451 rows=34553 loops=1
+                       Buffers: shared read=576
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_991_chunk b_211  (cost=0.00..777.09 rows=20309 width=38) (actual time=0.054..4.866 rows=34526 loops=1)
+                     Output: b_211.id, b_211.created_at, b_211.amount, b_211.source_account_id, b_211.destination_account_id
+                     Buffers: shared read=574
+                     Worker 1:  actual time=0.054..4.866 rows=34526 loops=1
+                       Buffers: shared read=574
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_980_chunk b_200  (cost=0.00..776.69 rows=20269 width=38) (actual time=0.054..5.221 rows=34458 loops=1)
+                     Output: b_200.id, b_200.created_at, b_200.amount, b_200.source_account_id, b_200.destination_account_id
+                     Buffers: shared read=574
+                     Worker 0:  actual time=0.054..5.221 rows=34458 loops=1
+                       Buffers: shared read=574
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_973_chunk b_193  (cost=0.00..771.61 rows=20161 width=38) (actual time=0.058..4.858 rows=34274 loops=1)
+                     Output: b_193.id, b_193.created_at, b_193.amount, b_193.source_account_id, b_193.destination_account_id
+                     Buffers: shared read=570
+                     Worker 1:  actual time=0.058..4.858 rows=34274 loops=1
+                       Buffers: shared read=570
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_831_chunk b_51  (cost=0.00..771.57 rows=20157 width=38) (actual time=0.060..5.183 rows=34267 loops=1)
+                     Output: b_51.id, b_51.created_at, b_51.amount, b_51.source_account_id, b_51.destination_account_id
+                     Buffers: shared read=570
+                     Worker 0:  actual time=0.060..5.183 rows=34267 loops=1
+                       Buffers: shared read=570
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_827_chunk b_47  (cost=0.00..769.12 rows=19912 width=38) (actual time=0.069..5.569 rows=33850 loops=1)
+                     Output: b_47.id, b_47.created_at, b_47.amount, b_47.source_account_id, b_47.destination_account_id
+                     Buffers: shared read=570
+                     Worker 1:  actual time=0.069..5.569 rows=33850 loops=1
+                       Buffers: shared read=570
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_824_chunk b_44  (cost=0.00..769.03 rows=20003 width=38) (actual time=0.074..5.026 rows=34005 loops=1)
+                     Output: b_44.id, b_44.created_at, b_44.amount, b_44.source_account_id, b_44.destination_account_id
+                     Buffers: shared read=569
+                     Worker 0:  actual time=0.074..5.026 rows=34005 loops=1
+                       Buffers: shared read=569
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_823_chunk b_43  (cost=0.00..768.94 rows=19994 width=38) (actual time=0.091..4.447 rows=33990 loops=1)
+                     Output: b_43.id, b_43.created_at, b_43.amount, b_43.source_account_id, b_43.destination_account_id
+                     Buffers: shared read=569
+                     Worker 1:  actual time=0.091..4.447 rows=33990 loops=1
+                       Buffers: shared read=569
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_822_chunk b_42  (cost=0.00..768.07 rows=20007 width=38) (actual time=0.053..4.668 rows=34012 loops=1)
+                     Output: b_42.id, b_42.created_at, b_42.amount, b_42.source_account_id, b_42.destination_account_id
+                     Buffers: shared read=568
+                     Worker 0:  actual time=0.053..4.668 rows=34012 loops=1
+                       Buffers: shared read=568
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_828_chunk b_48  (cost=0.00..767.74 rows=19974 width=38) (actual time=0.056..4.418 rows=33956 loops=1)
+                     Output: b_48.id, b_48.created_at, b_48.amount, b_48.source_account_id, b_48.destination_account_id
+                     Buffers: shared read=568
+                     Worker 1:  actual time=0.056..4.418 rows=33956 loops=1
+                       Buffers: shared read=568
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_815_chunk b_35  (cost=0.00..767.74 rows=19974 width=38) (actual time=0.051..5.151 rows=33955 loops=1)
+                     Output: b_35.id, b_35.created_at, b_35.amount, b_35.source_account_id, b_35.destination_account_id
+                     Buffers: shared read=568
+                     Worker 0:  actual time=0.051..5.151 rows=33955 loops=1
+                       Buffers: shared read=568
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_814_chunk b_34  (cost=0.00..767.68 rows=19968 width=38) (actual time=0.057..4.800 rows=33946 loops=1)
+                     Output: b_34.id, b_34.created_at, b_34.amount, b_34.source_account_id, b_34.destination_account_id
+                     Buffers: shared read=568
+                     Worker 1:  actual time=0.057..4.800 rows=33946 loops=1
+                       Buffers: shared read=568
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_838_chunk b_58  (cost=0.00..765.92 rows=19892 width=38) (actual time=0.058..4.539 rows=33817 loops=1)
+                     Output: b_58.id, b_58.created_at, b_58.amount, b_58.source_account_id, b_58.destination_account_id
+                     Buffers: shared read=567
+                     Worker 0:  actual time=0.058..4.539 rows=33817 loops=1
+                       Buffers: shared read=567
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_820_chunk b_40  (cost=0.00..765.69 rows=19969 width=38) (actual time=0.072..5.385 rows=33948 loops=1)
+                     Output: b_40.id, b_40.created_at, b_40.amount, b_40.source_account_id, b_40.destination_account_id
+                     Buffers: shared read=566
+                     Worker 1:  actual time=0.072..5.385 rows=33948 loops=1
+                       Buffers: shared read=566
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1073_chunk b_293  (cost=0.00..765.18 rows=19918 width=38) (actual time=0.062..5.487 rows=33861 loops=1)
+                     Output: b_293.id, b_293.created_at, b_293.amount, b_293.source_account_id, b_293.destination_account_id
+                     Buffers: shared read=566
+                     Worker 0:  actual time=0.062..5.487 rows=33861 loops=1
+                       Buffers: shared read=566
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_839_chunk b_59  (cost=0.00..765.14 rows=19914 width=38) (actual time=0.060..5.495 rows=33853 loops=1)
+                     Output: b_59.id, b_59.created_at, b_59.amount, b_59.source_account_id, b_59.destination_account_id
+                     Buffers: shared read=566
+                     Worker 1:  actual time=0.060..5.495 rows=33853 loops=1
+                       Buffers: shared read=566
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_836_chunk b_56  (cost=0.00..764.88 rows=19888 width=38) (actual time=0.061..5.099 rows=33809 loops=1)
+                     Output: b_56.id, b_56.created_at, b_56.amount, b_56.source_account_id, b_56.destination_account_id
+                     Buffers: shared read=566
+                     Worker 0:  actual time=0.061..5.099 rows=33809 loops=1
+                       Buffers: shared read=566
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1065_chunk b_285  (cost=0.00..764.85 rows=19985 width=38) (actual time=0.069..4.728 rows=33975 loops=1)
+                     Output: b_285.id, b_285.created_at, b_285.amount, b_285.source_account_id, b_285.destination_account_id
+                     Buffers: shared read=565
+                     Worker 1:  actual time=0.069..4.728 rows=33975 loops=1
+                       Buffers: shared read=565
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_812_chunk b_32  (cost=0.00..764.75 rows=19875 width=38) (actual time=0.054..4.592 rows=33787 loops=1)
+                     Output: b_32.id, b_32.created_at, b_32.amount, b_32.source_account_id, b_32.destination_account_id
+                     Buffers: shared read=566
+                     Worker 0:  actual time=0.054..4.592 rows=33787 loops=1
+                       Buffers: shared read=566
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_830_chunk b_50  (cost=0.00..764.63 rows=19863 width=38) (actual time=0.058..4.441 rows=33767 loops=1)
+                     Output: b_50.id, b_50.created_at, b_50.amount, b_50.source_account_id, b_50.destination_account_id
+                     Buffers: shared read=566
+                     Worker 1:  actual time=0.058..4.441 rows=33767 loops=1
+                       Buffers: shared read=566
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_826_chunk b_46  (cost=0.00..764.35 rows=19935 width=38) (actual time=0.047..4.683 rows=33889 loops=1)
+                     Output: b_46.id, b_46.created_at, b_46.amount, b_46.source_account_id, b_46.destination_account_id
+                     Buffers: shared read=565
+                     Worker 0:  actual time=0.047..4.683 rows=33889 loops=1
+                       Buffers: shared read=565
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_816_chunk b_36  (cost=0.00..763.67 rows=19867 width=38) (actual time=0.071..4.774 rows=33774 loops=1)
+                     Output: b_36.id, b_36.created_at, b_36.amount, b_36.source_account_id, b_36.destination_account_id
+                     Buffers: shared read=565
+                     Worker 1:  actual time=0.071..4.774 rows=33774 loops=1
+                       Buffers: shared read=565
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1057_chunk b_277  (cost=0.00..763.38 rows=19938 width=38) (actual time=0.061..4.692 rows=33894 loops=1)
+                     Output: b_277.id, b_277.created_at, b_277.amount, b_277.source_account_id, b_277.destination_account_id
+                     Buffers: shared read=564
+                     Worker 0:  actual time=0.061..4.692 rows=33894 loops=1
+                       Buffers: shared read=564
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_829_chunk b_49  (cost=0.00..762.32 rows=19832 width=38) (actual time=0.066..4.377 rows=33714 loops=1)
+                     Output: b_49.id, b_49.created_at, b_49.amount, b_49.source_account_id, b_49.destination_account_id
+                     Buffers: shared read=564
+                     Worker 1:  actual time=0.066..4.377 rows=33714 loops=1
+                       Buffers: shared read=564
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_914_chunk b_134  (cost=0.00..761.51 rows=19751 width=38) (actual time=0.066..4.464 rows=33577 loops=1)
+                     Output: b_134.id, b_134.created_at, b_134.amount, b_134.source_account_id, b_134.destination_account_id
+                     Buffers: shared read=564
+                     Worker 0:  actual time=0.066..4.464 rows=33577 loops=1
+                       Buffers: shared read=564
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1069_chunk b_289  (cost=0.00..761.42 rows=19842 width=38) (actual time=0.061..5.251 rows=33731 loops=1)
+                     Output: b_289.id, b_289.created_at, b_289.amount, b_289.source_account_id, b_289.destination_account_id
+                     Buffers: shared read=563
+                     Worker 1:  actual time=0.061..5.251 rows=33731 loops=1
+                       Buffers: shared read=563
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1062_chunk b_282  (cost=0.00..760.45 rows=19845 width=38) (actual time=0.049..5.200 rows=33737 loops=1)
+                     Output: b_282.id, b_282.created_at, b_282.amount, b_282.source_account_id, b_282.destination_account_id
+                     Buffers: shared read=562
+                     Worker 0:  actual time=0.049..5.200 rows=33737 loops=1
+                       Buffers: shared read=562
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1058_chunk b_278  (cost=0.00..760.19 rows=19819 width=38) (actual time=0.077..4.747 rows=33692 loops=1)
+                     Output: b_278.id, b_278.created_at, b_278.amount, b_278.source_account_id, b_278.destination_account_id
+                     Buffers: shared read=562
+                     Worker 1:  actual time=0.077..4.747 rows=33692 loops=1
+                       Buffers: shared read=562
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1059_chunk b_279  (cost=0.00..759.62 rows=19762 width=38) (actual time=0.058..4.488 rows=33595 loops=1)
+                     Output: b_279.id, b_279.created_at, b_279.amount, b_279.source_account_id, b_279.destination_account_id
+                     Buffers: shared read=562
+                     Worker 0:  actual time=0.058..4.488 rows=33595 loops=1
+                       Buffers: shared read=562
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1064_chunk b_284  (cost=0.00..759.61 rows=19761 width=38) (actual time=0.055..5.048 rows=33594 loops=1)
+                     Output: b_284.id, b_284.created_at, b_284.amount, b_284.source_account_id, b_284.destination_account_id
+                     Buffers: shared read=562
+                     Worker 1:  actual time=0.055..5.048 rows=33594 loops=1
+                       Buffers: shared read=562
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_925_chunk b_145  (cost=0.00..758.55 rows=19755 width=38) (actual time=0.052..5.530 rows=33583 loops=1)
+                     Output: b_145.id, b_145.created_at, b_145.amount, b_145.source_account_id, b_145.destination_account_id
+                     Buffers: shared read=561
+                     Worker 0:  actual time=0.052..5.530 rows=33583 loops=1
+                       Buffers: shared read=561
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1077_chunk b_297  (cost=0.00..758.48 rows=19748 width=38) (actual time=0.056..4.463 rows=33572 loops=1)
+                     Output: b_297.id, b_297.created_at, b_297.amount, b_297.source_account_id, b_297.destination_account_id
+                     Buffers: shared read=561
+                     Worker 1:  actual time=0.056..4.463 rows=33572 loops=1
+                       Buffers: shared read=561
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_913_chunk b_133  (cost=0.00..757.83 rows=19783 width=38) (actual time=0.063..4.901 rows=33631 loops=1)
+                     Output: b_133.id, b_133.created_at, b_133.amount, b_133.source_account_id, b_133.destination_account_id
+                     Buffers: shared read=560
+                     Worker 0:  actual time=0.063..4.901 rows=33631 loops=1
+                       Buffers: shared read=560
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1060_chunk b_280  (cost=0.00..757.76 rows=19776 width=38) (actual time=0.059..4.644 rows=33620 loops=1)
+                     Output: b_280.id, b_280.created_at, b_280.amount, b_280.source_account_id, b_280.destination_account_id
+                     Buffers: shared read=560
+                     Worker 1:  actual time=0.059..4.644 rows=33620 loops=1
+                       Buffers: shared read=560
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_908_chunk b_128  (cost=0.00..757.74 rows=19674 width=38) (actual time=0.061..4.637 rows=33446 loops=1)
+                     Output: b_128.id, b_128.created_at, b_128.amount, b_128.source_account_id, b_128.destination_account_id
+                     Buffers: shared read=561
+                     Worker 0:  actual time=0.061..4.637 rows=33446 loops=1
+                       Buffers: shared read=561
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1081_chunk b_301  (cost=0.00..757.72 rows=19772 width=38) (actual time=0.072..6.964 rows=33612 loops=1)
+                     Output: b_301.id, b_301.created_at, b_301.amount, b_301.source_account_id, b_301.destination_account_id
+                     Buffers: shared read=560
+                     Worker 1:  actual time=0.072..6.964 rows=33612 loops=1
+                       Buffers: shared read=560
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1067_chunk b_287  (cost=0.00..757.33 rows=19733 width=38) (actual time=0.066..6.920 rows=33546 loops=1)
+                     Output: b_287.id, b_287.created_at, b_287.amount, b_287.source_account_id, b_287.destination_account_id
+                     Buffers: shared read=560
+                     Worker 0:  actual time=0.066..6.920 rows=33546 loops=1
+                       Buffers: shared read=560
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1071_chunk b_291  (cost=0.00..756.99 rows=19699 width=38) (actual time=0.101..4.549 rows=33488 loops=1)
+                     Output: b_291.id, b_291.created_at, b_291.amount, b_291.source_account_id, b_291.destination_account_id
+                     Buffers: shared read=560
+                     Worker 1:  actual time=0.101..4.549 rows=33488 loops=1
+                       Buffers: shared read=560
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_837_chunk b_57  (cost=0.00..756.85 rows=19685 width=38) (actual time=0.104..4.986 rows=33465 loops=1)
+                     Output: b_57.id, b_57.created_at, b_57.amount, b_57.source_account_id, b_57.destination_account_id
+                     Buffers: shared read=560
+                     Worker 0:  actual time=0.104..4.986 rows=33465 loops=1
+                       Buffers: shared read=560
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_907_chunk b_127  (cost=0.00..756.29 rows=19629 width=38) (actual time=0.063..4.324 rows=33370 loops=1)
+                     Output: b_127.id, b_127.created_at, b_127.amount, b_127.source_account_id, b_127.destination_account_id
+                     Buffers: shared read=560
+                     Worker 1:  actual time=0.063..4.324 rows=33370 loops=1
+                       Buffers: shared read=560
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1055_chunk b_275  (cost=0.00..756.21 rows=19721 width=38) (actual time=0.061..4.781 rows=33525 loops=1)
+                     Output: b_275.id, b_275.created_at, b_275.amount, b_275.source_account_id, b_275.destination_account_id
+                     Buffers: shared read=559
+                     Worker 0:  actual time=0.061..4.781 rows=33525 loops=1
+                       Buffers: shared read=559
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_923_chunk b_143  (cost=0.00..756.10 rows=19610 width=38) (actual time=0.057..4.251 rows=33337 loops=1)
+                     Output: b_143.id, b_143.created_at, b_143.amount, b_143.source_account_id, b_143.destination_account_id
+                     Buffers: shared read=560
+                     Worker 1:  actual time=0.057..4.251 rows=33337 loops=1
+                       Buffers: shared read=560
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_911_chunk b_131  (cost=0.00..756.08 rows=19708 width=38) (actual time=0.079..4.900 rows=33504 loops=1)
+                     Output: b_131.id, b_131.created_at, b_131.amount, b_131.source_account_id, b_131.destination_account_id
+                     Buffers: shared read=559
+                     Worker 0:  actual time=0.079..4.900 rows=33504 loops=1
+                       Buffers: shared read=559
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1075_chunk b_295  (cost=0.00..755.85 rows=19685 width=38) (actual time=0.058..4.861 rows=33464 loops=1)
+                     Output: b_295.id, b_295.created_at, b_295.amount, b_295.source_account_id, b_295.destination_account_id
+                     Buffers: shared read=559
+                     Worker 1:  actual time=0.058..4.861 rows=33464 loops=1
+                       Buffers: shared read=559
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_912_chunk b_132  (cost=0.00..755.74 rows=19674 width=38) (actual time=0.059..4.410 rows=33446 loops=1)
+                     Output: b_132.id, b_132.created_at, b_132.amount, b_132.source_account_id, b_132.destination_account_id
+                     Buffers: shared read=559
+                     Worker 0:  actual time=0.059..4.410 rows=33446 loops=1
+                       Buffers: shared read=559
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1063_chunk b_283  (cost=0.00..755.62 rows=19662 width=38) (actual time=0.051..4.774 rows=33426 loops=1)
+                     Output: b_283.id, b_283.created_at, b_283.amount, b_283.source_account_id, b_283.destination_account_id
+                     Buffers: shared read=559
+                     Worker 1:  actual time=0.051..4.774 rows=33426 loops=1
+                       Buffers: shared read=559
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1074_chunk b_294  (cost=0.00..755.18 rows=19618 width=38) (actual time=0.066..4.957 rows=33350 loops=1)
+                     Output: b_294.id, b_294.created_at, b_294.amount, b_294.source_account_id, b_294.destination_account_id
+                     Buffers: shared read=559
+                     Worker 0:  actual time=0.066..4.957 rows=33350 loops=1
+                       Buffers: shared read=559
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1072_chunk b_292  (cost=0.00..754.40 rows=19640 width=38) (actual time=0.065..4.756 rows=33388 loops=1)
+                     Output: b_292.id, b_292.created_at, b_292.amount, b_292.source_account_id, b_292.destination_account_id
+                     Buffers: shared read=558
+                     Worker 1:  actual time=0.065..4.756 rows=33388 loops=1
+                       Buffers: shared read=558
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1068_chunk b_288  (cost=0.00..753.79 rows=19579 width=38) (actual time=0.056..4.892 rows=33285 loops=1)
+                     Output: b_288.id, b_288.created_at, b_288.amount, b_288.source_account_id, b_288.destination_account_id
+                     Buffers: shared read=558
+                     Worker 0:  actual time=0.056..4.892 rows=33285 loops=1
+                       Buffers: shared read=558
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_905_chunk b_125  (cost=0.00..753.57 rows=19657 width=38) (actual time=0.065..4.539 rows=33417 loops=1)
+                     Output: b_125.id, b_125.created_at, b_125.amount, b_125.source_account_id, b_125.destination_account_id
+                     Buffers: shared read=557
+                     Worker 1:  actual time=0.065..4.539 rows=33417 loops=1
+                       Buffers: shared read=557
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1066_chunk b_286  (cost=0.00..753.32 rows=19632 width=38) (actual time=0.057..5.113 rows=33375 loops=1)
+                     Output: b_286.id, b_286.created_at, b_286.amount, b_286.source_account_id, b_286.destination_account_id
+                     Buffers: shared read=557
+                     Worker 0:  actual time=0.057..5.113 rows=33375 loops=1
+                       Buffers: shared read=557
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_915_chunk b_135  (cost=0.00..753.24 rows=19624 width=38) (actual time=0.075..4.757 rows=33361 loops=1)
+                     Output: b_135.id, b_135.created_at, b_135.amount, b_135.source_account_id, b_135.destination_account_id
+                     Buffers: shared read=557
+                     Worker 1:  actual time=0.075..4.757 rows=33361 loops=1
+                       Buffers: shared read=557
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_926_chunk b_146  (cost=0.00..752.54 rows=19554 width=38) (actual time=0.067..6.726 rows=33241 loops=1)
+                     Output: b_146.id, b_146.created_at, b_146.amount, b_146.source_account_id, b_146.destination_account_id
+                     Buffers: shared read=557
+                     Worker 0:  actual time=0.067..6.726 rows=33241 loops=1
+                       Buffers: shared read=557
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_921_chunk b_141  (cost=0.00..752.29 rows=19629 width=38) (actual time=0.060..5.831 rows=33370 loops=1)
+                     Output: b_141.id, b_141.created_at, b_141.amount, b_141.source_account_id, b_141.destination_account_id
+                     Buffers: shared read=556
+                     Worker 1:  actual time=0.060..5.831 rows=33370 loops=1
+                       Buffers: shared read=556
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_933_chunk b_153  (cost=0.00..751.58 rows=19558 width=38) (actual time=0.063..4.348 rows=33248 loops=1)
+                     Output: b_153.id, b_153.created_at, b_153.amount, b_153.source_account_id, b_153.destination_account_id
+                     Buffers: shared read=556
+                     Worker 0:  actual time=0.063..4.348 rows=33248 loops=1
+                       Buffers: shared read=556
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_910_chunk b_130  (cost=0.00..751.42 rows=19542 width=38) (actual time=0.054..4.448 rows=33221 loops=1)
+                     Output: b_130.id, b_130.created_at, b_130.amount, b_130.source_account_id, b_130.destination_account_id
+                     Buffers: shared read=556
+                     Worker 1:  actual time=0.054..4.448 rows=33221 loops=1
+                       Buffers: shared read=556
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_924_chunk b_144  (cost=0.00..750.62 rows=19562 width=38) (actual time=0.061..6.037 rows=33255 loops=1)
+                     Output: b_144.id, b_144.created_at, b_144.amount, b_144.source_account_id, b_144.destination_account_id
+                     Buffers: shared read=555
+                     Worker 0:  actual time=0.061..6.037 rows=33255 loops=1
+                       Buffers: shared read=555
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_931_chunk b_151  (cost=0.00..749.08 rows=19508 width=38) (actual time=0.056..6.389 rows=33163 loops=1)
+                     Output: b_151.id, b_151.created_at, b_151.amount, b_151.source_account_id, b_151.destination_account_id
+                     Buffers: shared read=554
+                     Worker 1:  actual time=0.056..6.389 rows=33163 loops=1
+                       Buffers: shared read=554
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_922_chunk b_142  (cost=0.00..749.02 rows=19502 width=38) (actual time=0.063..4.192 rows=33154 loops=1)
+                     Output: b_142.id, b_142.created_at, b_142.amount, b_142.source_account_id, b_142.destination_account_id
+                     Buffers: shared read=554
+                     Worker 0:  actual time=0.063..4.192 rows=33154 loops=1
+                       Buffers: shared read=554
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_927_chunk b_147  (cost=0.00..747.24 rows=19424 width=38) (actual time=0.047..4.479 rows=33021 loops=1)
+                     Output: b_147.id, b_147.created_at, b_147.amount, b_147.source_account_id, b_147.destination_account_id
+                     Buffers: shared read=553
+                     Worker 1:  actual time=0.047..4.479 rows=33021 loops=1
+                       Buffers: shared read=553
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_860_chunk b_80  (cost=0.00..742.15 rows=19215 width=38) (actual time=0.050..4.958 rows=32665 loops=1)
+                     Output: b_80.id, b_80.created_at, b_80.amount, b_80.source_account_id, b_80.destination_account_id
+                     Buffers: shared read=550
+                     Worker 0:  actual time=0.050..4.958 rows=32665 loops=1
+                       Buffers: shared read=550
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1085_chunk b_305  (cost=0.00..741.58 rows=19258 width=38) (actual time=0.082..5.640 rows=32739 loops=1)
+                     Output: b_305.id, b_305.created_at, b_305.amount, b_305.source_account_id, b_305.destination_account_id
+                     Buffers: shared read=549
+                     Worker 1:  actual time=0.082..5.640 rows=32739 loops=1
+                       Buffers: shared read=549
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1086_chunk b_306  (cost=0.00..740.41 rows=19241 width=38) (actual time=0.068..4.371 rows=32709 loops=1)
+                     Output: b_306.id, b_306.created_at, b_306.amount, b_306.source_account_id, b_306.destination_account_id
+                     Buffers: shared read=548
+                     Worker 0:  actual time=0.068..4.371 rows=32709 loops=1
+                       Buffers: shared read=548
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_861_chunk b_81  (cost=0.00..740.27 rows=19127 width=38) (actual time=0.054..5.036 rows=32516 loops=1)
+                     Output: b_81.id, b_81.created_at, b_81.amount, b_81.source_account_id, b_81.destination_account_id
+                     Buffers: shared read=549
+                     Worker 1:  actual time=0.054..5.036 rows=32516 loops=1
+                       Buffers: shared read=549
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_859_chunk b_79  (cost=0.00..740.21 rows=19221 width=38) (actual time=0.063..4.220 rows=32676 loops=1)
+                     Output: b_79.id, b_79.created_at, b_79.amount, b_79.source_account_id, b_79.destination_account_id
+                     Buffers: shared read=548
+                     Worker 0:  actual time=0.063..4.220 rows=32676 loops=1
+                       Buffers: shared read=548
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_851_chunk b_71  (cost=0.00..740.19 rows=19219 width=38) (actual time=0.068..4.915 rows=32672 loops=1)
+                     Output: b_71.id, b_71.created_at, b_71.amount, b_71.source_account_id, b_71.destination_account_id
+                     Buffers: shared read=548
+                     Worker 1:  actual time=0.068..4.915 rows=32672 loops=1
+                       Buffers: shared read=548
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_791_chunk b_11  (cost=0.00..740.02 rows=19202 width=38) (actual time=0.064..4.641 rows=32643 loops=1)
+                     Output: b_11.id, b_11.created_at, b_11.amount, b_11.source_account_id, b_11.destination_account_id
+                     Buffers: shared read=548
+                     Worker 0:  actual time=0.064..4.641 rows=32643 loops=1
+                       Buffers: shared read=548
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1100_chunk b_320  (cost=0.00..739.64 rows=19164 width=38) (actual time=0.096..5.033 rows=32579 loops=1)
+                     Output: b_320.id, b_320.created_at, b_320.amount, b_320.source_account_id, b_320.destination_account_id
+                     Buffers: shared read=548
+                     Worker 1:  actual time=0.096..5.033 rows=32579 loops=1
+                       Buffers: shared read=548
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_785_chunk b_5  (cost=0.00..739.62 rows=19162 width=38) (actual time=0.055..4.610 rows=32576 loops=1)
+                     Output: b_5.id, b_5.created_at, b_5.amount, b_5.source_account_id, b_5.destination_account_id
+                     Buffers: shared read=548
+                     Worker 0:  actual time=0.055..4.610 rows=32576 loops=1
+                       Buffers: shared read=548
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1098_chunk b_318  (cost=0.00..739.62 rows=19162 width=38) (actual time=0.061..6.074 rows=32575 loops=1)
+                     Output: b_318.id, b_318.created_at, b_318.amount, b_318.source_account_id, b_318.destination_account_id
+                     Buffers: shared read=548
+                     Worker 1:  actual time=0.061..6.074 rows=32575 loops=1
+                       Buffers: shared read=548
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1116_chunk b_336  (cost=0.00..739.41 rows=19141 width=38) (actual time=0.034..3.047 rows=32540 loops=1)
+                     Output: b_336.id, b_336.created_at, b_336.amount, b_336.source_account_id, b_336.destination_account_id
+                     Buffers: shared hit=548
+                     Worker 0:  actual time=0.034..3.047 rows=32540 loops=1
+                       Buffers: shared hit=548
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1103_chunk b_323  (cost=0.00..739.00 rows=19200 width=38) (actual time=0.066..5.469 rows=32640 loops=1)
+                     Output: b_323.id, b_323.created_at, b_323.amount, b_323.source_account_id, b_323.destination_account_id
+                     Buffers: shared read=547
+                     Worker 1:  actual time=0.066..5.469 rows=32640 loops=1
+                       Buffers: shared read=547
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1105_chunk b_325  (cost=0.00..738.80 rows=19180 width=38) (actual time=0.065..5.906 rows=32606 loops=1)
+                     Output: b_325.id, b_325.created_at, b_325.amount, b_325.source_account_id, b_325.destination_account_id
+                     Buffers: shared read=547
+                     Worker 0:  actual time=0.065..5.906 rows=32606 loops=1
+                       Buffers: shared read=547
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1101_chunk b_321  (cost=0.00..738.73 rows=19173 width=38) (actual time=0.071..5.902 rows=32594 loops=1)
+                     Output: b_321.id, b_321.created_at, b_321.amount, b_321.source_account_id, b_321.destination_account_id
+                     Buffers: shared read=547
+                     Worker 1:  actual time=0.071..5.902 rows=32594 loops=1
+                       Buffers: shared read=547
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_781_chunk b_1  (cost=0.00..738.54 rows=19154 width=38) (actual time=0.101..5.721 rows=32561 loops=1)
+                     Output: b_1.id, b_1.created_at, b_1.amount, b_1.source_account_id, b_1.destination_account_id
+                     Buffers: shared read=547
+                     Worker 0:  actual time=0.101..5.721 rows=32561 loops=1
+                       Buffers: shared read=547
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_862_chunk b_82  (cost=0.00..738.04 rows=19104 width=38) (actual time=0.094..4.664 rows=32477 loops=1)
+                     Output: b_82.id, b_82.created_at, b_82.amount, b_82.source_account_id, b_82.destination_account_id
+                     Buffers: shared read=547
+                     Worker 1:  actual time=0.094..4.664 rows=32477 loops=1
+                       Buffers: shared read=547
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_805_chunk b_25  (cost=0.00..737.91 rows=19191 width=38) (actual time=0.076..5.957 rows=32625 loops=1)
+                     Output: b_25.id, b_25.created_at, b_25.amount, b_25.source_account_id, b_25.destination_account_id
+                     Buffers: shared read=546
+                     Worker 0:  actual time=0.076..5.957 rows=32625 loops=1
+                       Buffers: shared read=546
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1106_chunk b_326  (cost=0.00..737.82 rows=19182 width=38) (actual time=0.068..5.099 rows=32609 loops=1)
+                     Output: b_326.id, b_326.created_at, b_326.amount, b_326.source_account_id, b_326.destination_account_id
+                     Buffers: shared read=546
+                     Worker 1:  actual time=0.068..5.099 rows=32609 loops=1
+                       Buffers: shared read=546
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_795_chunk b_15  (cost=0.00..737.30 rows=19130 width=38) (actual time=0.069..4.490 rows=32521 loops=1)
+                     Output: b_15.id, b_15.created_at, b_15.amount, b_15.source_account_id, b_15.destination_account_id
+                     Buffers: shared read=546
+                     Worker 0:  actual time=0.069..4.490 rows=32521 loops=1
+                       Buffers: shared read=546
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_864_chunk b_84  (cost=0.00..736.74 rows=19074 width=38) (actual time=0.061..5.020 rows=32426 loops=1)
+                     Output: b_84.id, b_84.created_at, b_84.amount, b_84.source_account_id, b_84.destination_account_id
+                     Buffers: shared read=546
+                     Worker 1:  actual time=0.061..5.020 rows=32426 loops=1
+                       Buffers: shared read=546
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_865_chunk b_85  (cost=0.00..736.56 rows=19056 width=38) (actual time=0.054..4.434 rows=32395 loops=1)
+                     Output: b_85.id, b_85.created_at, b_85.amount, b_85.source_account_id, b_85.destination_account_id
+                     Buffers: shared read=546
+                     Worker 0:  actual time=0.054..4.434 rows=32395 loops=1
+                       Buffers: shared read=546
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_801_chunk b_21  (cost=0.00..736.46 rows=19046 width=38) (actual time=0.073..4.760 rows=32378 loops=1)
+                     Output: b_21.id, b_21.created_at, b_21.amount, b_21.source_account_id, b_21.destination_account_id
+                     Buffers: shared read=546
+                     Worker 1:  actual time=0.073..4.760 rows=32378 loops=1
+                       Buffers: shared read=546
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1091_chunk b_311  (cost=0.00..736.25 rows=19125 width=38) (actual time=0.059..4.145 rows=32512 loops=1)
+                     Output: b_311.id, b_311.created_at, b_311.amount, b_311.source_account_id, b_311.destination_account_id
+                     Buffers: shared read=545
+                     Worker 0:  actual time=0.059..4.145 rows=32512 loops=1
+                       Buffers: shared read=545
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1010_chunk b_230  (cost=0.00..736.02 rows=19002 width=38) (actual time=0.074..4.231 rows=32304 loops=1)
+                     Output: b_230.id, b_230.created_at, b_230.amount, b_230.source_account_id, b_230.destination_account_id
+                     Buffers: shared read=546
+                     Worker 1:  actual time=0.074..4.231 rows=32304 loops=1
+                       Buffers: shared read=546
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_796_chunk b_16  (cost=0.00..735.94 rows=18994 width=38) (actual time=0.066..4.120 rows=32290 loops=1)
+                     Output: b_16.id, b_16.created_at, b_16.amount, b_16.source_account_id, b_16.destination_account_id
+                     Buffers: shared read=546
+                     Worker 0:  actual time=0.066..4.120 rows=32290 loops=1
+                       Buffers: shared read=546
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1097_chunk b_317  (cost=0.00..735.85 rows=19085 width=38) (actual time=0.064..4.534 rows=32444 loops=1)
+                     Output: b_317.id, b_317.created_at, b_317.amount, b_317.source_account_id, b_317.destination_account_id
+                     Buffers: shared read=545
+                     Worker 1:  actual time=0.064..4.534 rows=32444 loops=1
+                       Buffers: shared read=545
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_848_chunk b_68  (cost=0.00..735.73 rows=19073 width=38) (actual time=0.053..4.435 rows=32424 loops=1)
+                     Output: b_68.id, b_68.created_at, b_68.amount, b_68.source_account_id, b_68.destination_account_id
+                     Buffers: shared read=545
+                     Worker 0:  actual time=0.053..4.435 rows=32424 loops=1
+                       Buffers: shared read=545
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_787_chunk b_7  (cost=0.00..735.72 rows=19072 width=38) (actual time=0.064..4.709 rows=32423 loops=1)
+                     Output: b_7.id, b_7.created_at, b_7.amount, b_7.source_account_id, b_7.destination_account_id
+                     Buffers: shared read=545
+                     Worker 1:  actual time=0.064..4.709 rows=32423 loops=1
+                       Buffers: shared read=545
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1104_chunk b_324  (cost=0.00..735.55 rows=19055 width=38) (actual time=0.062..5.059 rows=32393 loops=1)
+                     Output: b_324.id, b_324.created_at, b_324.amount, b_324.source_account_id, b_324.destination_account_id
+                     Buffers: shared read=545
+                     Worker 0:  actual time=0.062..5.059 rows=32393 loops=1
+                       Buffers: shared read=545
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_858_chunk b_78  (cost=0.00..735.54 rows=19054 width=38) (actual time=0.062..4.228 rows=32391 loops=1)
+                     Output: b_78.id, b_78.created_at, b_78.amount, b_78.source_account_id, b_78.destination_account_id
+                     Buffers: shared read=545
+                     Worker 1:  actual time=0.062..4.228 rows=32391 loops=1
+                       Buffers: shared read=545
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_850_chunk b_70  (cost=0.00..735.18 rows=19018 width=38) (actual time=0.053..4.654 rows=32331 loops=1)
+                     Output: b_70.id, b_70.created_at, b_70.amount, b_70.source_account_id, b_70.destination_account_id
+                     Buffers: shared read=545
+                     Worker 0:  actual time=0.053..4.654 rows=32331 loops=1
+                       Buffers: shared read=545
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_866_chunk b_86  (cost=0.00..735.15 rows=19015 width=38) (actual time=0.066..4.593 rows=32326 loops=1)
+                     Output: b_86.id, b_86.created_at, b_86.amount, b_86.source_account_id, b_86.destination_account_id
+                     Buffers: shared read=545
+                     Worker 1:  actual time=0.066..4.593 rows=32326 loops=1
+                       Buffers: shared read=545
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1017_chunk b_237  (cost=0.00..735.14 rows=19014 width=38) (actual time=0.054..4.739 rows=32323 loops=1)
+                     Output: b_237.id, b_237.created_at, b_237.amount, b_237.source_account_id, b_237.destination_account_id
+                     Buffers: shared read=545
+                     Worker 0:  actual time=0.054..4.739 rows=32323 loops=1
+                       Buffers: shared read=545
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1018_chunk b_238  (cost=0.00..735.08 rows=19008 width=38) (actual time=0.072..5.704 rows=32313 loops=1)
+                     Output: b_238.id, b_238.created_at, b_238.amount, b_238.source_account_id, b_238.destination_account_id
+                     Buffers: shared read=545
+                     Worker 1:  actual time=0.072..5.704 rows=32313 loops=1
+                       Buffers: shared read=545
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_846_chunk b_66  (cost=0.00..735.07 rows=19007 width=38) (actual time=0.076..5.427 rows=32312 loops=1)
+                     Output: b_66.id, b_66.created_at, b_66.amount, b_66.source_account_id, b_66.destination_account_id
+                     Buffers: shared read=545
+                     Worker 0:  actual time=0.076..5.427 rows=32312 loops=1
+                       Buffers: shared read=545
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1109_chunk b_329  (cost=0.00..735.06 rows=19106 width=38) (actual time=0.115..5.454 rows=32481 loops=1)
+                     Output: b_329.id, b_329.created_at, b_329.amount, b_329.source_account_id, b_329.destination_account_id
+                     Buffers: shared read=544
+                     Worker 1:  actual time=0.115..5.454 rows=32481 loops=1
+                       Buffers: shared read=544
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_803_chunk b_23  (cost=0.00..735.05 rows=19005 width=38) (actual time=0.058..5.181 rows=32309 loops=1)
+                     Output: b_23.id, b_23.created_at, b_23.amount, b_23.source_account_id, b_23.destination_account_id
+                     Buffers: shared read=545
+                     Worker 0:  actual time=0.058..5.181 rows=32309 loops=1
+                       Buffers: shared read=545
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1089_chunk b_309  (cost=0.00..735.05 rows=19105 width=38) (actual time=0.086..6.790 rows=32479 loops=1)
+                     Output: b_309.id, b_309.created_at, b_309.amount, b_309.source_account_id, b_309.destination_account_id
+                     Buffers: shared read=544
+                     Worker 1:  actual time=0.086..6.790 rows=32479 loops=1
+                       Buffers: shared read=544
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_794_chunk b_14  (cost=0.00..734.95 rows=18995 width=38) (actual time=0.065..6.270 rows=32292 loops=1)
+                     Output: b_14.id, b_14.created_at, b_14.amount, b_14.source_account_id, b_14.destination_account_id
+                     Buffers: shared read=545
+                     Worker 0:  actual time=0.065..6.270 rows=32292 loops=1
+                       Buffers: shared read=545
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_844_chunk b_64  (cost=0.00..734.88 rows=18988 width=38) (actual time=0.076..5.381 rows=32279 loops=1)
+                     Output: b_64.id, b_64.created_at, b_64.amount, b_64.source_account_id, b_64.destination_account_id
+                     Buffers: shared read=545
+                     Worker 0:  actual time=0.076..5.381 rows=32279 loops=1
+                       Buffers: shared read=545
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1002_chunk b_222  (cost=0.00..734.73 rows=18973 width=38) (actual time=0.058..6.020 rows=32254 loops=1)
+                     Output: b_222.id, b_222.created_at, b_222.amount, b_222.source_account_id, b_222.destination_account_id
+                     Buffers: shared read=545
+                     Worker 1:  actual time=0.058..6.020 rows=32254 loops=1
+                       Buffers: shared read=545
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1090_chunk b_310  (cost=0.00..734.56 rows=19056 width=38) (actual time=0.077..4.969 rows=32396 loops=1)
+                     Output: b_310.id, b_310.created_at, b_310.amount, b_310.source_account_id, b_310.destination_account_id
+                     Buffers: shared read=544
+                     Worker 0:  actual time=0.077..4.969 rows=32396 loops=1
+                       Buffers: shared read=544
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_783_chunk b_3  (cost=0.00..734.56 rows=19056 width=38) (actual time=0.063..4.866 rows=32395 loops=1)
+                     Output: b_3.id, b_3.created_at, b_3.amount, b_3.source_account_id, b_3.destination_account_id
+                     Buffers: shared read=544
+                     Worker 1:  actual time=0.063..4.866 rows=32395 loops=1
+                       Buffers: shared read=544
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_799_chunk b_19  (cost=0.00..734.26 rows=19026 width=38) (actual time=0.072..4.923 rows=32345 loops=1)
+                     Output: b_19.id, b_19.created_at, b_19.amount, b_19.source_account_id, b_19.destination_account_id
+                     Buffers: shared read=544
+                     Worker 0:  actual time=0.072..4.923 rows=32345 loops=1
+                       Buffers: shared read=544
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1096_chunk b_316  (cost=0.00..734.25 rows=19025 width=38) (actual time=0.068..4.649 rows=32343 loops=1)
+                     Output: b_316.id, b_316.created_at, b_316.amount, b_316.source_account_id, b_316.destination_account_id
+                     Buffers: shared read=544
+                     Worker 1:  actual time=0.068..4.649 rows=32343 loops=1
+                       Buffers: shared read=544
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_782_chunk b_2  (cost=0.00..734.24 rows=19024 width=38) (actual time=0.080..5.496 rows=32340 loops=1)
+                     Output: b_2.id, b_2.created_at, b_2.amount, b_2.source_account_id, b_2.destination_account_id
+                     Buffers: shared read=544
+                     Worker 0:  actual time=0.080..5.496 rows=32340 loops=1
+                       Buffers: shared read=544
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_802_chunk b_22  (cost=0.00..734.22 rows=19022 width=38) (actual time=0.059..4.763 rows=32337 loops=1)
+                     Output: b_22.id, b_22.created_at, b_22.amount, b_22.source_account_id, b_22.destination_account_id
+                     Buffers: shared read=544
+                     Worker 1:  actual time=0.059..4.763 rows=32337 loops=1
+                       Buffers: shared read=544
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_849_chunk b_69  (cost=0.00..734.13 rows=19013 width=38) (actual time=0.079..4.440 rows=32322 loops=1)
+                     Output: b_69.id, b_69.created_at, b_69.amount, b_69.source_account_id, b_69.destination_account_id
+                     Buffers: shared read=544
+                     Worker 0:  actual time=0.079..4.440 rows=32322 loops=1
+                       Buffers: shared read=544
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_863_chunk b_83  (cost=0.00..734.08 rows=19008 width=38) (actual time=0.055..5.711 rows=32314 loops=1)
+                     Output: b_83.id, b_83.created_at, b_83.amount, b_83.source_account_id, b_83.destination_account_id
+                     Buffers: shared read=544
+                     Worker 1:  actual time=0.055..5.711 rows=32314 loops=1
+                       Buffers: shared read=544
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1110_chunk b_330  (cost=0.00..734.02 rows=19002 width=38) (actual time=0.107..5.154 rows=32304 loops=1)
+                     Output: b_330.id, b_330.created_at, b_330.amount, b_330.source_account_id, b_330.destination_account_id
+                     Buffers: shared read=544
+                     Worker 0:  actual time=0.107..5.154 rows=32304 loops=1
+                       Buffers: shared read=544
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_843_chunk b_63  (cost=0.00..733.99 rows=18999 width=38) (actual time=0.101..6.071 rows=32299 loops=1)
+                     Output: b_63.id, b_63.created_at, b_63.amount, b_63.source_account_id, b_63.destination_account_id
+                     Buffers: shared read=544
+                     Worker 1:  actual time=0.101..6.071 rows=32299 loops=1
+                       Buffers: shared read=544
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_847_chunk b_67  (cost=0.00..733.84 rows=18984 width=38) (actual time=0.079..4.713 rows=32273 loops=1)
+                     Output: b_67.id, b_67.created_at, b_67.amount, b_67.source_account_id, b_67.destination_account_id
+                     Buffers: shared read=544
+                     Worker 0:  actual time=0.079..4.713 rows=32273 loops=1
+                       Buffers: shared read=544
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_842_chunk b_62  (cost=0.00..733.78 rows=18978 width=38) (actual time=0.083..4.561 rows=32262 loops=1)
+                     Output: b_62.id, b_62.created_at, b_62.amount, b_62.source_account_id, b_62.destination_account_id
+                     Buffers: shared read=544
+                     Worker 1:  actual time=0.083..4.561 rows=32262 loops=1
+                       Buffers: shared read=544
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1107_chunk b_327  (cost=0.00..733.77 rows=18977 width=38) (actual time=0.070..4.894 rows=32261 loops=1)
+                     Output: b_327.id, b_327.created_at, b_327.amount, b_327.source_account_id, b_327.destination_account_id
+                     Buffers: shared read=544
+                     Worker 0:  actual time=0.070..4.894 rows=32261 loops=1
+                       Buffers: shared read=544
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_853_chunk b_73  (cost=0.00..733.65 rows=18965 width=38) (actual time=0.068..4.303 rows=32241 loops=1)
+                     Output: b_73.id, b_73.created_at, b_73.amount, b_73.source_account_id, b_73.destination_account_id
+                     Buffers: shared read=544
+                     Worker 1:  actual time=0.068..4.303 rows=32241 loops=1
+                       Buffers: shared read=544
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_789_chunk b_9  (cost=0.00..733.62 rows=18962 width=38) (actual time=0.065..5.175 rows=32236 loops=1)
+                     Output: b_9.id, b_9.created_at, b_9.amount, b_9.source_account_id, b_9.destination_account_id
+                     Buffers: shared read=544
+                     Worker 0:  actual time=0.065..5.175 rows=32236 loops=1
+                       Buffers: shared read=544
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1108_chunk b_328  (cost=0.00..733.54 rows=18954 width=38) (actual time=0.064..5.115 rows=32222 loops=1)
+                     Output: b_328.id, b_328.created_at, b_328.amount, b_328.source_account_id, b_328.destination_account_id
+                     Buffers: shared read=544
+                     Worker 1:  actual time=0.064..5.115 rows=32222 loops=1
+                       Buffers: shared read=544
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1005_chunk b_225  (cost=0.00..722.24 rows=19024 width=38) (actual time=0.074..6.306 rows=32341 loops=1)
+                     Output: b_225.id, b_225.created_at, b_225.amount, b_225.source_account_id, b_225.destination_account_id
+                     Buffers: shared read=532
+                     Worker 0:  actual time=0.074..6.306 rows=32341 loops=1
+                       Buffers: shared read=532
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1092_chunk b_312  (cost=0.00..721.16 rows=19016 width=38) (actual time=0.079..4.819 rows=32327 loops=1)
+                     Output: b_312.id, b_312.created_at, b_312.amount, b_312.source_account_id, b_312.destination_account_id
+                     Buffers: shared read=531
+                     Worker 1:  actual time=0.079..4.819 rows=32327 loops=1
+                       Buffers: shared read=531
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_788_chunk b_8  (cost=0.00..721.06 rows=19006 width=38) (actual time=0.072..5.748 rows=32311 loops=1)
+                     Output: b_8.id, b_8.created_at, b_8.amount, b_8.source_account_id, b_8.destination_account_id
+                     Buffers: shared read=531
+                     Worker 0:  actual time=0.072..5.748 rows=32311 loops=1
+                       Buffers: shared read=531
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_792_chunk b_12  (cost=0.00..720.21 rows=18921 width=38) (actual time=0.081..4.614 rows=32165 loops=1)
+                     Output: b_12.id, b_12.created_at, b_12.amount, b_12.source_account_id, b_12.destination_account_id
+                     Buffers: shared read=531
+                     Worker 1:  actual time=0.081..4.614 rows=32165 loops=1
+                       Buffers: shared read=531
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_887_chunk b_107  (cost=0.00..717.95 rows=18895 width=38) (actual time=0.154..5.513 rows=32122 loops=1)
+                     Output: b_107.id, b_107.created_at, b_107.amount, b_107.source_account_id, b_107.destination_account_id
+                     Buffers: shared read=529
+                     Worker 0:  actual time=0.154..5.513 rows=32122 loops=1
+                       Buffers: shared read=529
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_809_chunk b_29  (cost=0.00..717.53 rows=18853 width=38) (actual time=0.058..4.198 rows=32050 loops=1)
+                     Output: b_29.id, b_29.created_at, b_29.amount, b_29.source_account_id, b_29.destination_account_id
+                     Buffers: shared read=529
+                     Worker 1:  actual time=0.058..4.198 rows=32050 loops=1
+                       Buffers: shared read=529
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1022_chunk b_242  (cost=0.00..717.26 rows=18926 width=38) (actual time=0.070..5.654 rows=32175 loops=1)
+                     Output: b_242.id, b_242.created_at, b_242.amount, b_242.source_account_id, b_242.destination_account_id
+                     Buffers: shared read=528
+                     Worker 0:  actual time=0.070..5.654 rows=32175 loops=1
+                       Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1093_chunk b_313  (cost=0.00..717.24 rows=18924 width=38) (actual time=0.048..4.781 rows=32171 loops=1)
+                     Output: b_313.id, b_313.created_at, b_313.amount, b_313.source_account_id, b_313.destination_account_id
+                     Buffers: shared read=528
+                     Worker 1:  actual time=0.048..4.781 rows=32171 loops=1
+                       Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1007_chunk b_227  (cost=0.00..717.19 rows=18919 width=38) (actual time=0.074..4.476 rows=32163 loops=1)
+                     Output: b_227.id, b_227.created_at, b_227.amount, b_227.source_account_id, b_227.destination_account_id
+                     Buffers: shared read=528
+                     Worker 1:  actual time=0.074..4.476 rows=32163 loops=1
+                       Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_868_chunk b_88  (cost=0.00..717.18 rows=18918 width=38) (actual time=0.046..4.289 rows=32160 loops=1)
+                     Output: b_88.id, b_88.created_at, b_88.amount, b_88.source_account_id, b_88.destination_account_id
+                     Buffers: shared read=528
+                     Worker 0:  actual time=0.046..4.289 rows=32160 loops=1
+                       Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_994_chunk b_214  (cost=0.00..717.15 rows=18915 width=38) (actual time=0.075..4.023 rows=32156 loops=1)
+                     Output: b_214.id, b_214.created_at, b_214.amount, b_214.source_account_id, b_214.destination_account_id
+                     Buffers: shared read=528
+                     Worker 1:  actual time=0.075..4.023 rows=32156 loops=1
+                       Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1088_chunk b_308  (cost=0.00..717.07 rows=18907 width=38) (actual time=0.046..3.861 rows=32142 loops=1)
+                     Output: b_308.id, b_308.created_at, b_308.amount, b_308.source_account_id, b_308.destination_account_id
+                     Buffers: shared read=528
+                     Worker 0:  actual time=0.046..3.861 rows=32142 loops=1
+                       Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_784_chunk b_4  (cost=0.00..717.04 rows=18904 width=38) (actual time=0.058..5.290 rows=32137 loops=1)
+                     Output: b_4.id, b_4.created_at, b_4.amount, b_4.source_account_id, b_4.destination_account_id
+                     Buffers: shared read=528
+                     Worker 1:  actual time=0.058..5.290 rows=32137 loops=1
+                       Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_855_chunk b_75  (cost=0.00..716.64 rows=18864 width=38) (actual time=0.047..4.011 rows=32069 loops=1)
+                     Output: b_75.id, b_75.created_at, b_75.amount, b_75.source_account_id, b_75.destination_account_id
+                     Buffers: shared read=528
+                     Worker 0:  actual time=0.047..4.011 rows=32069 loops=1
+                       Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1003_chunk b_223  (cost=0.00..716.52 rows=18852 width=38) (actual time=0.071..4.276 rows=32048 loops=1)
+                     Output: b_223.id, b_223.created_at, b_223.amount, b_223.source_account_id, b_223.destination_account_id
+                     Buffers: shared read=528
+                     Worker 0:  actual time=0.071..4.276 rows=32048 loops=1
+                       Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1011_chunk b_231  (cost=0.00..716.49 rows=18849 width=38) (actual time=0.055..4.228 rows=32044 loops=1)
+                     Output: b_231.id, b_231.created_at, b_231.amount, b_231.source_account_id, b_231.destination_account_id
+                     Buffers: shared read=528
+                     Worker 1:  actual time=0.055..4.228 rows=32044 loops=1
+                       Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1019_chunk b_239  (cost=0.00..716.49 rows=18849 width=38) (actual time=0.073..4.192 rows=32044 loops=1)
+                     Output: b_239.id, b_239.created_at, b_239.amount, b_239.source_account_id, b_239.destination_account_id
+                     Buffers: shared read=528
+                     Worker 0:  actual time=0.073..4.192 rows=32044 loops=1
+                       Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_873_chunk b_93  (cost=0.00..716.29 rows=18829 width=38) (actual time=0.046..4.016 rows=32009 loops=1)
+                     Output: b_93.id, b_93.created_at, b_93.amount, b_93.source_account_id, b_93.destination_account_id
+                     Buffers: shared read=528
+                     Worker 1:  actual time=0.046..4.016 rows=32009 loops=1
+                       Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1015_chunk b_235  (cost=0.00..716.24 rows=18824 width=38) (actual time=0.063..4.353 rows=32001 loops=1)
+                     Output: b_235.id, b_235.created_at, b_235.amount, b_235.source_account_id, b_235.destination_account_id
+                     Buffers: shared read=528
+                     Worker 0:  actual time=0.063..4.353 rows=32001 loops=1
+                       Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_999_chunk b_219  (cost=0.00..716.16 rows=18816 width=38) (actual time=0.043..4.032 rows=31987 loops=1)
+                     Output: b_219.id, b_219.created_at, b_219.amount, b_219.source_account_id, b_219.destination_account_id
+                     Buffers: shared read=528
+                     Worker 1:  actual time=0.043..4.032 rows=31987 loops=1
+                       Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1006_chunk b_226  (cost=0.00..716.14 rows=18814 width=38) (actual time=0.056..1.495 rows=10661 loops=3)
+                     Output: b_226.id, b_226.created_at, b_226.amount, b_226.source_account_id, b_226.destination_account_id
+                     Buffers: shared read=528
+                     Worker 0:  actual time=0.055..1.730 rows=11834 loops=1
+                       Buffers: shared read=194
+                     Worker 1:  actual time=0.071..1.023 rows=7991 loops=1
+                       Buffers: shared read=134
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_998_chunk b_218  (cost=0.00..716.10 rows=18810 width=38) (actual time=0.032..4.098 rows=31977 loops=1)
+                     Output: b_218.id, b_218.created_at, b_218.amount, b_218.source_account_id, b_218.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1013_chunk b_233  (cost=0.00..715.99 rows=18799 width=38) (actual time=0.032..3.746 rows=31959 loops=1)
+                     Output: b_233.id, b_233.created_at, b_233.amount, b_233.source_account_id, b_233.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_996_chunk b_216  (cost=0.00..715.99 rows=18799 width=38) (actual time=0.035..3.936 rows=31958 loops=1)
+                     Output: b_216.id, b_216.created_at, b_216.amount, b_216.source_account_id, b_216.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1000_chunk b_220  (cost=0.00..715.92 rows=18792 width=38) (actual time=0.034..3.960 rows=31946 loops=1)
+                     Output: b_220.id, b_220.created_at, b_220.amount, b_220.source_account_id, b_220.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1009_chunk b_229  (cost=0.00..715.91 rows=18791 width=38) (actual time=0.036..3.889 rows=31945 loops=1)
+                     Output: b_229.id, b_229.created_at, b_229.amount, b_229.source_account_id, b_229.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_880_chunk b_100  (cost=0.00..715.88 rows=18688 width=38) (actual time=0.037..4.309 rows=31769 loops=1)
+                     Output: b_100.id, b_100.created_at, b_100.amount, b_100.source_account_id, b_100.destination_account_id
+                     Buffers: shared read=529
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1001_chunk b_221  (cost=0.00..715.87 rows=18787 width=38) (actual time=0.041..5.174 rows=31938 loops=1)
+                     Output: b_221.id, b_221.created_at, b_221.amount, b_221.source_account_id, b_221.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_882_chunk b_102  (cost=0.00..715.64 rows=18764 width=38) (actual time=0.040..4.306 rows=31899 loops=1)
+                     Output: b_102.id, b_102.created_at, b_102.amount, b_102.source_account_id, b_102.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1014_chunk b_234  (cost=0.00..715.56 rows=18756 width=38) (actual time=0.042..4.918 rows=31885 loops=1)
+                     Output: b_234.id, b_234.created_at, b_234.amount, b_234.source_account_id, b_234.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_894_chunk b_114  (cost=0.00..715.50 rows=18750 width=38) (actual time=0.081..4.054 rows=31875 loops=1)
+                     Output: b_114.id, b_114.created_at, b_114.amount, b_114.source_account_id, b_114.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1028_chunk b_248  (cost=0.00..715.45 rows=18745 width=38) (actual time=0.039..4.804 rows=31866 loops=1)
+                     Output: b_248.id, b_248.created_at, b_248.amount, b_248.source_account_id, b_248.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_878_chunk b_98  (cost=0.00..715.42 rows=18742 width=38) (actual time=0.038..4.885 rows=31861 loops=1)
+                     Output: b_98.id, b_98.created_at, b_98.amount, b_98.source_account_id, b_98.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_876_chunk b_96  (cost=0.00..715.40 rows=18740 width=38) (actual time=0.040..4.060 rows=31858 loops=1)
+                     Output: b_96.id, b_96.created_at, b_96.amount, b_96.source_account_id, b_96.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_889_chunk b_109  (cost=0.00..715.35 rows=18735 width=38) (actual time=0.043..4.176 rows=31849 loops=1)
+                     Output: b_109.id, b_109.created_at, b_109.amount, b_109.source_account_id, b_109.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_874_chunk b_94  (cost=0.00..714.98 rows=18698 width=38) (actual time=0.054..6.462 rows=31787 loops=1)
+                     Output: b_94.id, b_94.created_at, b_94.amount, b_94.source_account_id, b_94.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_877_chunk b_97  (cost=0.00..714.81 rows=18681 width=38) (actual time=0.041..4.929 rows=31758 loops=1)
+                     Output: b_97.id, b_97.created_at, b_97.amount, b_97.source_account_id, b_97.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_879_chunk b_99  (cost=0.00..714.80 rows=18680 width=38) (actual time=0.042..4.525 rows=31756 loops=1)
+                     Output: b_99.id, b_99.created_at, b_99.amount, b_99.source_account_id, b_99.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_872_chunk b_92  (cost=0.00..714.64 rows=18664 width=38) (actual time=0.053..4.384 rows=31729 loops=1)
+                     Output: b_92.id, b_92.created_at, b_92.amount, b_92.source_account_id, b_92.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_895_chunk b_115  (cost=0.00..714.62 rows=18662 width=38) (actual time=0.049..4.602 rows=31725 loops=1)
+                     Output: b_115.id, b_115.created_at, b_115.amount, b_115.source_account_id, b_115.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_949_chunk b_169  (cost=0.00..713.70 rows=18570 width=38) (actual time=0.080..4.266 rows=31569 loops=1)
+                     Output: b_169.id, b_169.created_at, b_169.amount, b_169.source_account_id, b_169.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_897_chunk b_117  (cost=0.00..713.59 rows=18559 width=38) (actual time=0.045..4.437 rows=31550 loops=1)
+                     Output: b_117.id, b_117.created_at, b_117.amount, b_117.source_account_id, b_117.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1033_chunk b_253  (cost=0.00..713.40 rows=18440 width=38) (actual time=0.043..4.866 rows=31348 loops=1)
+                     Output: b_253.id, b_253.created_at, b_253.amount, b_253.source_account_id, b_253.destination_account_id
+                     Buffers: shared read=529
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1035_chunk b_255  (cost=0.00..713.31 rows=18531 width=38) (actual time=0.061..4.751 rows=31502 loops=1)
+                     Output: b_255.id, b_255.created_at, b_255.amount, b_255.source_account_id, b_255.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_941_chunk b_161  (cost=0.00..713.19 rows=18519 width=38) (actual time=0.047..4.807 rows=31482 loops=1)
+                     Output: b_161.id, b_161.created_at, b_161.amount, b_161.source_account_id, b_161.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_955_chunk b_175  (cost=0.00..713.17 rows=18517 width=38) (actual time=0.046..4.208 rows=31479 loops=1)
+                     Output: b_175.id, b_175.created_at, b_175.amount, b_175.source_account_id, b_175.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1048_chunk b_268  (cost=0.00..713.11 rows=18511 width=38) (actual time=0.041..4.551 rows=31469 loops=1)
+                     Output: b_268.id, b_268.created_at, b_268.amount, b_268.source_account_id, b_268.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_947_chunk b_167  (cost=0.00..713.10 rows=18510 width=38) (actual time=0.034..4.610 rows=31467 loops=1)
+                     Output: b_167.id, b_167.created_at, b_167.amount, b_167.source_account_id, b_167.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_961_chunk b_181  (cost=0.00..712.90 rows=18490 width=38) (actual time=0.032..4.045 rows=31433 loops=1)
+                     Output: b_181.id, b_181.created_at, b_181.amount, b_181.source_account_id, b_181.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_940_chunk b_160  (cost=0.00..712.87 rows=18487 width=38) (actual time=0.039..4.095 rows=31428 loops=1)
+                     Output: b_160.id, b_160.created_at, b_160.amount, b_160.source_account_id, b_160.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1042_chunk b_262  (cost=0.00..712.82 rows=18482 width=38) (actual time=0.045..5.153 rows=31420 loops=1)
+                     Output: b_262.id, b_262.created_at, b_262.amount, b_262.source_account_id, b_262.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1044_chunk b_264  (cost=0.00..712.77 rows=18477 width=38) (actual time=0.055..4.361 rows=31411 loops=1)
+                     Output: b_264.id, b_264.created_at, b_264.amount, b_264.source_account_id, b_264.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1034_chunk b_254  (cost=0.00..712.72 rows=18472 width=38) (actual time=0.035..4.692 rows=31402 loops=1)
+                     Output: b_254.id, b_254.created_at, b_254.amount, b_254.source_account_id, b_254.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1032_chunk b_252  (cost=0.00..712.54 rows=18454 width=38) (actual time=0.044..5.212 rows=31372 loops=1)
+                     Output: b_252.id, b_252.created_at, b_252.amount, b_252.source_account_id, b_252.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_944_chunk b_164  (cost=0.00..712.49 rows=18449 width=38) (actual time=0.162..5.230 rows=31364 loops=1)
+                     Output: b_164.id, b_164.created_at, b_164.amount, b_164.source_account_id, b_164.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1031_chunk b_251  (cost=0.00..712.44 rows=18444 width=38) (actual time=0.046..4.671 rows=31354 loops=1)
+                     Output: b_251.id, b_251.created_at, b_251.amount, b_251.source_account_id, b_251.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1036_chunk b_256  (cost=0.00..712.19 rows=18419 width=38) (actual time=0.060..4.933 rows=31312 loops=1)
+                     Output: b_256.id, b_256.created_at, b_256.amount, b_256.source_account_id, b_256.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_958_chunk b_178  (cost=0.00..712.18 rows=18418 width=38) (actual time=0.040..4.694 rows=31310 loops=1)
+                     Output: b_178.id, b_178.created_at, b_178.amount, b_178.source_account_id, b_178.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1024_chunk b_244  (cost=0.00..712.09 rows=18409 width=38) (actual time=0.036..4.978 rows=31295 loops=1)
+                     Output: b_244.id, b_244.created_at, b_244.amount, b_244.source_account_id, b_244.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1041_chunk b_261  (cost=0.00..712.06 rows=18406 width=38) (actual time=0.032..4.667 rows=31291 loops=1)
+                     Output: b_261.id, b_261.created_at, b_261.amount, b_261.source_account_id, b_261.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1027_chunk b_247  (cost=0.00..711.94 rows=18394 width=38) (actual time=0.036..4.914 rows=31269 loops=1)
+                     Output: b_247.id, b_247.created_at, b_247.amount, b_247.source_account_id, b_247.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_938_chunk b_158  (cost=0.00..711.71 rows=18371 width=38) (actual time=0.034..4.356 rows=31230 loops=1)
+                     Output: b_158.id, b_158.created_at, b_158.amount, b_158.source_account_id, b_158.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_964_chunk b_184  (cost=0.00..711.68 rows=18368 width=38) (actual time=0.041..4.074 rows=31225 loops=1)
+                     Output: b_184.id, b_184.created_at, b_184.amount, b_184.source_account_id, b_184.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_937_chunk b_157  (cost=0.00..711.67 rows=18367 width=38) (actual time=0.057..5.527 rows=31224 loops=1)
+                     Output: b_157.id, b_157.created_at, b_157.amount, b_157.source_account_id, b_157.destination_account_id
+                     Buffers: shared read=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_935_chunk b_155  (cost=0.00..711.62 rows=18362 width=38) (actual time=0.044..3.632 rows=31216 loops=1)
+                     Output: b_155.id, b_155.created_at, b_155.amount, b_155.source_account_id, b_155.destination_account_id
+                     Buffers: shared hit=528
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_884_chunk b_104  (cost=0.00..706.47 rows=18647 width=38) (actual time=0.043..4.686 rows=31700 loops=1)
+                     Output: b_104.id, b_104.created_at, b_104.amount, b_104.source_account_id, b_104.destination_account_id
+                     Buffers: shared read=520
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1029_chunk b_249  (cost=0.00..706.45 rows=18645 width=38) (actual time=0.044..4.188 rows=31696 loops=1)
+                     Output: b_249.id, b_249.created_at, b_249.amount, b_249.source_account_id, b_249.destination_account_id
+                     Buffers: shared read=520
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_886_chunk b_106  (cost=0.00..706.42 rows=18642 width=38) (actual time=0.047..4.397 rows=31691 loops=1)
+                     Output: b_106.id, b_106.created_at, b_106.amount, b_106.source_account_id, b_106.destination_account_id
+                     Buffers: shared read=520
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_939_chunk b_159  (cost=0.00..706.30 rows=18630 width=38) (actual time=0.045..3.251 rows=31671 loops=1)
+                     Output: b_159.id, b_159.created_at, b_159.amount, b_159.source_account_id, b_159.destination_account_id
+                     Buffers: shared hit=520
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_953_chunk b_173  (cost=0.00..706.24 rows=18624 width=38) (actual time=0.044..4.130 rows=31661 loops=1)
+                     Output: b_173.id, b_173.created_at, b_173.amount, b_173.source_account_id, b_173.destination_account_id
+                     Buffers: shared read=520
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_892_chunk b_112  (cost=0.00..706.14 rows=18614 width=38) (actual time=0.040..4.406 rows=31644 loops=1)
+                     Output: b_112.id, b_112.created_at, b_112.amount, b_112.source_account_id, b_112.destination_account_id
+                     Buffers: shared read=520
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_883_chunk b_103  (cost=0.00..706.05 rows=18605 width=38) (actual time=0.071..4.850 rows=31628 loops=1)
+                     Output: b_103.id, b_103.created_at, b_103.amount, b_103.source_account_id, b_103.destination_account_id
+                     Buffers: shared read=520
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_948_chunk b_168  (cost=0.00..705.96 rows=18596 width=38) (actual time=0.031..3.148 rows=31613 loops=1)
+                     Output: b_168.id, b_168.created_at, b_168.amount, b_168.source_account_id, b_168.destination_account_id
+                     Buffers: shared hit=520
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_952_chunk b_172  (cost=0.00..705.93 rows=18593 width=38) (actual time=0.041..3.166 rows=31608 loops=1)
+                     Output: b_172.id, b_172.created_at, b_172.amount, b_172.source_account_id, b_172.destination_account_id
+                     Buffers: shared hit=520
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_885_chunk b_105  (cost=0.00..705.68 rows=18568 width=38) (actual time=0.037..4.791 rows=31565 loops=1)
+                     Output: b_105.id, b_105.created_at, b_105.amount, b_105.source_account_id, b_105.destination_account_id
+                     Buffers: shared read=520
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1038_chunk b_258  (cost=0.00..705.49 rows=18549 width=38) (actual time=0.054..4.276 rows=31533 loops=1)
+                     Output: b_258.id, b_258.created_at, b_258.amount, b_258.source_account_id, b_258.destination_account_id
+                     Buffers: shared read=520
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_951_chunk b_171  (cost=0.00..705.41 rows=18541 width=38) (actual time=0.044..4.025 rows=31519 loops=1)
+                     Output: b_171.id, b_171.created_at, b_171.amount, b_171.source_account_id, b_171.destination_account_id
+                     Buffers: shared read=520
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_946_chunk b_166  (cost=0.00..705.28 rows=18528 width=38) (actual time=0.046..4.185 rows=31498 loops=1)
+                     Output: b_166.id, b_166.created_at, b_166.amount, b_166.source_account_id, b_166.destination_account_id
+                     Buffers: shared read=520
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_890_chunk b_110  (cost=0.00..705.02 rows=18502 width=38) (actual time=0.060..4.331 rows=31453 loops=1)
+                     Output: b_110.id, b_110.created_at, b_110.amount, b_110.source_account_id, b_110.destination_account_id
+                     Buffers: shared read=520
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1037_chunk b_257  (cost=0.00..695.62 rows=18362 width=38) (actual time=0.039..4.652 rows=31216 loops=1)
+                     Output: b_257.id, b_257.created_at, b_257.amount, b_257.source_account_id, b_257.destination_account_id
+                     Buffers: shared read=512
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_936_chunk b_156  (cost=0.00..695.60 rows=18360 width=38) (actual time=0.038..4.490 rows=31212 loops=1)
+                     Output: b_156.id, b_156.created_at, b_156.amount, b_156.source_account_id, b_156.destination_account_id
+                     Buffers: shared read=512
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_934_chunk b_154  (cost=0.00..695.59 rows=18359 width=38) (actual time=0.041..4.251 rows=31211 loops=1)
+                     Output: b_154.id, b_154.created_at, b_154.amount, b_154.source_account_id, b_154.destination_account_id
+                     Buffers: shared read=512
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1026_chunk b_246  (cost=0.00..695.56 rows=18356 width=38) (actual time=0.043..4.309 rows=31206 loops=1)
+                     Output: b_246.id, b_246.created_at, b_246.amount, b_246.source_account_id, b_246.destination_account_id
+                     Buffers: shared read=512
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_956_chunk b_176  (cost=0.00..695.44 rows=18344 width=38) (actual time=0.034..4.235 rows=31185 loops=1)
+                     Output: b_176.id, b_176.created_at, b_176.amount, b_176.source_account_id, b_176.destination_account_id
+                     Buffers: shared read=512
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_942_chunk b_162  (cost=0.00..695.06 rows=18306 width=38) (actual time=0.042..4.148 rows=31120 loops=1)
+                     Output: b_162.id, b_162.created_at, b_162.amount, b_162.source_account_id, b_162.destination_account_id
+                     Buffers: shared read=512
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1049_chunk b_269  (cost=0.00..694.99 rows=18299 width=38) (actual time=0.038..4.168 rows=31109 loops=1)
+                     Output: b_269.id, b_269.created_at, b_269.amount, b_269.source_account_id, b_269.destination_account_id
+                     Buffers: shared read=512
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1025_chunk b_245  (cost=0.00..694.93 rows=18293 width=38) (actual time=0.043..4.831 rows=31098 loops=1)
+                     Output: b_245.id, b_245.created_at, b_245.amount, b_245.source_account_id, b_245.destination_account_id
+                     Buffers: shared read=512
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1040_chunk b_260  (cost=0.00..694.68 rows=18268 width=38) (actual time=0.046..4.292 rows=31056 loops=1)
+                     Output: b_260.id, b_260.created_at, b_260.amount, b_260.source_account_id, b_260.destination_account_id
+                     Buffers: shared read=512
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1030_chunk b_250  (cost=0.00..694.63 rows=18263 width=38) (actual time=0.046..4.474 rows=31047 loops=1)
+                     Output: b_250.id, b_250.created_at, b_250.amount, b_250.source_account_id, b_250.destination_account_id
+                     Buffers: shared read=512
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1046_chunk b_266  (cost=0.00..694.15 rows=18215 width=38) (actual time=0.050..5.010 rows=30966 loops=1)
+                     Output: b_266.id, b_266.created_at, b_266.amount, b_266.source_account_id, b_266.destination_account_id
+                     Buffers: shared read=512
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_852_chunk b_72  (cost=0.00..527.18 rows=13918 width=38) (actual time=0.069..3.239 rows=23661 loops=1)
+                     Output: b_72.id, b_72.created_at, b_72.amount, b_72.source_account_id, b_72.destination_account_id
+                     Buffers: shared read=388
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1094_chunk b_314  (cost=0.00..522.83 rows=13783 width=38) (actual time=0.053..3.411 rows=23431 loops=1)
+                     Output: b_314.id, b_314.created_at, b_314.amount, b_314.source_account_id, b_314.destination_account_id
+                     Buffers: shared read=385
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_993_chunk b_213  (cost=0.00..511.95 rows=13495 width=38) (actual time=0.040..3.203 rows=22942 loops=1)
+                     Output: b_213.id, b_213.created_at, b_213.amount, b_213.source_account_id, b_213.destination_account_id
+                     Buffers: shared read=377
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_982_chunk b_202  (cost=0.00..356.49 rows=9249 width=38) (actual time=0.041..2.132 rows=15723 loops=1)
+                     Output: b_202.id, b_202.created_at, b_202.amount, b_202.source_account_id, b_202.destination_account_id
+                     Buffers: shared read=264
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_983_chunk b_203  (cost=0.00..356.49 rows=9249 width=38) (actual time=0.040..2.688 rows=15723 loops=1)
+                     Output: b_203.id, b_203.created_at, b_203.amount, b_203.source_account_id, b_203.destination_account_id
+                     Buffers: shared read=264
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_987_chunk b_207  (cost=0.00..356.31 rows=9231 width=38) (actual time=0.041..2.626 rows=15693 loops=1)
+                     Output: b_207.id, b_207.created_at, b_207.amount, b_207.source_account_id, b_207.destination_account_id
+                     Buffers: shared read=264
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_977_chunk b_197  (cost=0.00..355.92 rows=9192 width=38) (actual time=0.074..2.679 rows=15627 loops=1)
+                     Output: b_197.id, b_197.created_at, b_197.amount, b_197.source_account_id, b_197.destination_account_id
+                     Buffers: shared read=264
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_813_chunk b_33  (cost=0.00..347.14 rows=9114 width=38) (actual time=0.038..2.310 rows=15493 loops=1)
+                     Output: b_33.id, b_33.created_at, b_33.amount, b_33.source_account_id, b_33.destination_account_id
+                     Buffers: shared read=256
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_825_chunk b_45  (cost=0.00..346.48 rows=9048 width=38) (actual time=0.032..2.036 rows=15382 loops=1)
+                     Output: b_45.id, b_45.created_at, b_45.amount, b_45.source_account_id, b_45.destination_account_id
+                     Buffers: shared read=256
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1080_chunk b_300  (cost=0.00..345.71 rows=8971 width=38) (actual time=0.038..2.074 rows=15250 loops=1)
+                     Output: b_300.id, b_300.created_at, b_300.amount, b_300.source_account_id, b_300.destination_account_id
+                     Buffers: shared read=256
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_834_chunk b_54  (cost=0.00..344.86 rows=8886 width=38) (actual time=0.041..2.299 rows=15107 loops=1)
+                     Output: b_54.id, b_54.created_at, b_54.amount, b_54.source_account_id, b_54.destination_account_id
+                     Buffers: shared read=256
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_818_chunk b_38  (cost=0.00..341.73 rows=8973 width=38) (actual time=0.040..2.329 rows=15254 loops=1)
+                     Output: b_38.id, b_38.created_at, b_38.amount, b_38.source_account_id, b_38.destination_account_id
+                     Buffers: shared read=252
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1056_chunk b_276  (cost=0.00..336.94 rows=8894 width=38) (actual time=0.036..2.042 rows=15120 loops=1)
+                     Output: b_276.id, b_276.created_at, b_276.amount, b_276.source_account_id, b_276.destination_account_id
+                     Buffers: shared read=248
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_930_chunk b_150  (cost=0.00..336.16 rows=8816 width=38) (actual time=0.041..1.966 rows=14987 loops=1)
+                     Output: b_150.id, b_150.created_at, b_150.amount, b_150.source_account_id, b_150.destination_account_id
+                     Buffers: shared read=248
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_909_chunk b_129  (cost=0.00..336.05 rows=8805 width=38) (actual time=0.036..2.215 rows=14968 loops=1)
+                     Output: b_129.id, b_129.created_at, b_129.amount, b_129.source_account_id, b_129.destination_account_id
+                     Buffers: shared read=248
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1070_chunk b_290  (cost=0.00..336.02 rows=8802 width=38) (actual time=0.044..1.958 rows=14963 loops=1)
+                     Output: b_290.id, b_290.created_at, b_290.amount, b_290.source_account_id, b_290.destination_account_id
+                     Buffers: shared read=248
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_919_chunk b_139  (cost=0.00..335.90 rows=8790 width=38) (actual time=0.037..2.103 rows=14943 loops=1)
+                     Output: b_139.id, b_139.created_at, b_139.amount, b_139.source_account_id, b_139.destination_account_id
+                     Buffers: shared read=248
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_928_chunk b_148  (cost=0.00..335.65 rows=8765 width=38) (actual time=0.030..1.952 rows=14900 loops=1)
+                     Output: b_148.id, b_148.created_at, b_148.amount, b_148.source_account_id, b_148.destination_account_id
+                     Buffers: shared read=248
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1114_chunk b_334  (cost=0.00..334.46 rows=8646 width=38) (actual time=0.041..2.445 rows=14699 loops=1)
+                     Output: b_334.id, b_334.created_at, b_334.amount, b_334.source_account_id, b_334.destination_account_id
+                     Buffers: shared read=248
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_804_chunk b_24  (cost=0.00..334.39 rows=8639 width=38) (actual time=0.047..2.011 rows=14687 loops=1)
+                     Output: b_24.id, b_24.created_at, b_24.amount, b_24.source_account_id, b_24.destination_account_id
+                     Buffers: shared read=248
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1117_chunk b_337  (cost=0.00..334.23 rows=8623 width=38) (actual time=0.038..1.799 rows=14659 loops=1)
+                     Output: b_337.id, b_337.created_at, b_337.amount, b_337.source_account_id, b_337.destination_account_id
+                     Buffers: shared hit=248
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_800_chunk b_20  (cost=0.00..334.06 rows=8606 width=38) (actual time=0.046..1.863 rows=14631 loops=1)
+                     Output: b_20.id, b_20.created_at, b_20.amount, b_20.source_account_id, b_20.destination_account_id
+                     Buffers: shared read=248
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1076_chunk b_296  (cost=0.00..331.50 rows=8750 width=38) (actual time=0.033..2.116 rows=14875 loops=1)
+                     Output: b_296.id, b_296.created_at, b_296.amount, b_296.source_account_id, b_296.destination_account_id
+                     Buffers: shared read=244
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_916_chunk b_136  (cost=0.00..331.18 rows=8718 width=38) (actual time=0.051..1.987 rows=14821 loops=1)
+                     Output: b_136.id, b_136.created_at, b_136.amount, b_136.source_account_id, b_136.destination_account_id
+                     Buffers: shared read=244
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_857_chunk b_77  (cost=0.00..330.28 rows=8628 width=38) (actual time=0.038..1.847 rows=14667 loops=1)
+                     Output: b_77.id, b_77.created_at, b_77.amount, b_77.source_account_id, b_77.destination_account_id
+                     Buffers: shared read=244
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_790_chunk b_10  (cost=0.00..328.42 rows=8642 width=38) (actual time=0.044..1.886 rows=14692 loops=1)
+                     Output: b_10.id, b_10.created_at, b_10.amount, b_10.source_account_id, b_10.destination_account_id
+                     Buffers: shared read=242
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1008_chunk b_228  (cost=0.00..325.76 rows=8576 width=38) (actual time=0.033..1.883 rows=14580 loops=1)
+                     Output: b_228.id, b_228.created_at, b_228.amount, b_228.source_account_id, b_228.destination_account_id
+                     Buffers: shared read=240
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1099_chunk b_319  (cost=0.00..325.69 rows=8569 width=38) (actual time=0.041..1.866 rows=14567 loops=1)
+                     Output: b_319.id, b_319.created_at, b_319.amount, b_319.source_account_id, b_319.destination_account_id
+                     Buffers: shared read=240
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1087_chunk b_307  (cost=0.00..325.68 rows=8568 width=38) (actual time=0.040..1.861 rows=14566 loops=1)
+                     Output: b_307.id, b_307.created_at, b_307.amount, b_307.source_account_id, b_307.destination_account_id
+                     Buffers: shared read=240
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_810_chunk b_30  (cost=0.00..325.64 rows=8564 width=38) (actual time=0.038..1.780 rows=14558 loops=1)
+                     Output: b_30.id, b_30.created_at, b_30.amount, b_30.source_account_id, b_30.destination_account_id
+                     Buffers: shared read=240
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_807_chunk b_27  (cost=0.00..325.63 rows=8563 width=38) (actual time=0.036..1.821 rows=14557 loops=1)
+                     Output: b_27.id, b_27.created_at, b_27.amount, b_27.source_account_id, b_27.destination_account_id
+                     Buffers: shared read=240
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_854_chunk b_74  (cost=0.00..325.48 rows=8548 width=38) (actual time=0.041..2.596 rows=14531 loops=1)
+                     Output: b_74.id, b_74.created_at, b_74.amount, b_74.source_account_id, b_74.destination_account_id
+                     Buffers: shared read=240
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_867_chunk b_87  (cost=0.00..325.35 rows=8535 width=38) (actual time=0.038..1.827 rows=14509 loops=1)
+                     Output: b_87.id, b_87.created_at, b_87.amount, b_87.source_account_id, b_87.destination_account_id
+                     Buffers: shared read=240
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1004_chunk b_224  (cost=0.00..324.96 rows=8496 width=38) (actual time=0.046..2.139 rows=14444 loops=1)
+                     Output: b_224.id, b_224.created_at, b_224.amount, b_224.source_account_id, b_224.destination_account_id
+                     Buffers: shared read=240
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1012_chunk b_232  (cost=0.00..324.92 rows=8492 width=38) (actual time=0.038..2.009 rows=14437 loops=1)
+                     Output: b_232.id, b_232.created_at, b_232.amount, b_232.source_account_id, b_232.destination_account_id
+                     Buffers: shared read=240
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1053_chunk b_273  (cost=0.00..323.44 rows=8344 width=38) (actual time=0.044..1.839 rows=14185 loops=1)
+                     Output: b_273.id, b_273.created_at, b_273.amount, b_273.source_account_id, b_273.destination_account_id
+                     Buffers: shared read=240
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_893_chunk b_113  (cost=0.00..320.31 rows=8431 width=38) (actual time=0.056..2.203 rows=14333 loops=1)
+                     Output: b_113.id, b_113.created_at, b_113.amount, b_113.source_account_id, b_113.destination_account_id
+                     Buffers: shared read=236
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_901_chunk b_121  (cost=0.00..320.19 rows=8419 width=38) (actual time=0.038..2.074 rows=14313 loops=1)
+                     Output: b_121.id, b_121.created_at, b_121.amount, b_121.source_account_id, b_121.destination_account_id
+                     Buffers: shared read=236
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_945_chunk b_165  (cost=0.00..317.92 rows=8392 width=38) (actual time=0.041..1.852 rows=14266 loops=1)
+                     Output: b_165.id, b_165.created_at, b_165.amount, b_165.source_account_id, b_165.destination_account_id
+                     Buffers: shared read=234
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1050_chunk b_270  (cost=0.00..317.88 rows=8388 width=38) (actual time=0.039..1.826 rows=14260 loops=1)
+                     Output: b_270.id, b_270.created_at, b_270.amount, b_270.source_account_id, b_270.destination_account_id
+                     Buffers: shared read=234
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_888_chunk b_108  (cost=0.00..317.66 rows=8366 width=38) (actual time=0.036..1.794 rows=14223 loops=1)
+                     Output: b_108.id, b_108.created_at, b_108.amount, b_108.source_account_id, b_108.destination_account_id
+                     Buffers: shared read=234
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_900_chunk b_120  (cost=0.00..315.03 rows=8303 width=38) (actual time=0.048..1.784 rows=14115 loops=1)
+                     Output: b_120.id, b_120.created_at, b_120.amount, b_120.source_account_id, b_120.destination_account_id
+                     Buffers: shared read=232
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1043_chunk b_263  (cost=0.00..314.98 rows=8298 width=38) (actual time=0.042..1.825 rows=14106 loops=1)
+                     Output: b_263.id, b_263.created_at, b_263.amount, b_263.source_account_id, b_263.destination_account_id
+                     Buffers: shared read=232
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1052_chunk b_272  (cost=0.00..314.48 rows=8248 width=38) (actual time=0.041..2.015 rows=14022 loops=1)
+                     Output: b_272.id, b_272.created_at, b_272.amount, b_272.source_account_id, b_272.destination_account_id
+                     Buffers: shared read=232
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_943_chunk b_163  (cost=0.00..314.25 rows=8225 width=38) (actual time=0.046..3.827 rows=13982 loops=1)
+                     Output: b_163.id, b_163.created_at, b_163.amount, b_163.source_account_id, b_163.destination_account_id
+                     Buffers: shared read=232
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_959_chunk b_179  (cost=0.00..314.17 rows=8217 width=38) (actual time=0.042..2.846 rows=13969 loops=1)
+                     Output: b_179.id, b_179.created_at, b_179.amount, b_179.source_account_id, b_179.destination_account_id
+                     Buffers: shared read=232
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_960_chunk b_180  (cost=0.00..309.78 rows=8178 width=38) (actual time=0.039..2.266 rows=13903 loops=1)
+                     Output: b_180.id, b_180.created_at, b_180.amount, b_180.source_account_id, b_180.destination_account_id
+                     Buffers: shared read=228
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1061_chunk b_281  (cost=0.00..298.68 rows=7868 width=38) (actual time=0.036..1.718 rows=13375 loops=1)
+                     Output: b_281.id, b_281.created_at, b_281.amount, b_281.source_account_id, b_281.destination_account_id
+                     Buffers: shared read=220
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_957_chunk b_177  (cost=0.00..281.81 rows=7381 width=38) (actual time=0.032..1.542 rows=12548 loops=1)
+                     Output: b_177.id, b_177.created_at, b_177.amount, b_177.source_account_id, b_177.destination_account_id
+                     Buffers: shared read=208
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1047_chunk b_267  (cost=0.00..276.89 rows=7289 width=38) (actual time=0.037..1.518 rows=12392 loops=1)
+                     Output: b_267.id, b_267.created_at, b_267.amount, b_267.source_account_id, b_267.destination_account_id
+                     Buffers: shared read=204
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_821_chunk b_41  (cost=0.00..229.56 rows=6056 width=38) (actual time=0.035..1.881 rows=10295 loops=1)
+                     Output: b_41.id, b_41.created_at, b_41.amount, b_41.source_account_id, b_41.destination_account_id
+                     Buffers: shared read=169
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_835_chunk b_55  (cost=0.00..228.04 rows=6004 width=38) (actual time=0.026..1.298 rows=10206 loops=1)
+                     Output: b_55.id, b_55.created_at, b_55.amount, b_55.source_account_id, b_55.destination_account_id
+                     Buffers: shared read=168
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1083_chunk b_303  (cost=0.00..222.05 rows=5805 width=38) (actual time=0.038..1.241 rows=9868 loops=1)
+                     Output: b_303.id, b_303.created_at, b_303.amount, b_303.source_account_id, b_303.destination_account_id
+                     Buffers: shared read=164
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_903_chunk b_123  (cost=0.00..221.83 rows=5783 width=38) (actual time=0.027..1.361 rows=9831 loops=1)
+                     Output: b_123.id, b_123.created_at, b_123.amount, b_123.source_account_id, b_123.destination_account_id
+                     Buffers: shared read=164
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_869_chunk b_89  (cost=0.00..221.06 rows=5706 width=38) (actual time=0.032..1.212 rows=9700 loops=1)
+                     Output: b_89.id, b_89.created_at, b_89.amount, b_89.source_account_id, b_89.destination_account_id
+                     Buffers: shared read=164
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1023_chunk b_243  (cost=0.00..216.24 rows=5624 width=38) (actual time=0.038..1.200 rows=9561 loops=1)
+                     Output: b_243.id, b_243.created_at, b_243.amount, b_243.source_account_id, b_243.destination_account_id
+                     Buffers: shared read=160
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_793_chunk b_13  (cost=0.00..215.89 rows=5589 width=38) (actual time=0.028..1.233 rows=9501 loops=1)
+                     Output: b_13.id, b_13.created_at, b_13.amount, b_13.source_account_id, b_13.destination_account_id
+                     Buffers: shared read=160
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1045_chunk b_265  (cost=0.00..212.11 rows=5511 width=38) (actual time=0.028..1.190 rows=9368 loops=1)
+                     Output: b_265.id, b_265.created_at, b_265.amount, b_265.source_account_id, b_265.destination_account_id
+                     Buffers: shared read=157
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_989_chunk b_209  (cost=0.00..199.59 rows=5159 width=38) (actual time=0.034..1.101 rows=8771 loops=1)
+                     Output: b_209.id, b_209.created_at, b_209.amount, b_209.source_account_id, b_209.destination_account_id
+                     Buffers: shared read=148
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_992_chunk b_212  (cost=0.00..199.30 rows=5130 width=38) (actual time=0.026..1.202 rows=8721 loops=1)
+                     Output: b_212.id, b_212.created_at, b_212.amount, b_212.source_account_id, b_212.destination_account_id
+                     Buffers: shared read=148
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_990_chunk b_210  (cost=0.00..195.80 rows=5080 width=38) (actual time=0.039..1.103 rows=8636 loops=1)
+                     Output: b_210.id, b_210.created_at, b_210.amount, b_210.source_account_id, b_210.destination_account_id
+                     Buffers: shared read=145
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_840_chunk b_60  (cost=0.00..195.71 rows=5071 width=38) (actual time=0.027..1.136 rows=8620 loops=1)
+                     Output: b_60.id, b_60.created_at, b_60.amount, b_60.source_account_id, b_60.destination_account_id
+                     Buffers: shared read=145
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_985_chunk b_205  (cost=0.00..195.45 rows=5045 width=38) (actual time=0.041..1.164 rows=8577 loops=1)
+                     Output: b_205.id, b_205.created_at, b_205.amount, b_205.source_account_id, b_205.destination_account_id
+                     Buffers: shared read=145
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_819_chunk b_39  (cost=0.00..192.84 rows=4984 width=38) (actual time=0.037..1.063 rows=8473 loops=1)
+                     Output: b_39.id, b_39.created_at, b_39.amount, b_39.source_account_id, b_39.destination_account_id
+                     Buffers: shared read=143
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_920_chunk b_140  (cost=0.00..192.69 rows=4969 width=38) (actual time=0.026..1.512 rows=8447 loops=1)
+                     Output: b_140.id, b_140.created_at, b_140.amount, b_140.source_account_id, b_140.destination_account_id
+                     Buffers: shared read=143
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1079_chunk b_299  (cost=0.00..190.09 rows=4909 width=38) (actual time=0.039..1.084 rows=8346 loops=1)
+                     Output: b_299.id, b_299.created_at, b_299.amount, b_299.source_account_id, b_299.destination_account_id
+                     Buffers: shared read=141
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_917_chunk b_137  (cost=0.00..190.05 rows=4905 width=38) (actual time=0.028..1.069 rows=8338 loops=1)
+                     Output: b_137.id, b_137.created_at, b_137.amount, b_137.source_account_id, b_137.destination_account_id
+                     Buffers: shared read=141
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_808_chunk b_28  (cost=0.00..189.47 rows=4847 width=38) (actual time=0.033..1.062 rows=8240 loops=1)
+                     Output: b_28.id, b_28.created_at, b_28.amount, b_28.source_account_id, b_28.destination_account_id
+                     Buffers: shared read=141
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_932_chunk b_152  (cost=0.00..189.18 rows=4918 width=38) (actual time=0.030..1.243 rows=8360 loops=1)
+                     Output: b_152.id, b_152.created_at, b_152.amount, b_152.source_account_id, b_152.destination_account_id
+                     Buffers: shared read=140
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_841_chunk b_61  (cost=0.00..188.98 rows=4898 width=38) (actual time=0.033..1.092 rows=8326 loops=1)
+                     Output: b_61.id, b_61.created_at, b_61.amount, b_61.source_account_id, b_61.destination_account_id
+                     Buffers: shared read=140
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_929_chunk b_149  (cost=0.00..188.22 rows=4922 width=38) (actual time=0.033..1.154 rows=8368 loops=1)
+                     Output: b_149.id, b_149.created_at, b_149.amount, b_149.source_account_id, b_149.destination_account_id
+                     Buffers: shared read=139
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1082_chunk b_302  (cost=0.00..187.72 rows=4872 width=38) (actual time=0.029..1.140 rows=8283 loops=1)
+                     Output: b_302.id, b_302.created_at, b_302.amount, b_302.source_account_id, b_302.destination_account_id
+                     Buffers: shared read=139
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_806_chunk b_26  (cost=0.00..187.61 rows=4861 width=38) (actual time=0.031..1.154 rows=8264 loops=1)
+                     Output: b_26.id, b_26.created_at, b_26.amount, b_26.source_account_id, b_26.destination_account_id
+                     Buffers: shared read=139
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1113_chunk b_333  (cost=0.00..187.45 rows=4845 width=38) (actual time=0.049..1.186 rows=8237 loops=1)
+                     Output: b_333.id, b_333.created_at, b_333.amount, b_333.source_account_id, b_333.destination_account_id
+                     Buffers: shared read=139
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1118_chunk b_338  (cost=0.00..187.16 rows=4816 width=38) (actual time=0.040..0.758 rows=8188 loops=1)
+                     Output: b_338.id, b_338.created_at, b_338.amount, b_338.source_account_id, b_338.destination_account_id
+                     Buffers: shared hit=139
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_832_chunk b_52  (cost=0.00..186.33 rows=4833 width=38) (actual time=0.037..1.139 rows=8216 loops=1)
+                     Output: b_52.id, b_52.created_at, b_52.amount, b_52.source_account_id, b_52.destination_account_id
+                     Buffers: shared read=138
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1084_chunk b_304  (cost=0.00..186.14 rows=4814 width=38) (actual time=0.025..1.857 rows=8183 loops=1)
+                     Output: b_304.id, b_304.created_at, b_304.amount, b_304.source_account_id, b_304.destination_account_id
+                     Buffers: shared read=138
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_918_chunk b_138  (cost=0.00..185.94 rows=4794 width=38) (actual time=0.024..1.026 rows=8149 loops=1)
+                     Output: b_138.id, b_138.created_at, b_138.amount, b_138.source_account_id, b_138.destination_account_id
+                     Buffers: shared read=138
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_811_chunk b_31  (cost=0.00..184.88 rows=4788 width=38) (actual time=0.025..1.034 rows=8140 loops=1)
+                     Output: b_31.id, b_31.created_at, b_31.amount, b_31.source_account_id, b_31.destination_account_id
+                     Buffers: shared read=137
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_870_chunk b_90  (cost=0.00..184.75 rows=4775 width=38) (actual time=0.058..1.099 rows=8117 loops=1)
+                     Output: b_90.id, b_90.created_at, b_90.amount, b_90.source_account_id, b_90.destination_account_id
+                     Buffers: shared read=137
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_891_chunk b_111  (cost=0.00..184.65 rows=4765 width=38) (actual time=0.030..1.460 rows=8100 loops=1)
+                     Output: b_111.id, b_111.created_at, b_111.amount, b_111.source_account_id, b_111.destination_account_id
+                     Buffers: shared read=137
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1095_chunk b_315  (cost=0.00..184.45 rows=4845 width=38) (actual time=0.038..1.104 rows=8237 loops=1)
+                     Output: b_315.id, b_315.created_at, b_315.amount, b_315.source_account_id, b_315.destination_account_id
+                     Buffers: shared read=136
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_995_chunk b_215  (cost=0.00..183.73 rows=4773 width=38) (actual time=0.042..1.218 rows=8114 loops=1)
+                     Output: b_215.id, b_215.created_at, b_215.amount, b_215.source_account_id, b_215.destination_account_id
+                     Buffers: shared read=136
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1020_chunk b_240  (cost=0.00..183.37 rows=4737 width=38) (actual time=0.026..1.522 rows=8053 loops=1)
+                     Output: b_240.id, b_240.created_at, b_240.amount, b_240.source_account_id, b_240.destination_account_id
+                     Buffers: shared read=136
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_871_chunk b_91  (cost=0.00..181.81 rows=4781 width=38) (actual time=0.030..0.999 rows=8127 loops=1)
+                     Output: b_91.id, b_91.created_at, b_91.amount, b_91.source_account_id, b_91.destination_account_id
+                     Buffers: shared read=134
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1111_chunk b_331  (cost=0.00..181.46 rows=4746 width=38) (actual time=0.029..1.721 rows=8068 loops=1)
+                     Output: b_331.id, b_331.created_at, b_331.amount, b_331.source_account_id, b_331.destination_account_id
+                     Buffers: shared read=134
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1021_chunk b_241  (cost=0.00..181.45 rows=4745 width=38) (actual time=0.029..1.061 rows=8067 loops=1)
+                     Output: b_241.id, b_241.created_at, b_241.amount, b_241.source_account_id, b_241.destination_account_id
+                     Buffers: shared read=134
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_856_chunk b_76  (cost=0.00..181.36 rows=4736 width=38) (actual time=0.027..1.026 rows=8052 loops=1)
+                     Output: b_76.id, b_76.created_at, b_76.amount, b_76.source_account_id, b_76.destination_account_id
+                     Buffers: shared read=134
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1112_chunk b_332  (cost=0.00..180.32 rows=4732 width=38) (actual time=0.030..1.053 rows=8044 loops=1)
+                     Output: b_332.id, b_332.created_at, b_332.amount, b_332.source_account_id, b_332.destination_account_id
+                     Buffers: shared read=133
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1054_chunk b_274  (cost=0.00..179.47 rows=4647 width=38) (actual time=0.030..1.018 rows=7900 loops=1)
+                     Output: b_274.id, b_274.created_at, b_274.amount, b_274.source_account_id, b_274.destination_account_id
+                     Buffers: shared read=133
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_962_chunk b_182  (cost=0.00..179.21 rows=4721 width=38) (actual time=0.026..1.043 rows=8025 loops=1)
+                     Output: b_182.id, b_182.created_at, b_182.amount, b_182.source_account_id, b_182.destination_account_id
+                     Buffers: shared read=132
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_896_chunk b_116  (cost=0.00..179.12 rows=4712 width=38) (actual time=0.038..1.162 rows=8010 loops=1)
+                     Output: b_116.id, b_116.created_at, b_116.amount, b_116.source_account_id, b_116.destination_account_id
+                     Buffers: shared read=132
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1016_chunk b_236  (cost=0.00..179.07 rows=4707 width=38) (actual time=0.030..1.916 rows=8002 loops=1)
+                     Output: b_236.id, b_236.created_at, b_236.amount, b_236.source_account_id, b_236.destination_account_id
+                     Buffers: shared read=132
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_899_chunk b_119  (cost=0.00..178.92 rows=4692 width=38) (actual time=0.036..1.075 rows=7977 loops=1)
+                     Output: b_119.id, b_119.created_at, b_119.amount, b_119.source_account_id, b_119.destination_account_id
+                     Buffers: shared read=132
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_963_chunk b_183  (cost=0.00..178.39 rows=4639 width=38) (actual time=0.029..1.110 rows=7887 loops=1)
+                     Output: b_183.id, b_183.created_at, b_183.amount, b_183.source_account_id, b_183.destination_account_id
+                     Buffers: shared read=132
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_898_chunk b_118  (cost=0.00..178.24 rows=4624 width=38) (actual time=0.079..1.372 rows=7861 loops=1)
+                     Output: b_118.id, b_118.created_at, b_118.amount, b_118.source_account_id, b_118.destination_account_id
+                     Buffers: shared read=132
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_954_chunk b_174  (cost=0.00..178.15 rows=4615 width=38) (actual time=0.031..0.999 rows=7846 loops=1)
+                     Output: b_174.id, b_174.created_at, b_174.amount, b_174.source_account_id, b_174.destination_account_id
+                     Buffers: shared read=132
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_797_chunk b_17  (cost=0.00..177.94 rows=4694 width=38) (actual time=0.033..1.149 rows=7979 loops=1)
+                     Output: b_17.id, b_17.created_at, b_17.amount, b_17.source_account_id, b_17.destination_account_id
+                     Buffers: shared read=131
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1051_chunk b_271  (cost=0.00..173.82 rows=4582 width=38) (actual time=0.032..1.112 rows=7789 loops=1)
+                     Output: b_271.id, b_271.created_at, b_271.amount, b_271.source_account_id, b_271.destination_account_id
+                     Buffers: shared read=128
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_902_chunk b_122  (cost=0.00..173.03 rows=4503 width=38) (actual time=0.051..1.287 rows=7655 loops=1)
+                     Output: b_122.id, b_122.created_at, b_122.amount, b_122.source_account_id, b_122.destination_account_id
+                     Buffers: shared read=128
+         ->  Parallel Hash  (cost=23326.38..23326.38 rows=430600 width=38) (actual time=639.507..639.511 rows=319645 loops=3)
+               Output: a.id, a.amount, a.created_at, a.source_account_id, a.destination_account_id
+               Buckets: 1048576  Batches: 1  Memory Usage: 75904kB
+               Buffers: shared hit=15783
+               Worker 0:  actual time=609.591..609.593 rows=268760 loops=1
+                 Buffers: shared hit=4448
+               Worker 1:  actual time=607.290..607.294 rows=249069 loops=1
+                 Buffers: shared hit=4102
+               ->  Parallel Custom Scan (ChunkAppend) on public.transactions a  (cost=0.29..23326.38 rows=430600 width=38) (actual time=438.702..515.544 rows=319645 loops=3)
+                     Output: a.id, a.amount, a.created_at, a.source_account_id, a.destination_account_id
+                     Startup Exclusion: true
+                     Runtime Exclusion: false
+                     Chunks excluded during startup: 1
+                     Buffers: shared hit=15783
+                     Worker 0:  actual time=443.322..506.230 rows=268760 loops=1
+                       Buffers: shared hit=4448
+                     Worker 1:  actual time=442.828..506.821 rows=249069 loops=1
+                       Buffers: shared hit=4102
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1115_chunk a_5  (cost=0.00..18432.54 rows=324145 width=38) (actual time=143.355..187.604 rows=259316 loops=3)
+                           Output: a_5.id, a_5.amount, a_5.created_at, a_5.source_account_id, a_5.destination_account_id
+                           Filter: (a_5.created_at >= (now() - '7 days'::interval))
+                           Buffers: shared hit=12760
+                           Worker 0:  actual time=0.058..27.907 rows=182268 loops=1
+                             Buffers: shared hit=2993
+                           Worker 1:  actual time=0.060..25.939 rows=154574 loops=1
+                             Buffers: shared hit=2534
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1116_chunk a_6  (cost=0.00..882.97 rows=19141 width=38) (actual time=443.319..450.703 rows=32540 loops=1)
+                           Output: a_6.id, a_6.amount, a_6.created_at, a_6.source_account_id, a_6.destination_account_id
+                           Filter: (a_6.created_at >= (now() - '7 days'::interval))
+                           Buffers: shared hit=548
+                           Worker 0:  actual time=443.319..450.703 rows=32540 loops=1
+                             Buffers: shared hit=548
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_935_chunk a_1  (cost=0.00..849.34 rows=18362 width=38) (actual time=442.825..447.946 rows=31216 loops=1)
+                           Output: a_1.id, a_1.amount, a_1.created_at, a_1.source_account_id, a_1.destination_account_id
+                           Filter: (a_1.created_at >= (now() - '7 days'::interval))
+                           Buffers: shared hit=528
+                           Worker 1:  actual time=442.825..447.946 rows=31216 loops=1
+                             Buffers: shared hit=528
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_939_chunk a_2  (cost=0.00..846.03 rows=18630 width=38) (actual time=0.055..8.948 rows=31671 loops=1)
+                           Output: a_2.id, a_2.amount, a_2.created_at, a_2.source_account_id, a_2.destination_account_id
+                           Filter: (a_2.created_at >= (now() - '7 days'::interval))
+                           Buffers: shared hit=520
+                           Worker 1:  actual time=0.055..8.948 rows=31671 loops=1
+                             Buffers: shared hit=520
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_948_chunk a_3  (cost=0.00..845.43 rows=18289 width=38) (actual time=0.053..7.628 rows=31105 loops=1)
+                           Output: a_3.id, a_3.amount, a_3.created_at, a_3.source_account_id, a_3.destination_account_id
+                           Filter: (a_3.created_at >= (now() - '7 days'::interval))
+                           Rows Removed by Filter: 508
+                           Buffers: shared hit=520
+                           Worker 0:  actual time=0.053..7.628 rows=31105 loops=1
+                             Buffers: shared hit=520
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_952_chunk a_4  (cost=0.00..845.38 rows=18593 width=38) (actual time=0.057..9.674 rows=31608 loops=1)
+                           Output: a_4.id, a_4.amount, a_4.created_at, a_4.source_account_id, a_4.destination_account_id
+                           Filter: (a_4.created_at >= (now() - '7 days'::interval))
+                           Buffers: shared hit=520
+                           Worker 1:  actual time=0.057..9.674 rows=31608 loops=1
+                             Buffers: shared hit=520
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1117_chunk a_7  (cost=0.00..398.90 rows=8623 width=38) (actual time=0.060..3.486 rows=14659 loops=1)
+                           Output: a_7.id, a_7.amount, a_7.created_at, a_7.source_account_id, a_7.destination_account_id
+                           Filter: (a_7.created_at >= (now() - '7 days'::interval))
+                           Buffers: shared hit=248
+                           Worker 0:  actual time=0.060..3.486 rows=14659 loops=1
+                             Buffers: shared hit=248
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_1118_chunk a_8  (cost=0.00..223.29 rows=4816 width=38) (actual time=0.057..2.068 rows=8188 loops=1)
+                           Output: a_8.id, a_8.amount, a_8.created_at, a_8.source_account_id, a_8.destination_account_id
+                           Filter: (a_8.created_at >= (now() - '7 days'::interval))
+                           Buffers: shared hit=139
+                           Worker 0:  actual time=0.057..2.068 rows=8188 loops=1
+                             Buffers: shared hit=139
+ Query Identifier: -4486213645551032099
+ Planning:
+   Buffers: shared hit=25577 read=799
+ Planning Time: 149.433 ms
+ JIT:
+   Functions: 2160
+   Options: Inlining false, Optimization false, Expressions true, Deforming true
+   Timing: Generation 126.488 ms, Inlining 0.000 ms, Optimization 60.874 ms, Emission 1264.338 ms, Total 1451.700 ms
+ Execution Time: 2813.611 ms
+(1461 rows)

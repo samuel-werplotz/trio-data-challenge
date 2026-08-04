@@ -77,7 +77,7 @@ Critérios atendidos → testes no `run_all.sh` → `run_all.sh` sem FAIL → `E
 - [x] 03 makefile-e-healthcheck · compose
 - [x] 04 schema-timescaledb · compose
 - [x] 05 seed-10m · B
-- [ ] 06 queries-antes-indices · B
+- [x] 06 queries-antes-indices · B
 - [ ] 07 indices-e-otimizacao · B
 - [ ] 08 caggs-compressao-retencao · B
 - [ ] 09 lgpd-sanitizacao · local

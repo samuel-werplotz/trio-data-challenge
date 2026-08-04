@@ -24,6 +24,10 @@ services:
     container_name: trio-timescaledb
     restart: unless-stopped
     profiles: ["core", "full"]
+    # default de 64MB do Docker estoura em hash join grande (ex.: Q4 self-join
+    # de S06, o anti-padrão medido de propósito na etapa 06) — sem isso a query
+    # nem chega a rodar para ser medida.
+    shm_size: "1gb"
     ports:
       - "5432:5432"
     environment:
