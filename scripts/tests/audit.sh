@@ -44,6 +44,12 @@ skip() { SKIP_N=$((SKIP_N+1)); printf '  SKIP  %-14s %s\n' "$1" "${2:-}"; return
 # want <id> <descrição> <comando...> — PASS se o comando sai 0
 want() { local id="$1" d="$2"; shift 2; if "$@" >/dev/null 2>&1; then ok "$id" "$d"; else bad "$id" "$d"; fi; }
 
+# step_file <NN> — resolve o caminho de uma etapa do roadmap esteja ela ainda
+# na raiz (aberta) ou em concluidas/ (fechada). Uso: grep_file A3.1 "$(step_file 06)" ...
+step_file() {
+  ls "$ROADMAP/$1"-*.md "$ROADMAP/concluidas/$1"-*.md 2>/dev/null | head -1
+}
+
 # grep_file <id> <arquivo> <regex> <descrição> — o arquivo precisa conter o padrão
 grep_file() {
   local id="$1" f="$2" re="$3" d="$4"
@@ -98,12 +104,14 @@ done
 # ============================================================================
 sec "2. Esteira — 15 etapas + 99"
 # ============================================================================
-N_STEPS=$(ls "$ROADMAP"/[0-9]*.md 2>/dev/null | wc -l)
+# Etapa fechada move de $ROADMAP para $ROADMAP/concluidas — procurar nos dois
+# é o que faz esta seção continuar válida depois que a esteira anda.
+N_STEPS=$(ls "$ROADMAP"/[0-9]*.md "$ROADMAP/concluidas"/[0-9]*.md 2>/dev/null | wc -l)
 if [ "$N_STEPS" -eq 16 ]; then ok A2.1 "16 arquivos de etapa (15 + 99)"
 else bad A2.1 "esperava 16 arquivos de etapa, achei $N_STEPS"; fi
 
 for n in 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 99; do
-  f=$(ls "$ROADMAP/$n"-*.md 2>/dev/null | head -1)
+  f=$(ls "$ROADMAP/$n"-*.md "$ROADMAP/concluidas/$n"-*.md 2>/dev/null | head -1)
   if [ -z "$f" ]; then bad "A2.$n" "etapa $n ausente"; continue; fi
 
   # As 10 seções do template fixo
@@ -127,49 +135,67 @@ for n in 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 99; do
 done
 ok A2.z "template conferido nas 16 etapas"
 
-# Só as 7 de carga-real nascem BLOQUEADA
-BLOQ=$(grep -l "Estado: BLOQUEADA" "$ROADMAP"/[0-9]*.md 2>/dev/null | wc -l)
-if [ "$BLOQ" -eq 7 ]; then ok A2.b "7 etapas nascem BLOQUEADA"
-else bad A2.b "esperava 7 etapas BLOQUEADA, achei $BLOQ"; fi
+# As 7 de carga-real nascem BLOQUEADA. "Estado:" é mutável — vira CONCLUÍDA ao
+# fechar — então não serve para provar o nascimento depois que a esteira anda.
+# O impeditivo da ficha (DOCKER-LOCAL.md) é a marca fixa de nascer BLOQUEADA:
+# fica escrito na etapa para sempre, também depois de fechada. Só conta se
+# aparecer dentro da seção ## IMPEDITIVOS — texto livre em STATUS/ESTADO
+# HERDADO pode citar o arquivo sem ser o impeditivo formal da etapa.
+has_impeditivo_ficha() {
+  sed -n '/^## IMPEDITIVOS/,/^## ESTADO HERDADO/p' "$1" 2>/dev/null | grep -q "DOCKER-LOCAL.md"
+}
 
+BLOQ_NASCENTE=0
 for n in 05 06 07 08 12 13 99; do
-  f=$(ls "$ROADMAP/$n"-*.md 2>/dev/null | head -1)
-  grep -q "Estado: BLOQUEADA" "$f" 2>/dev/null || bad "A2.b$n" "etapa $n deveria nascer BLOQUEADA"
-  grep -q "DOCKER-LOCAL.md" "$f" 2>/dev/null   || bad "A2.i$n" "etapa $n sem o impeditivo da ficha"
+  f=$(ls "$ROADMAP/$n"-*.md "$ROADMAP/concluidas/$n"-*.md 2>/dev/null | head -1)
+  if has_impeditivo_ficha "$f"; then
+    BLOQ_NASCENTE=$((BLOQ_NASCENTE + 1))
+  else
+    bad "A2.i$n" "etapa $n sem o impeditivo da ficha"
+  fi
 done
-ok A2.b2 "impeditivo da ficha presente nas 7"
+if [ "$BLOQ_NASCENTE" -eq 7 ]; then ok A2.b "7 etapas nascem BLOQUEADA (impeditivo da ficha presente)"
+else bad A2.b "esperava 7 etapas com o impeditivo da ficha, achei $BLOQ_NASCENTE"; fi
+
+# Nenhuma etapa fora das 7 pode ter herdado o impeditivo por engano
+OUTRAS_COM_IMPEDITIVO=0
+for f in "$ROADMAP"/[0-9]*.md "$ROADMAP/concluidas"/[0-9]*.md; do
+  has_impeditivo_ficha "$f" && OUTRAS_COM_IMPEDITIVO=$((OUTRAS_COM_IMPEDITIVO + 1))
+done
+if [ "$OUTRAS_COM_IMPEDITIVO" -eq 7 ]; then ok A2.b2 "impeditivo da ficha só nas 7 etapas certas"
+else bad A2.b2 "impeditivo da ficha em $OUTRAS_COM_IMPEDITIVO etapas, esperava exatamente 7"; fi
 
 # ============================================================================
 sec "3. Decisões travadas (não podem ter se perdido)"
 # ============================================================================
 # A inversão S06-antes-de-S03: medir sem CAgg é o "antes" honesto
-grep_file A3.1 "$ROADMAP/06-queries-antes-indices.md" 'não cria índice nenhum' \
+grep_file A3.1 "$(step_file 06)" 'não cria índice nenhum' \
   "etapa 06 declara que NÃO cria índice"
-grep_file A3.2 "$ROADMAP/06-queries-antes-indices.md" 'baseline sem otimiza' \
+grep_file A3.2 "$(step_file 06)" 'baseline sem otimiza' \
   "etapa 06 explica o porquê do baseline"
 
 # Acionar plano B é decisão de arquitetura, não do agente
-grep_file A3.3 "$ROADMAP/13-pipeline-cdc.md" '2h sem CDC' \
+grep_file A3.3 "$(step_file 13)" '2h sem CDC' \
   "etapa 13 tem o gatilho do plano B como impeditivo"
-grep_file A3.4 "$ROADMAP/13-pipeline-cdc.md" 'PARAR, relatar' \
+grep_file A3.4 "$(step_file 13)" 'PARAR, relatar' \
   "etapa 13: plano B trava e espera decisão"
 
 # status fora do ORDER BY — a pergunta que a banca faz
-grep_file A3.5 "$ROADMAP/11-schema-clickhouse.md" 'status.*fora|fora.*status' \
+grep_file A3.5 "$(step_file 11)" 'status.*fora|fora.*status' \
   "etapa 11 justifica status fora do ORDER BY"
-grep_file A3.6 "$ROADMAP/11-schema-clickhouse.md" 'POPULATE' \
+grep_file A3.6 "$(step_file 11)" 'POPULATE' \
   "etapa 11 proíbe POPULATE nas MVs"
 
 # Retenção criada e desabilitada — conflito 90d x 12 meses
-grep_file A3.7 "$ROADMAP/08-caggs-compressao-retencao.md" 'scheduled *=> *false|scheduled = false' \
+grep_file A3.7 "$(step_file 08)" 'scheduled *=> *false|scheduled = false' \
   "etapa 08 desabilita a retenção do raw"
 
 # Backfill direto PG->CH, não pelo Kafka
-grep_file A3.8 "$ROADMAP/12-backfill-e-query-subsegundo.md" 'não passa pelo Kafka|direto PG' \
+grep_file A3.8 "$(step_file 12)" 'não passa pelo Kafka|direto PG' \
   "etapa 12: backfill não passa pelo Kafka"
 
 # Ordem obrigatória: schema -> backfill -> conector
-grep_file A3.9 "$ROADMAP/11-schema-clickhouse.md" 'backfill.*etapa 12|etapa 12' \
+grep_file A3.9 "$(step_file 11)" 'backfill.*etapa 12|etapa 12' \
   "etapa 11 adia o backfill para a 12"
 
 # ============================================================================
@@ -178,59 +204,59 @@ sec "4. Conformidade com o PDF (fonte canônica)"
 # Requisitos que já foram corrigidos uma vez — se sumirem de novo, é regressão.
 
 # § 3.2 A.5 — as DUAS retenções
-grep_file A4.1 "$ROADMAP/08-caggs-compressao-retencao.md" '2 anos' \
+grep_file A4.1 "$(step_file 08)" '2 anos' \
   "§3.2 A.5: retenção de 2 anos nos CAggs"
 
 # § 3.2 A.6.c — Q3 com as 3 medidas
-grep_file A4.2 "$ROADMAP/06-queries-antes-indices.md" 'taxa de falha' \
+grep_file A4.2 "$(step_file 06)" 'taxa de falha' \
   "§3.2 A.6.c: Q3 com taxa de falha"
-grep_file A4.3 "$ROADMAP/06-queries-antes-indices.md" 'tempo de liquida|liquidação' \
+grep_file A4.3 "$(step_file 06)" 'tempo de liquida|liquidação' \
   "§3.2 A.6.c: Q3 com média de liquidação"
 
 # § 3.2 A.6.b — Q2 com origem E destino
-grep_file A4.4 "$ROADMAP/06-queries-antes-indices.md" 'origem e destino|origem.*destino' \
+grep_file A4.4 "$(step_file 06)" 'origem e destino|origem.*destino' \
   "§3.2 A.6.b: Q2 com contas de origem e destino"
 
 # § 3.2 B.1 — a terceira tabela do legado
-grep_file A4.5 "$ROADMAP/10-legado-e-migracao-aurora.md" 'parâmetros de configuração|institution_config' \
+grep_file A4.5 "$(step_file 10)" 'parâmetros de configuração|institution_config' \
   "§3.2 B.1: tabela de configs do legado (origem do Dictionary)"
 
 # § 5.2 A.1 — backup dos TRÊS bancos
-grep_file A4.6 "$ROADMAP/15-backup-observabilidade-e-incidente.md" 'três bancos|3 bancos' \
+grep_file A4.6 "$(step_file 15)" 'três bancos|3 bancos' \
   "§5.2 A.1: backup dos três bancos"
-grep_file A4.7 "$ROADMAP/15-backup-observabilidade-e-incidente.md" 'legado' \
+grep_file A4.7 "$(step_file 15)" 'legado' \
   "§5.2 A.1: legado incluído no backup"
-grep_file A4.8 "$ROADMAP/15-backup-observabilidade-e-incidente.md" 'lifecycle|cross-region' \
+grep_file A4.8 "$(step_file 15)" 'lifecycle|cross-region' \
   "§5.2 A.1: destino AWS de produção documentado"
 
 # § 5.2 A.2 — as três contagens do recovery
-grep_file A4.9 "$ROADMAP/15-backup-observabilidade-e-incidente.md" '3 contagens|três contagens' \
+grep_file A4.9 "$(step_file 15)" '3 contagens|três contagens' \
   "§5.2 A.2: recovery com as 3 contagens"
 
 # § 5.2 B.2 — alertas integrados ao CloudWatch/SNS
-grep_file A4.10 "$ROADMAP/15-backup-observabilidade-e-incidente.md" 'CloudWatch' \
+grep_file A4.10 "$(step_file 15)" 'CloudWatch' \
   "§5.2 B.2: alertas com integração CloudWatch/SNS"
 
 # § 5.2 C — o incidente tem DUAS pistas
-grep_file A4.11 "$ROADMAP/15-backup-observabilidade-e-incidente.md" 'security group' \
+grep_file A4.11 "$(step_file 15)" 'security group' \
   "§5.2 C: incidente considera a mudança de security group"
 
 # § 4.2 C.1 — o diagrama completo
-grep_file A4.12 "$ROADMAP/14-ref-sync-api-e-adr.md" 'SLA' \
+grep_file A4.12 "$(step_file 14)" 'SLA' \
   "§4.2 C.1: diagrama com SLAs"
-grep_file A4.13 "$ROADMAP/14-ref-sync-api-e-adr.md" 'ponto[s]? de falha' \
+grep_file A4.13 "$(step_file 14)" 'ponto[s]? de falha' \
   "§4.2 C.1: diagrama com pontos de falha"
-grep_file A4.14 "$ROADMAP/14-ref-sync-api-e-adr.md" 'Hex' \
+grep_file A4.14 "$(step_file 14)" 'Hex' \
   "§4.2 C.1: diagrama inclui Hex"
-grep_file A4.15 "$ROADMAP/14-ref-sync-api-e-adr.md" 'VPC|CloudWatch' \
+grep_file A4.15 "$(step_file 14)" 'VPC|CloudWatch' \
   "§4.2 C.1: diagrama com serviços AWS"
 
 # § 4.2 B.2 — ref-sync sob migração para Aurora
-grep_file A4.16 "$ROADMAP/14-ref-sync-api-e-adr.md" 'Aurora' \
+grep_file A4.16 "$(step_file 14)" 'Aurora' \
   "§4.2 B.2: comportamento do ref-sync sob Aurora"
 
 # § 6 — nomes literais da árvore de entrega
-grep_file A4.17 "$ROADMAP/15-backup-observabilidade-e-incidente.md" 'desafio-3/runbook\.md' \
+grep_file A4.17 "$(step_file 15)" 'desafio-3/runbook\.md' \
   "§6: nome literal desafio-3/runbook.md"
 if grep -rq 'runbook-storage-92' "$ROADMAP"/*.md 2>/dev/null; then
   bad A4.18 "§6: ainda há referência ao nome antigo runbook-storage-92.md"
@@ -240,19 +266,19 @@ else ok A4.18 "§6: nome antigo do runbook eliminado"; fi
 # Conta só dentro do bloco da tabela de critérios: o mapa requisito→arquivo, logo abaixo,
 # também usa linhas "| N |" e contaminaria a contagem. Funciona antes e depois de a
 # coluna de evidência ser preenchida pela etapa 99.
-C7=$(sed -n '/^## Os 7 critérios/,/^## Mapa/p' "$ROADMAP/99-validacao-final.md" 2>/dev/null \
+C7=$(sed -n '/^## Os 7 critérios/,/^## Mapa/p' "$(step_file 99)" 2>/dev/null \
      | grep -cE '^\| [1-7] \|' || echo 0)
 if [ "$C7" -eq 7 ]; then ok A4.19 "§6.1: os 7 critérios de aceitação estão na tabela"
 else bad A4.19 "§6.1: esperava 7 critérios na tabela, achei $C7"; fi
 
 # § 7 — duração e os 4 blocos
-grep_file A4.20 "$ROADMAP/99-validacao-final.md" '30 a 45|30–45' \
+grep_file A4.20 "$(step_file 99)" '30 a 45|30–45' \
   "§7: duração de 30–45 min registrada"
-grep_file A4.21 "$ROADMAP/99-validacao-final.md" 'incidente' \
+grep_file A4.21 "$(step_file 99)" 'incidente' \
   "§7: discussão do incidente prevista na apresentação"
 
 # § 3.2 C.5 — ClickHouse servindo aplicação, não só dashboard
-grep_file A4.22 "$ROADMAP/14-ref-sync-api-e-adr.md" 'API|endpoint' \
+grep_file A4.22 "$(step_file 14)" 'API|endpoint' \
   "§3.2 C.5: API servindo aplicação"
 
 # ============================================================================
@@ -292,10 +318,15 @@ LEAK=$(grep -rlEi '(password|senha|secret|token)\s*[:=]\s*["'"'"']?[A-Za-z0-9]{8
 if [ -z "$LEAK" ]; then ok A6.1 "nenhum segredo aparente nos .md/.sh"
 else warn A6.1 "revisar possível segredo em: $(echo "$LEAK" | tr '\n' ' ')"; fi
 
-# Nenhum código de aplicação deve existir antes da etapa 01
-APP=$(find . -name '*.py' -o -name 'Dockerfile' 2>/dev/null | grep -v './trio-data-challenge/' || true)
-if [ -z "$APP" ]; then ok A6.2 "nenhum código de aplicação criado ainda"
-else warn A6.2 "código de aplicação presente antes da hora: $(echo "$APP" | tr '\n' ' ')"; fi
+# Nenhum código de aplicação deve existir antes da etapa 01 achatar o repo —
+# depois disso (05 seed, etc.) código de aplicação é esperado, não checar mais.
+if [ -d "trio-data-challenge" ]; then
+  APP=$(find . -name '*.py' -o -name 'Dockerfile' 2>/dev/null | grep -v './trio-data-challenge/' || true)
+  if [ -z "$APP" ]; then ok A6.2 "nenhum código de aplicação criado ainda"
+  else warn A6.2 "código de aplicação presente antes da hora: $(echo "$APP" | tr '\n' ' ')"; fi
+else
+  skip A6.2 "repo já achatado (pós-etapa 01) — código de aplicação é esperado"
+fi
 
 # run_all.sh precisa continuar cumulativo, com a regra escrita no cabeçalho
 grep_file A6.3 scripts/tests/run_all.sh 'ACUMULAÇÃO|cumulativ' \
