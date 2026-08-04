@@ -21,6 +21,21 @@ cleanup() {
   step "CLEANUP — removendo conta e transação sintéticas"
   $PSQL -c "DELETE FROM transactions WHERE source_institution='$DEMO_INST';" >/dev/null 2>&1
   $PSQL -c "DELETE FROM accounts WHERE institution_code='$DEMO_INST';" >/dev/null 2>&1
+
+  # O ClickHouse precisa ser limpo explicitamente: o sync-worker sincroniza por
+  # watermark de updated_at, e um DELETE não altera updated_at — a linha some da
+  # origem sem deixar rastro que o pipeline consiga observar. É o trade-off
+  # declarado da abordagem (ver ADR); aqui ele aparece na prática, e é por isso
+  # que a limpeza é feita nos dois lados. Sem isto, cada execução desta demo
+  # deixa uma órfã no destino e o teste E2.6 (contagens iguais) passa a falhar.
+  # Inclui as 2 MVs, e por um motivo diferente do da raw: elas são incrementais
+  # (AggregatingMergeTree). Contam o que foi INSERIDO — apagar da raw não desfaz
+  # o agregado, então sem isto o total da MV cresce a cada execução da demo.
+  for t in transactions_raw daily_by_institution status_funnel; do
+    docker exec trio-clickhouse clickhouse-client -u trio --password trio2024 \
+      -q "ALTER TABLE trio_analytics.$t DELETE WHERE source_institution='$DEMO_INST' SETTINGS mutations_sync=2" >/dev/null 2>&1
+  done
+
   local n
   n=$($PSQL_TA -c "SELECT count(*) FROM accounts WHERE institution_code='$DEMO_INST'")
   echo "  contas sintéticas restantes: $n (esperado: 0)"

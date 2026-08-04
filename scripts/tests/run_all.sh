@@ -80,9 +80,9 @@ check 02.1b "docker compose config válido (full)" docker compose --profile full
 check 02.1c "docker compose config válido (cdc-experimento)" docker compose --profile cdc-experimento config -q
 N_IMG=$(grep -c '^\s*image:' docker-compose.yml)
 N_BUILD=$(grep -c '^\s*build:' docker-compose.yml)
-[ "$N_IMG" -eq 10 ] && [ "$N_BUILD" -eq 5 ] \
-  && ok 02.2 "10 serviços com image: + 5 build local = 15" \
-  || fail 02.2 "esperava 10 image: e 5 build:, achei $N_IMG e $N_BUILD"
+[ "$N_IMG" -eq 10 ] && [ "$N_BUILD" -eq 6 ] \
+  && ok 02.2 "10 serviços com image: + 6 build local = 16 (sync-worker entrou no E2)" \
+  || fail 02.2 "esperava 10 image: e 6 build:, achei $N_IMG e $N_BUILD"
 # O critério nº 1 do PDF § 6.1 é o perfil core subir sem erro: o grafana chegou a
 # declarar depends_on do prometheus, que só existe em full, e isso abortava o up.
 check 02.7 "grafana não depende de serviço fora do profile core" \
@@ -145,6 +145,23 @@ if container_up timescaledb; then
   U2=$(psql_ts "SELECT updated_at FROM transactions WHERE id=$ID")
   [ "$U1" != "$U2" ] && ok 04.4 "trigger updated_at dispara em UPDATE" || fail 04.4 "updated_at não mudou ($U1 == $U2)"
   psql_ts "DELETE FROM transactions WHERE id=$ID" >/dev/null
+  # Desde o E2 há um pipeline ativo: entre o INSERT e o DELETE acima, o
+  # sync-worker pode ter sincronizado esta linha para o ClickHouse. O DELETE não
+  # altera updated_at, então o pipeline não tem como observá-lo — a órfã ficaria
+  # no destino e faria E2.6 (contagens iguais) falhar na execução seguinte.
+  # Limpar os dois lados é responsabilidade de quem cria dado de teste.
+  #
+  # As MVs também precisam ser limpas, e por um motivo distinto: elas são
+  # incrementais (AggregatingMergeTree). Contam o que foi INSERIDO e nada as
+  # decrementa — apagar da raw não desfaz o agregado. É o mesmo mecanismo que
+  # duplicou 20M na etapa 12, visto do outro lado.
+  cleanup_ch_test_row() {
+    local inst="$1"
+    ch_query "ALTER TABLE trio_analytics.transactions_raw DELETE WHERE source_institution='$inst' SETTINGS mutations_sync=2" >/dev/null 2>&1
+    ch_query "ALTER TABLE trio_analytics.daily_by_institution DELETE WHERE source_institution='$inst' SETTINGS mutations_sync=2" >/dev/null 2>&1
+    ch_query "ALTER TABLE trio_analytics.status_funnel DELETE WHERE source_institution='$inst' SETTINGS mutations_sync=2" >/dev/null 2>&1
+  }
+  cleanup_ch_test_row 'A'
 
   ERR=$(docker compose exec -T timescaledb psql -U trio -d trio_transactions -c "INSERT INTO seed_control(id) VALUES (2)" 2>&1)
   echo "$ERR" | grep -q 'violates check constraint' && ok 04.5 "seed_control rejeita segunda linha" \
@@ -517,6 +534,77 @@ check E1.2 "indice idx_tx_updated_at existe (sem ele a janela e Seq Scan de 10M)
 check E1.3 "janela do watermark usa Index Scan, nao Seq Scan (predicado duplo)" \
   bash -c 'docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "explain select id from transactions where updated_at >= now() - interval '"'"'30 seconds'"'"' and created_at >= now() - interval '"'"'7 days'"'"' order by updated_at, id limit 50000" 2>/dev/null | grep -q "Index Scan"'
 check E1.4 "premissas verificadas documentadas" test -f PREMISSAS-VERIFICADAS.md
+
+# --- E2 sync-worker (pipeline TimescaleDB -> ClickHouse) ---
+# Substitui o pipeline CDC. Os testes 13.x do plano original nao se aplicam: nao
+# ha conector, topico nem slot de replicacao. O que o PDF 4.2 A.2 cobra continua
+# sendo cobrado aqui: idempotencia, tratamento de falhas, observabilidade e
+# "demonstravel no docker-compose".
+sw_metric() { curl -s --max-time 5 localhost:8001/metrics 2>/dev/null | awk -v k="$1" '$1==k{print $2}'; }
+
+if container_up timescaledb; then
+  WM=$(psql_ts "SELECT last_updated_at FROM sync_state WHERE source='transactions'")
+  [ -n "$WM" ] && ok E2.1 "sync_state com watermark ($WM)" \
+    || fail E2.1 "sync_state sem linha para 'transactions'"
+else
+  skip E2.1 "timescaledb fora do ar"
+fi
+
+if docker ps --filter "name=trio-sync-worker" --format '{{.Status}}' 2>/dev/null | grep -q Up; then
+  ok E2.2 "container sync-worker de pe"
+  check E2.3 "metricas sync_ expostas em :8001" \
+    bash -c 'curl -s --max-time 5 localhost:8001/metrics 2>/dev/null | grep -q "^sync_last_success_timestamp"'
+  # sync_last_success_timestamp envelhecendo e o sinal que detecta o SEV-1 do
+  # Desafio 3 (pipeline parado com o resto de pe). Um contador nao serve: ele
+  # so para de crescer, e isso e indistinguivel de "nao houve movimento".
+  LS=$(sw_metric sync_last_success_timestamp)
+  if [ -n "$LS" ]; then
+    IDADE=$(awk -v t="$LS" 'BEGIN{printf "%d", systime()-t}')
+    [ "$IDADE" -lt 300 ] && ok E2.4 "ultimo ciclo ha ${IDADE}s (<300s)" \
+      || fail E2.4 "ultimo ciclo ha ${IDADE}s — pipeline parado?"
+  else
+    fail E2.4 "sync_last_success_timestamp ausente"
+  fi
+else
+  skip E2.2 "sync-worker fora do ar — docker compose --profile core up -d sync-worker"
+  skip E2.3 "sync-worker fora do ar"
+  skip E2.4 "sync-worker fora do ar"
+fi
+
+if container_up clickhouse; then
+  N_RAW=$(ch_query "SELECT count(*) FROM trio_analytics.transactions_raw")
+  N_FIN=$(ch_query "SELECT count() FROM trio_analytics.transactions_raw FINAL")
+  [ -n "$N_RAW" ] && [ "$N_RAW" = "$N_FIN" ] \
+    && ok E2.5 "raw sem duplicata: count()=count() FINAL ($N_RAW)" \
+    || fail E2.5 "count()=$N_RAW vs FINAL=$N_FIN — duplicata pendente de merge"
+  if container_up timescaledb; then
+    N_TS=$(psql_ts "SELECT count(*) FROM transactions")
+    [ "$N_TS" = "$N_FIN" ] && ok E2.6 "origem e destino com a mesma contagem ($N_TS)" \
+      || fail E2.6 "TimescaleDB=$N_TS vs ClickHouse FINAL=$N_FIN"
+  else
+    skip E2.6 "timescaledb fora do ar"
+  fi
+else
+  skip E2.5 "clickhouse fora do ar"
+  skip E2.6 "clickhouse fora do ar"
+fi
+
+# Ordem das operacoes no laco: a escrita tem de vir ANTES de avancar o watermark.
+# Inverter isso perderia linhas silenciosamente numa falha no meio do ciclo — e o
+# tipo de regressao que passa despercebida em revisao de codigo.
+check E2.7 "watermark avanca so apos a escrita confirmar" \
+  bash -c 'W=$(grep -n "sink.write_batch" desafio-2/pipeline/sync-worker/main.py | head -1 | cut -d: -f1);
+           C=$(grep -n "source.commit_watermark" desafio-2/pipeline/sync-worker/main.py | head -1 | cut -d: -f1);
+           [ -n "$W" ] && [ -n "$C" ] && [ "$W" -lt "$C" ]'
+# Sem o predicado de created_at o planner nao exclui chunk nenhum e a janela vira
+# Seq Scan de 10M (85.587 buffers vs 17). Ver PREMISSAS-VERIFICADAS.md P2b.
+check E2.8 "query do worker filtra created_at (exclusao de chunks)" \
+  grep -q "created_at >= %(created_floor)s" desafio-2/pipeline/sync-worker/source.py
+check E2.9 "demo-sync-worker.sh com sintaxe valida" bash -n desafio-2/demo-sync-worker.sh
+check E2.10 "sync-worker sobe junto do profile core" \
+  bash -c 'docker compose --profile core config --services 2>/dev/null | grep -qx sync-worker'
+check E2.11 "idx_tx_updated_at versionado no init" \
+  grep -q "idx_tx_updated_at" init/timescaledb/03_indexes.sql
 
 echo "----"
 echo "$PASS_N pass, $FAIL_N fail, $SKIP_N skip"

@@ -1,0 +1,4 @@
+# Versões fixadas: reprodutibilidade é requisito do projeto.
+psycopg[binary]==3.2.3
+clickhouse-connect==0.8.3
+prometheus-client==0.21.0

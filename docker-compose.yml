@@ -225,6 +225,35 @@ services:
           memory: 2G
 
   # ===========================================================================
+  #  8b. sync-worker — TimescaleDB -> ClickHouse por micro-batch (watermark)
+  #  Pipeline PRINCIPAL da entrega. Substitui o cdc-consumer, que ficou no
+  #  profile cdc-experimento como artefato da decisao de descartar o CDC.
+  # ===========================================================================
+  sync-worker:
+    build:
+      context: ./desafio-2/pipeline/sync-worker
+    container_name: trio-sync-worker
+    restart: unless-stopped
+    profiles: ["core", "full"]
+    ports:
+      - "8001:8001"   # metricas Prometheus
+    environment:
+      <<: *pg-common
+      PGHOST: timescaledb
+      POSTGRES_DB: trio_transactions
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-trio}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-trio2024}
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ===========================================================================
   #  ARTEFATO DE DECISAO — profile "cdc-experimento", fora do caminho critico
   #
   #  A abordagem CDC (Debezium -> Redpanda -> consumidor) foi construida,
