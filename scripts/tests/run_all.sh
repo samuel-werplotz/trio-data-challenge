@@ -213,9 +213,13 @@ if seed_done; then
   check 06.3 "medição 'antes' feita sem índice (evidência nos qN_before.txt)" bash -c \
     '! grep -qE "Index (Only )?Scan using idx_" desafio-1/queries/explains/q*_before.txt'
 
-  N_CAGG=$(psql_ts "SELECT count(*) FROM timescaledb_information.continuous_aggregates")
-  [ "$N_CAGG" = "0" ] && ok 06.4 "nenhum continuous aggregate ainda" \
-    || fail 06.4 "esperava 0 CAggs, achei ${N_CAGG:-erro}"
+  # Mesma correção de 04.6/06.3: a etapa 08 cria os CAggs legitimamente, então
+  # contar CAggs hoje não prova mais nada sobre a medição "antes". O que o
+  # teste realmente guarda é que os qN_before.txt foram medidos SEM CAgg —
+  # e isso se prova no plano gravado, que varre `transactions`, não o
+  # materialized hypertable. Ver 99-validacao-final.md.
+  check 06.4 "medição 'antes' feita sem CAgg (evidência nos qN_before.txt)" bash -c \
+    '! grep -q "_materialized_hypertable" desafio-1/queries/explains/q1_before.txt'
 else
   skip 06.3 "seed não concluído"
   skip 06.4 "seed não concluído"
@@ -249,6 +253,76 @@ check 07.4 "Q4 otimizada sem self-join" bash -c \
   '! grep -qiE "join +transactions" desafio-1/queries/q4_optimized.sql'
 check 07.6 "REPORT.md com tabela antes/depois" bash -c \
   'grep -q "^| Q2 —" desafio-1/REPORT.md && grep -q "^| Q4 —" desafio-1/REPORT.md'
+
+# --- 08 caggs-compressao-retencao ---
+check 08.7 "retention-demo.sh com sintaxe válida" bash -n desafio-1/scripts/retention-demo.sh
+
+if seed_done; then
+  N_CAGG_08=$(psql_ts "SELECT count(*) FROM timescaledb_information.continuous_aggregates")
+  [ "$N_CAGG_08" = "2" ] && ok 08.1 "2 continuous aggregates" \
+    || fail 08.1 "esperava 2 CAggs, achei ${N_CAGG_08:-erro}"
+
+  # A retenção do RAW existe mas fica parada: 90 dias apagariam 9 dos 12 meses
+  # do dataset. As dos CAggs (2 anos) ficam ligadas — não alcançam nada hoje.
+  N_RET_RAW=$(psql_ts "SELECT count(*) FROM timescaledb_information.jobs WHERE proc_name='policy_retention' AND hypertable_name='transactions' AND NOT scheduled")
+  [ "$N_RET_RAW" = "1" ] && ok 08.2 "retenção do raw existe e está DESLIGADA" \
+    || fail 08.2 "esperava 1 política de retenção parada no raw, achei ${N_RET_RAW:-erro}"
+
+  # 3 no total: 1 do raw (parada) + 2 dos CAggs (PDF § 3.2 A.5 pede as duas).
+  # O plano da etapa previa 1 antes de o PASSO 7 acrescentar as dos CAggs.
+  N_RET=$(psql_ts "SELECT count(*) FROM timescaledb_information.jobs WHERE proc_name='policy_retention'")
+  [ "$N_RET" = "3" ] && ok 08.3 "3 políticas de retenção (1 raw + 2 CAggs)" \
+    || fail 08.3 "esperava 3 políticas de retenção, achei ${N_RET:-erro}"
+
+  N_RET_CAGG=$(psql_ts "SELECT count(*) FROM timescaledb_information.jobs WHERE proc_name='policy_retention' AND hypertable_name LIKE 'cagg_%' AND scheduled")
+  [ "$N_RET_CAGG" = "2" ] && ok 08.3b "retenção de 2 anos nos 2 CAggs, habilitada" \
+    || fail 08.3b "esperava 2 retenções de CAgg ligadas, achei ${N_RET_CAGG:-erro}"
+
+  # O dataset tem que sobreviver a compressão, políticas e retention-demo.
+  N_TX_08=$(psql_ts "SELECT count(*) FROM transactions")
+  [ "$N_TX_08" = "10000000" ] && ok 08.4 "transactions intacta (10.000.000)" \
+    || fail 08.4 "esperava 10000000 linhas, achei ${N_TX_08:-erro}"
+
+  TAXA=$(psql_ts "SELECT round(before_compression_total_bytes::numeric / nullif(after_compression_total_bytes,0), 1) FROM hypertable_compression_stats('transactions')")
+  awk -v t="${TAXA:-0}" 'BEGIN{exit !(t>1)}' 2>/dev/null \
+    && ok 08.5 "taxa de compressão medida: ${TAXA}× (>1)" \
+    || fail 08.5 "taxa de compressão inválida: ${TAXA:-erro}"
+
+  N_VOL=$(psql_ts "SELECT count(*) FROM cagg_volume_hourly")
+  [ -n "$N_VOL" ] && [ "$N_VOL" -gt 0 ] 2>/dev/null && ok 08.6 "cagg_volume_hourly materializado ($N_VOL buckets)" \
+    || fail 08.6 "cagg_volume_hourly vazio ou erro: ${N_VOL:-erro}"
+
+  # end_offset de 1h nos dois refreshes: sem ele o bucket corrente (ainda
+  # recebendo escrita) seria gravado pela metade e nunca revisitado.
+  N_EO=$(psql_ts "SELECT count(*) FROM timescaledb_information.jobs WHERE proc_name='policy_refresh_continuous_aggregate' AND config->>'end_offset' = '01:00:00'")
+  [ "$N_EO" = "2" ] && ok 08.8 "end_offset de 1h nas 2 políticas de refresh" \
+    || fail 08.8 "esperava 2 refreshes com end_offset 1h, achei ${N_EO:-erro}"
+
+  # segmentby/orderby exatamente como S03 — é a decisão que define a taxa.
+  SEG=$(psql_ts "SELECT string_agg(attname, ', ' ORDER BY segmentby_column_index) FROM timescaledb_information.compression_settings WHERE hypertable_name='transactions' AND segmentby_column_index IS NOT NULL")
+  [ "$SEG" = "source_institution, type" ] && ok 08.9 "segmentby = source_institution, type" \
+    || fail 08.9 "segmentby inesperado: ${SEG:-erro}"
+
+  # Q1 via CAgg tem que bater exatamente com a query sobre o raw. O corte
+  # alinhado à hora não é detalhe: no meio do bucket, o mês da borda diverge.
+  DIVERG=$(psql_ts "WITH corte AS (SELECT date_trunc('hour', now() - INTERVAL '6 months') AS t),
+    raw AS (SELECT date_trunc('month', created_at) AS mes, type, status, count(*) qtd, sum(amount) total
+            FROM transactions, corte WHERE created_at >= corte.t GROUP BY 1,2,3),
+    cg AS (SELECT date_trunc('month', bucket) AS mes, type, status, sum(tx_count) qtd, sum(total_amount) total
+            FROM cagg_volume_hourly, corte WHERE bucket >= corte.t GROUP BY 1,2,3)
+    SELECT count(*) FROM raw FULL JOIN cg USING (mes, type, status)
+    WHERE raw.qtd IS DISTINCT FROM cg.qtd OR raw.total IS DISTINCT FROM cg.total")
+  [ "$DIVERG" = "0" ] && ok 08.10 "Q1 via CAgg idêntica ao raw (0 divergências)" \
+    || fail 08.10 "CAgg divergiu do raw em ${DIVERG:-erro} linhas"
+else
+  for t in 08.1 08.2 08.3 08.3b 08.4 08.5 08.6 08.8 08.9 08.10; do
+    skip "$t" "seed não concluído"
+  done
+fi
+
+check 08.11 "q1_after.txt existe (Q1 via CAgg medida)" test -f desafio-1/queries/explains/q1_after.txt
+check 08.12 "REPORT.md com taxa de compressão e retenção" bash -c \
+  'grep -q "Compressão —" desafio-1/REPORT.md && grep -q "Retenção —" desafio-1/REPORT.md'
 
 # ===========================================================================
 

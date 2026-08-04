@@ -1,0 +1,201 @@
+-- Query: q1
+-- Arquivo fonte: q1_volume_por_tipo_status_optimized.sql
+-- Protocolo: 4 execuções, 1ª descartada (aquece cache), mediana das 3 seguintes = 23.233ms
+-- Tempos das 3 execuções medidas (ms): 23.233 26.647 22.119 
+-- EXPLAIN abaixo é da última execução (cache já quente, mesmo plano)
+--
+                                                                                                                              QUERY PLAN                                                                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=2805.26..2825.10 rows=7936 width=80) (actual time=20.680..20.698 rows=88 loops=1)
+   Output: (date_trunc('month'::text, _materialized_hypertable_3.bucket)), _materialized_hypertable_3.type, _materialized_hypertable_3.status, (sum(_materialized_hypertable_3.tx_count)), (sum(_materialized_hypertable_3.total_amount))
+   Sort Key: (date_trunc('month'::text, _materialized_hypertable_3.bucket)), _materialized_hypertable_3.type, _materialized_hypertable_3.status
+   Sort Method: quicksort  Memory: 29kB
+   Buffers: shared hit=500
+   ->  Finalize HashAggregate  (cost=2152.35..2291.23 rows=7936 width=80) (actual time=20.538..20.602 rows=88 loops=1)
+         Output: (date_trunc('month'::text, _materialized_hypertable_3.bucket)), _materialized_hypertable_3.type, _materialized_hypertable_3.status, sum(_materialized_hypertable_3.tx_count), sum(_materialized_hypertable_3.total_amount)
+         Group Key: (date_trunc('month'::text, _materialized_hypertable_3.bucket)), _materialized_hypertable_3.type, _materialized_hypertable_3.status
+         Batches: 1  Memory Usage: 465kB
+         Buffers: shared hit=492
+         ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_3  (cost=0.29..2072.89 rows=4541 width=80) (actual time=1.224..20.296 rows=304 loops=1)
+               Output: (date_trunc('month'::text, _materialized_hypertable_3.bucket)), _materialized_hypertable_3.type, _materialized_hypertable_3.status, (PARTIAL sum(_materialized_hypertable_3.tx_count)), (PARTIAL sum(_materialized_hypertable_3.total_amount))
+               Startup Exclusion: true
+               Runtime Exclusion: false
+               Chunks excluded during startup: 15
+               Buffers: shared hit=492
+               ->  Partial HashAggregate  (cost=107.20..111.40 rows=240 width=80) (actual time=1.223..1.232 rows=24 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1182_chunk.bucket)), _hyper_3_1182_chunk.type, _hyper_3_1182_chunk.status, PARTIAL sum(_hyper_3_1182_chunk.tx_count), PARTIAL sum(_hyper_3_1182_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1182_chunk.bucket), _hyper_3_1182_chunk.type, _hyper_3_1182_chunk.status
+                     Batches: 1  Memory Usage: 45kB
+                     Buffers: shared hit=26
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_1182_chunk  (cost=0.00..78.20 rows=2320 width=31) (actual time=0.018..0.822 rows=2320 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1182_chunk.bucket), _hyper_3_1182_chunk.type, _hyper_3_1182_chunk.status, _hyper_3_1182_chunk.tx_count, _hyper_3_1182_chunk.total_amount
+                           Filter: (_hyper_3_1182_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=26
+               ->  Partial HashAggregate  (cost=108.88..113.08 rows=240 width=80) (actual time=1.605..1.610 rows=12 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1183_chunk.bucket)), _hyper_3_1183_chunk.type, _hyper_3_1183_chunk.status, PARTIAL sum(_hyper_3_1183_chunk.tx_count), PARTIAL sum(_hyper_3_1183_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1183_chunk.bucket), _hyper_3_1183_chunk.type, _hyper_3_1183_chunk.status
+                     Batches: 1  Memory Usage: 37kB
+                     Buffers: shared hit=26
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_1183_chunk  (cost=0.00..79.28 rows=2368 width=31) (actual time=0.007..1.129 rows=2368 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1183_chunk.bucket), _hyper_3_1183_chunk.type, _hyper_3_1183_chunk.status, _hyper_3_1183_chunk.tx_count, _hyper_3_1183_chunk.total_amount
+                           Filter: (_hyper_3_1183_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=26
+               ->  Partial HashAggregate  (cost=107.62..111.82 rows=240 width=80) (actual time=1.166..1.170 rows=12 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1184_chunk.bucket)), _hyper_3_1184_chunk.type, _hyper_3_1184_chunk.status, PARTIAL sum(_hyper_3_1184_chunk.tx_count), PARTIAL sum(_hyper_3_1184_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1184_chunk.bucket), _hyper_3_1184_chunk.type, _hyper_3_1184_chunk.status
+                     Batches: 1  Memory Usage: 37kB
+                     Buffers: shared hit=26
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_1184_chunk  (cost=0.00..78.47 rows=2332 width=31) (actual time=0.007..0.754 rows=2332 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1184_chunk.bucket), _hyper_3_1184_chunk.type, _hyper_3_1184_chunk.status, _hyper_3_1184_chunk.tx_count, _hyper_3_1184_chunk.total_amount
+                           Filter: (_hyper_3_1184_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=26
+               ->  Partial HashAggregate  (cost=109.19..113.39 rows=240 width=80) (actual time=0.954..0.962 rows=24 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1185_chunk.bucket)), _hyper_3_1185_chunk.type, _hyper_3_1185_chunk.status, PARTIAL sum(_hyper_3_1185_chunk.tx_count), PARTIAL sum(_hyper_3_1185_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1185_chunk.bucket), _hyper_3_1185_chunk.type, _hyper_3_1185_chunk.status
+                     Batches: 1  Memory Usage: 45kB
+                     Buffers: shared hit=26
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_1185_chunk  (cost=0.00..79.48 rows=2377 width=31) (actual time=0.006..0.611 rows=2377 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1185_chunk.bucket), _hyper_3_1185_chunk.type, _hyper_3_1185_chunk.status, _hyper_3_1185_chunk.tx_count, _hyper_3_1185_chunk.total_amount
+                           Filter: (_hyper_3_1185_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=26
+               ->  Partial HashAggregate  (cost=111.14..115.34 rows=240 width=80) (actual time=0.941..0.946 rows=12 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1186_chunk.bucket)), _hyper_3_1186_chunk.type, _hyper_3_1186_chunk.status, PARTIAL sum(_hyper_3_1186_chunk.tx_count), PARTIAL sum(_hyper_3_1186_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1186_chunk.bucket), _hyper_3_1186_chunk.type, _hyper_3_1186_chunk.status
+                     Batches: 1  Memory Usage: 37kB
+                     Buffers: shared hit=27
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_1186_chunk  (cost=0.00..81.09 rows=2404 width=31) (actual time=0.006..0.612 rows=2404 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1186_chunk.bucket), _hyper_3_1186_chunk.type, _hyper_3_1186_chunk.status, _hyper_3_1186_chunk.tx_count, _hyper_3_1186_chunk.total_amount
+                           Filter: (_hyper_3_1186_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=27
+               ->  Partial HashAggregate  (cost=107.48..111.68 rows=240 width=80) (actual time=0.955..0.959 rows=12 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1187_chunk.bucket)), _hyper_3_1187_chunk.type, _hyper_3_1187_chunk.status, PARTIAL sum(_hyper_3_1187_chunk.tx_count), PARTIAL sum(_hyper_3_1187_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1187_chunk.bucket), _hyper_3_1187_chunk.type, _hyper_3_1187_chunk.status
+                     Batches: 1  Memory Usage: 37kB
+                     Buffers: shared hit=26
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_1187_chunk  (cost=0.00..78.38 rows=2328 width=31) (actual time=0.004..0.627 rows=2328 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1187_chunk.bucket), _hyper_3_1187_chunk.type, _hyper_3_1187_chunk.status, _hyper_3_1187_chunk.tx_count, _hyper_3_1187_chunk.total_amount
+                           Filter: (_hyper_3_1187_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=26
+               ->  Partial HashAggregate  (cost=24.79..28.59 rows=217 width=80) (actual time=0.195..0.199 rows=12 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1188_chunk.bucket)), _hyper_3_1188_chunk.type, _hyper_3_1188_chunk.status, PARTIAL sum(_hyper_3_1188_chunk.tx_count), PARTIAL sum(_hyper_3_1188_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1188_chunk.bucket), _hyper_3_1188_chunk.type, _hyper_3_1188_chunk.status
+                     Batches: 1  Memory Usage: 40kB
+                     Buffers: shared hit=25
+                     ->  Index Scan using _hyper_3_1188_chunk__materialized_hypertable_3_bucket_idx on _timescaledb_internal._hyper_3_1188_chunk  (cost=0.29..18.61 rows=494 width=31) (actual time=0.031..0.120 rows=491 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1188_chunk.bucket), _hyper_3_1188_chunk.type, _hyper_3_1188_chunk.status, _hyper_3_1188_chunk.tx_count, _hyper_3_1188_chunk.total_amount
+                           Index Cond: (_hyper_3_1188_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=25
+               ->  Partial HashAggregate  (cost=106.85..111.05 rows=240 width=80) (actual time=1.104..1.112 rows=24 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1191_chunk.bucket)), _hyper_3_1191_chunk.type, _hyper_3_1191_chunk.status, PARTIAL sum(_hyper_3_1191_chunk.tx_count), PARTIAL sum(_hyper_3_1191_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1191_chunk.bucket), _hyper_3_1191_chunk.type, _hyper_3_1191_chunk.status
+                     Batches: 1  Memory Usage: 45kB
+                     Buffers: shared hit=26
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_1191_chunk  (cost=0.00..77.98 rows=2310 width=31) (actual time=0.009..0.772 rows=2310 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1191_chunk.bucket), _hyper_3_1191_chunk.type, _hyper_3_1191_chunk.status, _hyper_3_1191_chunk.tx_count, _hyper_3_1191_chunk.total_amount
+                           Filter: (_hyper_3_1191_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=26
+               ->  Partial HashAggregate  (cost=109.41..113.61 rows=240 width=80) (actual time=1.243..1.247 rows=12 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1192_chunk.bucket)), _hyper_3_1192_chunk.type, _hyper_3_1192_chunk.status, PARTIAL sum(_hyper_3_1192_chunk.tx_count), PARTIAL sum(_hyper_3_1192_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1192_chunk.bucket), _hyper_3_1192_chunk.type, _hyper_3_1192_chunk.status
+                     Batches: 1  Memory Usage: 37kB
+                     Buffers: shared hit=26
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_1192_chunk  (cost=0.00..79.62 rows=2383 width=31) (actual time=0.007..0.860 rows=2383 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1192_chunk.bucket), _hyper_3_1192_chunk.type, _hyper_3_1192_chunk.status, _hyper_3_1192_chunk.tx_count, _hyper_3_1192_chunk.total_amount
+                           Filter: (_hyper_3_1192_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=26
+               ->  Partial HashAggregate  (cost=105.32..109.52 rows=240 width=80) (actual time=1.021..1.025 rows=12 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1193_chunk.bucket)), _hyper_3_1193_chunk.type, _hyper_3_1193_chunk.status, PARTIAL sum(_hyper_3_1193_chunk.tx_count), PARTIAL sum(_hyper_3_1193_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1193_chunk.bucket), _hyper_3_1193_chunk.type, _hyper_3_1193_chunk.status
+                     Batches: 1  Memory Usage: 37kB
+                     Buffers: shared hit=25
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_1193_chunk  (cost=0.00..76.64 rows=2295 width=31) (actual time=0.015..0.699 rows=2295 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1193_chunk.bucket), _hyper_3_1193_chunk.type, _hyper_3_1193_chunk.status, _hyper_3_1193_chunk.tx_count, _hyper_3_1193_chunk.total_amount
+                           Filter: (_hyper_3_1193_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=25
+               ->  Partial HashAggregate  (cost=111.00..115.20 rows=240 width=80) (actual time=1.074..1.081 rows=24 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1194_chunk.bucket)), _hyper_3_1194_chunk.type, _hyper_3_1194_chunk.status, PARTIAL sum(_hyper_3_1194_chunk.tx_count), PARTIAL sum(_hyper_3_1194_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1194_chunk.bucket), _hyper_3_1194_chunk.type, _hyper_3_1194_chunk.status
+                     Batches: 1  Memory Usage: 45kB
+                     Buffers: shared hit=27
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_1194_chunk  (cost=0.00..81.00 rows=2400 width=31) (actual time=0.010..0.723 rows=2400 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1194_chunk.bucket), _hyper_3_1194_chunk.type, _hyper_3_1194_chunk.status, _hyper_3_1194_chunk.tx_count, _hyper_3_1194_chunk.total_amount
+                           Filter: (_hyper_3_1194_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=27
+               ->  Partial HashAggregate  (cost=107.66..111.86 rows=240 width=80) (actual time=1.080..1.084 rows=12 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1195_chunk.bucket)), _hyper_3_1195_chunk.type, _hyper_3_1195_chunk.status, PARTIAL sum(_hyper_3_1195_chunk.tx_count), PARTIAL sum(_hyper_3_1195_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1195_chunk.bucket), _hyper_3_1195_chunk.type, _hyper_3_1195_chunk.status
+                     Batches: 1  Memory Usage: 37kB
+                     Buffers: shared hit=26
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_1195_chunk  (cost=0.00..78.49 rows=2333 width=31) (actual time=0.005..0.708 rows=2333 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1195_chunk.bucket), _hyper_3_1195_chunk.type, _hyper_3_1195_chunk.status, _hyper_3_1195_chunk.tx_count, _hyper_3_1195_chunk.total_amount
+                           Filter: (_hyper_3_1195_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=26
+               ->  Partial HashAggregate  (cost=108.04..112.24 rows=240 width=80) (actual time=1.041..1.045 rows=12 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1196_chunk.bucket)), _hyper_3_1196_chunk.type, _hyper_3_1196_chunk.status, PARTIAL sum(_hyper_3_1196_chunk.tx_count), PARTIAL sum(_hyper_3_1196_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1196_chunk.bucket), _hyper_3_1196_chunk.type, _hyper_3_1196_chunk.status
+                     Batches: 1  Memory Usage: 37kB
+                     Buffers: shared hit=26
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_1196_chunk  (cost=0.00..78.74 rows=2344 width=31) (actual time=0.004..0.708 rows=2344 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1196_chunk.bucket), _hyper_3_1196_chunk.type, _hyper_3_1196_chunk.status, _hyper_3_1196_chunk.tx_count, _hyper_3_1196_chunk.total_amount
+                           Filter: (_hyper_3_1196_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=26
+               ->  Partial HashAggregate  (cost=108.35..112.55 rows=240 width=80) (actual time=1.055..1.062 rows=24 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1197_chunk.bucket)), _hyper_3_1197_chunk.type, _hyper_3_1197_chunk.status, PARTIAL sum(_hyper_3_1197_chunk.tx_count), PARTIAL sum(_hyper_3_1197_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1197_chunk.bucket), _hyper_3_1197_chunk.type, _hyper_3_1197_chunk.status
+                     Batches: 1  Memory Usage: 45kB
+                     Buffers: shared hit=26
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_1197_chunk  (cost=0.00..78.94 rows=2353 width=31) (actual time=0.005..0.707 rows=2353 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1197_chunk.bucket), _hyper_3_1197_chunk.type, _hyper_3_1197_chunk.status, _hyper_3_1197_chunk.tx_count, _hyper_3_1197_chunk.total_amount
+                           Filter: (_hyper_3_1197_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=26
+               ->  Partial HashAggregate  (cost=104.56..108.76 rows=240 width=80) (actual time=1.043..1.047 rows=12 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1198_chunk.bucket)), _hyper_3_1198_chunk.type, _hyper_3_1198_chunk.status, PARTIAL sum(_hyper_3_1198_chunk.tx_count), PARTIAL sum(_hyper_3_1198_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1198_chunk.bucket), _hyper_3_1198_chunk.type, _hyper_3_1198_chunk.status
+                     Batches: 1  Memory Usage: 37kB
+                     Buffers: shared hit=25
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_1198_chunk  (cost=0.00..76.14 rows=2273 width=31) (actual time=0.005..0.708 rows=2273 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1198_chunk.bucket), _hyper_3_1198_chunk.type, _hyper_3_1198_chunk.status, _hyper_3_1198_chunk.tx_count, _hyper_3_1198_chunk.total_amount
+                           Filter: (_hyper_3_1198_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=25
+               ->  Partial HashAggregate  (cost=109.72..113.92 rows=240 width=80) (actual time=1.144..1.148 rows=12 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1199_chunk.bucket)), _hyper_3_1199_chunk.type, _hyper_3_1199_chunk.status, PARTIAL sum(_hyper_3_1199_chunk.tx_count), PARTIAL sum(_hyper_3_1199_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1199_chunk.bucket), _hyper_3_1199_chunk.type, _hyper_3_1199_chunk.status
+                     Batches: 1  Memory Usage: 37kB
+                     Buffers: shared hit=26
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_1199_chunk  (cost=0.00..79.82 rows=2392 width=31) (actual time=0.005..0.794 rows=2392 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1199_chunk.bucket), _hyper_3_1199_chunk.type, _hyper_3_1199_chunk.status, _hyper_3_1199_chunk.tx_count, _hyper_3_1199_chunk.total_amount
+                           Filter: (_hyper_3_1199_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=26
+               ->  Partial HashAggregate  (cost=105.11..109.12 rows=229 width=80) (actual time=1.040..1.048 rows=28 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1200_chunk.bucket)), _hyper_3_1200_chunk.type, _hyper_3_1200_chunk.status, PARTIAL sum(_hyper_3_1200_chunk.tx_count), PARTIAL sum(_hyper_3_1200_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1200_chunk.bucket), _hyper_3_1200_chunk.type, _hyper_3_1200_chunk.status
+                     Batches: 1  Memory Usage: 48kB
+                     Buffers: shared hit=25
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_1200_chunk  (cost=0.00..76.50 rows=2289 width=31) (actual time=0.009..0.700 rows=2289 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1200_chunk.bucket), _hyper_3_1200_chunk.type, _hyper_3_1200_chunk.status, _hyper_3_1200_chunk.tx_count, _hyper_3_1200_chunk.total_amount
+                           Filter: (_hyper_3_1200_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=25
+               ->  Partial HashAggregate  (cost=108.56..112.77 rows=240 width=80) (actual time=1.071..1.075 rows=12 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1201_chunk.bucket)), _hyper_3_1201_chunk.type, _hyper_3_1201_chunk.status, PARTIAL sum(_hyper_3_1201_chunk.tx_count), PARTIAL sum(_hyper_3_1201_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1201_chunk.bucket), _hyper_3_1201_chunk.type, _hyper_3_1201_chunk.status
+                     Batches: 1  Memory Usage: 37kB
+                     Buffers: shared hit=26
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_1201_chunk  (cost=0.00..79.08 rows=2359 width=31) (actual time=0.015..0.732 rows=2359 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1201_chunk.bucket), _hyper_3_1201_chunk.type, _hyper_3_1201_chunk.status, _hyper_3_1201_chunk.tx_count, _hyper_3_1201_chunk.total_amount
+                           Filter: (_hyper_3_1201_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=26
+               ->  Partial HashAggregate  (cost=109.16..113.36 rows=240 width=80) (actual time=1.203..1.208 rows=12 loops=1)
+                     Output: (date_trunc('month'::text, _hyper_3_1202_chunk.bucket)), _hyper_3_1202_chunk.type, _hyper_3_1202_chunk.status, PARTIAL sum(_hyper_3_1202_chunk.tx_count), PARTIAL sum(_hyper_3_1202_chunk.total_amount)
+                     Group Key: date_trunc('month'::text, _hyper_3_1202_chunk.bucket), _hyper_3_1202_chunk.type, _hyper_3_1202_chunk.status
+                     Batches: 1  Memory Usage: 37kB
+                     Buffers: shared hit=26
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_1202_chunk  (cost=0.00..79.46 rows=2376 width=31) (actual time=0.004..0.797 rows=2376 loops=1)
+                           Output: date_trunc('month'::text, _hyper_3_1202_chunk.bucket), _hyper_3_1202_chunk.type, _hyper_3_1202_chunk.status, _hyper_3_1202_chunk.tx_count, _hyper_3_1202_chunk.total_amount
+                           Filter: (_hyper_3_1202_chunk.bucket >= date_trunc('hour'::text, (now() - '6 mons'::interval)))
+                           Buffers: shared hit=26
+ Query Identifier: 3239812216048496167
+ Planning:
+   Buffers: shared hit=3783
+ Planning Time: 21.737 ms
+ Execution Time: 22.119 ms
+(192 rows)

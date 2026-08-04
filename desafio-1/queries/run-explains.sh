@@ -61,10 +61,14 @@ if [ "$SUFFIX" = "before" ]; then
   run_query q3 q3_top_instituicoes.sql
   run_query q4 q4_deteccao_duplicatas.sql
 else
-  # Q1 otimizada (via CAgg) só existe na etapa 08 — aqui reescrevemos Q2/Q3/Q4
+  # Q1 otimizada lê de cagg_volume_hourly (etapa 08); Q2/Q3/Q4 vêm da etapa 07.
+  run_query q1 q1_volume_por_tipo_status_optimized.sql
   run_query q2 q2_divergencias_reconciliacao_optimized.sql
   run_query q3 q3_top_instituicoes_optimized.sql
   run_query q4 q4_optimized.sql
+  # 3ª versão da Q3, lendo do CAgg de latência em vez do índice covering.
+  # Arquivo separado (q3_cagg_after.txt) para não sobrescrever a medição da 07.
+  run_query q3_cagg q3_top_instituicoes_cagg.sql
 fi
 
 echo "Concluído. Ver $OUT_DIR/qN_${SUFFIX}.txt"

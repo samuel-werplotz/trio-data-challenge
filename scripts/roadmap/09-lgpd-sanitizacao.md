@@ -7,7 +7,17 @@
 (vazio = liberado)
 
 ## ESTADO HERDADO
-<preenchido pela etapa 08 ao fechar>
+Verificado ao fechar a etapa 08:
+- **`accounts` continua tabela comum, sem compressão e sem ser hypertable** — é a pré-condição central desta etapa. A compressão da 08 foi habilitada **só em `transactions`**; `reconciliation_events` também segue descomprimida. Ou seja: o `UPDATE` de anonimização de S09 funciona direto, sem descomprimir nada. A premissa "PII só em `accounts`" segue intacta.
+- `init/timescaledb/04_caggs_policies.sql` aplicado. Existem 2 CAggs, **ambos livres de PII por design** (agregam por `type`/`status`/`source_institution`, nunca por conta): `cagg_volume_hourly` (79.396 buckets) e `cagg_settlement_latency_daily` (20.280 buckets). Isso importa para a camada 2 do problema de S09 — aqui os agregados **não** contêm PII, e o documento pode afirmar isso com o schema na mão.
+- Compressão ativa em `transactions`: 330 de 338 chunks comprimidos, `segmentby='source_institution, type'`. **Taxa de 5,0× no total, 23,5× só na tabela** — os 4 índices da etapa 07 (1.484 MB) pesam mais que os dados (1.188 MB) e puxam o total para baixo.
+- 3 políticas de retenção: `transactions` 90d **desligada** (`scheduled=false`, conflito com o dataset de 12 meses), `cagg_volume_hourly` e `cagg_settlement_latency_daily` 2 anos **ligadas**. `desafio-1/scripts/retention-demo.sh` demonstra a do raw sem destruir dado (insere linhas em 2020, calibra `drop_after`, roda `CALL run_job`, restaura).
+- **Limitação nova a considerar:** `timescaledb_toolkit` **não existe** na imagem fixada, então não há `percentile_agg`/TDigest disponível. O CAgg 2 materializa só colunas somáveis e o P95/P99 sai da view `v_settlement_latency_percentiles` (`percentile_cont` sobre o raw). Se esta etapa precisar de função do toolkit, ela não está lá.
+- Q1 otimizada criada (`q1_volume_por_tipo_status_optimized.sql`, lê do CAgg): 12.115ms → 23ms (**521×**). Q3 ganhou 3ª versão via CAgg (`q3_top_instituicoes_cagg.sql`): 1.285ms → 3,4ms (383×). `explains/q1_after.txt` e `q3_cagg_after.txt` gravados. `run-explains.sh` no ramo `after` roda as duas.
+- `REPORT.md` completo: tabela sem lacunas, mais seções de compressão, retenção e limitação do toolkit.
+- **Armadilha documentada:** `failed_count`/`total_count` de `cagg_settlement_latency_daily` são estruturalmente enganosos (o `WHERE settled_at IS NOT NULL` exclui todo `failed`). Comentado no DDL; taxa de falha vem do `cagg_volume_hourly`.
+- `run_all.sh`: blocos 01–08, **53 pass / 0 fail / 4 skip**. Teste `06.4` foi reescrito nesta etapa (asseria "0 CAggs"); desvio em `99-validacao-final.md`.
+- Containers de pé: `timescaledb` e `postgres-legado`, ambos healthy. `transactions` com 10.000.000 linhas confirmadas após compressão + demo de retenção.
 
 ## ESCOPO
 Faz: `lgpd_erasure_log` (tabela de auditoria), o procedimento de anonimização em 3 passos, e `desafio-1/lgpd-sanitization.md` comparando as 3 estratégias e justificando a escolha da tabela lateral (opção C).

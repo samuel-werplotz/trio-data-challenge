@@ -37,6 +37,12 @@ Decidido: `shm_size: 1gb` no serviço timescaledb (docker-compose.yml). Medianas
 Quebrou: gerador de `reconciliation_events` (etapa 05) fazia 86% das linhas divergirem (divergência percentual do valor) e gravava `reconciled_at = now()` em todas — as duas coisas invalidavam a premissa do índice parcial de Q2 e o filtro de 30 dias. Corrigido e só essa tabela recarregada; Q2 remedida do zero (before + after).
 Decidido: Q2 entra no REPORT como "índice que não melhorou" — ambos os índices são usados, mas o gargalo é o Seq Scan no lado de `transactions` do join. Testes 04.6/06.3 reescritos (asseriam "sem índice", que esta etapa invalida por design).
 
+## 08 · 2026-08-04
+Quebrou: `timescaledb_toolkit` não existe na imagem fixada `latest-pg16` — `percentile_agg`, que S03 usa no CAgg 2, é inalcançável sem trocar a imagem (proibido pela Seção 2). Adotado o plano B que o próprio S03 prevê, com confirmação do usuário.
+Quebrou: `failed_count` do CAgg 2 é estruturalmente 0 — o `WHERE settled_at IS NOT NULL` de S03 exclui toda transação `failed`. Schema mantido (é contrato), mas a coluna ganhou aviso no DDL e a Q3 via CAgg não calcula taxa de falha.
+Decidido: compressão deu **5,0× no total** mas **23,5× só na tabela** — os 4 índices da etapa 07 pesam 1.484 MB contra 1.188 MB de dado, e é isso que puxa a taxa para baixo dos 10–20× que S03 esperava. O número virou seção do REPORT em vez de nota de rodapé: as duas otimizações do desafio se pagam uma contra a outra.
+Decidido: Q1 12.115ms → 23ms (**521×**, buffers 95.670 → 500); Q3 via CAgg 1.285ms → 3,4ms (383×). Equivalência do CAgg com o raw verificada linha a linha — 0 divergências, mas só com o corte alinhado a `date_trunc('hour')`; no meio do bucket o mês da borda diverge em ~193 linhas.
+
 ## audit.sh · 2026-08-04
 Quebrou: `audit.sh` só buscava etapas em `scripts/roadmap/*.md` — depois que uma etapa fecha e move para `concluidas/`, o script deixa de achá-la e reporta FAIL falso (arquivo ausente, esteira com número errado de etapas BLOQUEADA, decisões/PDF não rastreados). Regressão silenciosa a cada fechamento de etapa desde a 02.
 Decidido: `step_file NN` resolve o caminho da etapa em `$ROADMAP` ou `$ROADMAP/concluidas`; `has_impeditivo_ficha` checa só dentro da seção `## IMPEDITIVOS` (não em prosa livre de STATUS) para não pegar falso-positivo. A6.2 (código de aplicação "antes da hora") virou condicional a `-d trio-data-challenge` — só faz sentido antes da etapa 01. `audit.sh` volta a 0 FAIL de forma estável, não é mais preciso ignorar FAILs "conhecidos" a cada fechamento.

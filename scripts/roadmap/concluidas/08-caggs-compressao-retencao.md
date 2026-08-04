@@ -35,16 +35,16 @@ Não faz: não habilita a política de retenção (o dataset é de 12 meses e a 
 9. Conferir os jobs em `timescaledb_information.jobs` e acrescentar o bloco `# --- 08 caggs-compressao-retencao ---` em `scripts/tests/run_all.sh`.
 
 ## CRITÉRIOS DE ACEITE
-- [ ] Os 2 CAggs existem e estão materializados nos 12 meses
-- [ ] Ambos foram criados `WITH NO DATA` e materializados em lotes trimestrais
-- [ ] Política de refresh de cada CAgg tem `end_offset` de 1h
-- [ ] Compressão ativa com `segmentby` e `orderby` exatamente como S03
-- [ ] Taxa de compressão medida e registrada com número real
-- [ ] Política de retenção de 90d sobre o raw **existe** e está com `scheduled = false`
-- [ ] Política de retenção de **2 anos sobre os 2 CAggs** existe (PDF § 3.2 A.5)
-- [ ] `count(*)` de `transactions` continua 10.000.000 depois de tudo
-- [ ] `retention-demo.sh` roda sem apagar dado do dataset principal
-- [ ] Q1 e Q3 reexecutadas lendo do CAgg, com o ganho registrado no `REPORT.md`
+- [x] Os 2 CAggs existem e estão materializados nos 12 meses (79.396 e 20.280 buckets, set/2025→ago/2026)
+- [x] Ambos foram criados `WITH NO DATA` e materializados em lotes trimestrais (5 `CALL` cada)
+- [x] Política de refresh de cada CAgg tem `end_offset` de 1h (teste 08.8)
+- [x] Compressão ativa com `segmentby` e `orderby` exatamente como S03 (teste 08.9)
+- [x] Taxa de compressão medida e registrada com número real — **5,0× total / 23,5× só tabela**
+- [x] Política de retenção de 90d sobre o raw **existe** e está com `scheduled = false` (teste 08.2)
+- [x] Política de retenção de **2 anos sobre os 2 CAggs** existe e ligada (teste 08.3b)
+- [x] `count(*)` de `transactions` continua 10.000.000 depois de tudo (teste 08.4)
+- [x] `retention-demo.sh` roda sem apagar dado do dataset principal — executado, 10M intactos
+- [x] Q1 e Q3 reexecutadas lendo do CAgg, com o ganho registrado no `REPORT.md` (521× e 383×)
 
 ## TESTES
 | id | trilha | comando | esperado |
@@ -69,16 +69,26 @@ git checkout -- init/timescaledb/04_caggs_policies.sql
 ```
 
 ## STATUS
-Estado: BLOQUEADA
-Premissas assumidas: —
-Desvios do plano: —
+Estado: CONCLUÍDA
+Premissas assumidas:
+- `retention-demo.sh` foi para `desafio-1/scripts/` (caminho do alvo `demo-retention` do Makefile/S08), não para `scripts/` como dizia o PASSO 8.
+- Q3 via CAgg ganhou arquivo próprio (`q3_top_instituicoes_cagg.sql` → `q3_cagg_after.txt`) para não sobrescrever a medição de índice da etapa 07. As duas versões coexistem no REPORT.
+- Q2/Q3/Q4 `after` **não** foram remedidas após a compressão: seriam outro experimento (dado comprimido), e a tabela do REPORT compara índice vs. sem índice.
+
+Desvios do plano:
+- `percentile_agg` → plano B de S03 (`percentile_cont` em view). Toolkit ausente da imagem fixada. Confirmado com o usuário.
+- Teste `06.4` reescrito (asseria "0 CAggs", que esta etapa invalida por design).
+- Teste `08.3` esperava 1 política de retenção; são 3 após o PASSO 7. Ajustado + `08.3b` acrescentado.
+- `failed_count`/`total_count` do CAgg 2 são estruturalmente inúteis; schema mantido, aviso no DDL.
+
+Todos os 4 registrados em `99-validacao-final.md`.
 
 ## FECHAMENTO
-- [ ] Critérios atendidos
-- [ ] Testes no run_all.sh
-- [ ] run_all.sh sem FAIL
-- [ ] ESTADO HERDADO da próxima preenchido
-- [ ] Bloco no LOG-EXECUCAO.md
-- [ ] Desvio? → atualizar 99-validacao-final.md
+- [x] Critérios atendidos
+- [x] Testes no run_all.sh (08.1–08.12)
+- [x] run_all.sh sem FAIL — 53 pass / 0 fail / 4 skip
+- [x] ESTADO HERDADO da próxima preenchido
+- [x] Bloco no LOG-EXECUCAO.md
+- [x] Desvio? → atualizar 99-validacao-final.md
 - [ ] Commit checkpoint
 - [ ] Mover pra concluidas/. Marcar [x] no CLAUDE.md
