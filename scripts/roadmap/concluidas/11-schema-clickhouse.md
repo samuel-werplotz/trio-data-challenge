@@ -30,13 +30,13 @@ Não faz: **nenhum backfill** — as MVs ficam vazias de propósito; carregar da
 8. Acrescentar o bloco `# --- 11 schema-clickhouse ---` em `scripts/tests/run_all.sh`.
 
 ## CRITÉRIOS DE ACEITE
-- [ ] `transactions_raw` existe com engine, `PARTITION BY` e `ORDER BY` exatamente como S04
-- [ ] `status` **não** aparece no `ORDER BY`, e o motivo está comentado no SQL
-- [ ] 2 tabelas `AggregatingMergeTree` + 2 MVs separadas existem
-- [ ] Nenhuma MV foi criada com `POPULATE`
-- [ ] `dict_institutions` carrega e responde a `dictGetOrDefault`
-- [ ] As MVs estão **vazias** (backfill é a etapa 12)
-- [ ] Limitação do funil de status documentada
+- [x] `transactions_raw` existe com engine, `PARTITION BY` e `ORDER BY` exatamente como S04
+- [x] `status` **não** aparece no `ORDER BY`, e o motivo está comentado no SQL
+- [x] 2 tabelas `AggregatingMergeTree` + 2 MVs separadas existem
+- [x] Nenhuma MV foi criada com `POPULATE`
+- [x] `dict_institutions` carrega e responde a `dictGetOrDefault` (testado: código real do legado, não fallback)
+- [x] As MVs estão **vazias** (backfill é a etapa 12) — `transactions_raw` com 0 linhas
+- [x] Limitação do funil de status documentada (comentário no DDL, `01_schema.sql`)
 
 ## TESTES
 | id | trilha | comando | esperado |
@@ -61,16 +61,19 @@ git checkout -- init/clickhouse/01_schema.sql
 ```
 
 ## STATUS
-Estado: PENDENTE
-Premissas assumidas: —
-Desvios do plano: —
+Estado: CONCLUÍDA
+Premissas assumidas:
+- `clickhouse` subido fora do fluxo de `--profile core` (que está quebrado por bug pré-existente do compose, alheio a esta etapa) — subido por nome de serviço direto.
+- 4 colunas de estado agregado (`avg_settle_seconds`, `avg_seconds`, `p50_seconds`, `p95_seconds`) redeclaradas como `AggregateFunction(_, Nullable(Float32))` em vez de `Float32` puro — o DDL literal de S04 não compilava contra o tipo real produzido pelas MVs.
+
+Desvios do plano: 2, ambos em `99-validacao-final.md` — tipo `Nullable` nas 4 colunas de estado agregado; bug de `profiles`/`depends_on` do compose (`grafana`→`prometheus`), contornado sem editar o compose.
 
 ## FECHAMENTO
-- [ ] Critérios atendidos
-- [ ] Testes no run_all.sh
-- [ ] run_all.sh sem FAIL
-- [ ] ESTADO HERDADO da próxima preenchido
-- [ ] Bloco no LOG-EXECUCAO.md
-- [ ] Desvio? → atualizar 99-validacao-final.md
+- [x] Critérios atendidos
+- [x] Testes no run_all.sh (11.1–11.6)
+- [x] run_all.sh sem FAIL — 74 pass / 0 fail / 3 skip
+- [x] ESTADO HERDADO da próxima preenchido
+- [x] Bloco no LOG-EXECUCAO.md
+- [x] Desvio? → atualizado 99-validacao-final.md
 - [ ] Commit checkpoint
 - [ ] Mover pra concluidas/. Marcar [x] no CLAUDE.md

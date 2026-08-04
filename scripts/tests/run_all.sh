@@ -119,6 +119,7 @@ fi
 # --- 04 schema-timescaledb ---
 psql_ts() { docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc "$1" 2>/dev/null | head -1; }
 psql_legado() { docker compose exec -T postgres-legado psql -q -U trio -d trio_legado -tAc "$1" 2>/dev/null | head -1; }
+ch_query() { docker compose exec -T clickhouse clickhouse-client --user trio --password trio2024 -q "$1" 2>/dev/null | head -1; }
 if container_up timescaledb; then
   N_HT=$(psql_ts "SELECT count(*) FROM timescaledb_information.hypertables")
   [ "$N_HT" = "2" ] && ok 04.1 "2 hypertables (transactions, reconciliation_events)" \
@@ -388,6 +389,42 @@ if legado_seed_done; then
     || fail 10.7 "esperava >0, achei ${N_CFG:-erro}"
 else
   for t in 10.1 10.2 10.3 10.7; do skip "$t" "seed do legado não concluído"; done
+fi
+
+# --- 11 schema-clickhouse ---
+# só SQL executável conta — comentários explicando por que NÃO usar POPULATE
+# (exigido pela Seção 6 do CLAUDE.md) não podem reprovar este teste.
+check 11.4 "nenhuma MV criada com POPULATE" bash -c \
+  '! grep -viE "^\s*--" init/clickhouse/01_schema.sql | grep -qi "POPULATE"'
+
+if container_up clickhouse; then
+  # ch_query devolve \n como 2 caracteres literais (backslash + n), não
+  # quebra de linha real — sed converte para newline de verdade antes de
+  # qualquer extração baseada em linha.
+  CREATE_SQL=$(ch_query "SHOW CREATE TABLE trio_analytics.transactions_raw" | sed 's/\\n/\n/g')
+  echo "$CREATE_SQL" | grep -q "ReplacingMergeTree(_version)" && ok 11.1 "transactions_raw usa ReplacingMergeTree(_version)" \
+    || fail 11.1 "engine inesperada: ${CREATE_SQL:-erro}"
+
+  # status não pode aparecer dentro da cláusula ORDER BY (só a cláusula, não
+  # a definição da coluna em si, que aparece antes). Com \n já convertido em
+  # newline real, a cláusula fica isolada numa linha própria do CREATE TABLE.
+  ORDER_CLAUSE=$(echo "$CREATE_SQL" | grep '^ORDER BY')
+  echo "$ORDER_CLAUSE" | grep -qi "status" && fail 11.2 "status apareceu no ORDER BY: $ORDER_CLAUSE" \
+    || ok 11.2 "status fora do ORDER BY ($ORDER_CLAUSE)"
+
+  N_MV=$(ch_query "SELECT count(*) FROM system.tables WHERE engine='MaterializedView' AND database='trio_analytics'")
+  [ "$N_MV" = "2" ] && ok 11.3 "2 MVs existem (mv_daily_by_institution, mv_status_funnel)" \
+    || fail 11.3 "esperava 2 MVs, achei ${N_MV:-erro}"
+
+  N_TX_RAW=$(ch_query "SELECT count(*) FROM trio_analytics.transactions_raw")
+  [ "$N_TX_RAW" = "0" ] && ok 11.6 "transactions_raw vazia (backfill é a etapa 12)" \
+    || fail 11.6 "esperava 0 linhas, achei ${N_TX_RAW:-erro}"
+
+  DICT_VAL=$(ch_query "SELECT dictGetOrDefault('trio_analytics.dict_institutions','name',tuple('001'),'?')")
+  [ -n "$DICT_VAL" ] && [ "$DICT_VAL" != "?" ] && [ "$DICT_VAL" != "001" ] && ok 11.5 "dict_institutions resolve código real: $DICT_VAL" \
+    || fail 11.5 "dictGetOrDefault não resolveu do legado: ${DICT_VAL:-erro}"
+else
+  for t in 11.1 11.2 11.3 11.5 11.6; do skip "$t" "clickhouse fora do ar"; done
 fi
 
 # ===========================================================================

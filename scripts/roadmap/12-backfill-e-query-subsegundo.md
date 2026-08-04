@@ -7,7 +7,15 @@
 - [ ] ficha `scripts/ambiente/DOCKER-LOCAL.md` tem campo `<PREENCHER>` → preencher e confirmar seed concluído
 
 ## ESTADO HERDADO
-<preenchido pela etapa 11 ao fechar>
+Verificado ao fechar a etapa 11:
+- `init/clickhouse/01_schema.sql` aplicado no ClickHouse: `transactions_raw` (`ReplacingMergeTree(_version)`, `status` fora do `ORDER BY`), `daily_by_institution`+`mv_daily_by_institution`, `status_funnel`+`mv_status_funnel`, `dict_institutions`. **Todas as tabelas/MVs estão vazias** (0 linhas) — nenhum backfill rodou ainda, essa é justamente esta etapa.
+- `dict_institutions` testado e resolvendo dado real do legado (`dictGetOrDefault(...'001'...)` → "Instituição Parceira 1"), fonte é `postgres-legado.partner_institutions` (15 linhas, etapa 10).
+- **4 colunas de estado agregado saíram diferentes do DDL literal de S04**: `avg_settle_seconds` (em `daily_by_institution`) e `avg_seconds`/`p50_seconds`/`p95_seconds` (em `status_funnel`) são `AggregateFunction(_, Nullable(Float32))`, não `AggregateFunction(_, Float32)` — porque `settlement_seconds` é `Nullable`. Isso importa para esta etapa: o backfill via `INSERT SELECT` precisa gerar `avgState`/`quantileState` sobre a mesma coluna nullable, senão bate no mesmo `CANNOT_CONVERT_TYPE` que a criação das MVs bateu.
+- **`docker compose --profile core up` está quebrado** (bug pré-existente, não desta etapa): `grafana` depende de `prometheus`, que só está no perfil `full`. `clickhouse` foi subido por nome de serviço direto (`docker compose up -d clickhouse`), contornando o filtro de perfil — mesma abordagem que esta etapa deve usar se precisar subir mais serviços.
+- `postgres-legado`: inalterado desde a etapa 10 (15 instituições, 480 configs, 50k usuários, 80k contas, bloat induzido presente).
+- `timescaledb`: inalterado desde a etapa 09 — 10.000.000 `transactions`, 2 CAggs, compressão e retenção ativas. Esta é a fonte do backfill PG→ClickHouse desta etapa (direto, sem Kafka, por decisão de S05).
+- Containers de pé: `timescaledb`, `postgres-legado`, `clickhouse`, todos healthy.
+- `run_all.sh`: blocos 01–11, **74 pass / 0 fail / 3 skip**. `audit.sh`: 83 pass / 0 fail / 1 warn / 1 skip. Dois desvios em `99-validacao-final.md`: tipo `Nullable` nas 4 colunas de estado; bug de `profiles`/`depends_on` do compose (contornado, não corrigido — fora do escopo de qualquer etapa até agora).
 
 ## ESCOPO
 Faz: backfill mês a mês de `transactions` do PostgreSQL direto para `transactions_raw` no ClickHouse, `INSERT SELECT` para popular as 2 MVs, e a medição da query Pix "24h vs D-1" via `system.query_log` comprovando sub-segundo com número.
