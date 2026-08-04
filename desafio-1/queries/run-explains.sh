@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# run-explains.sh — ritual de medição de S06 § O método, versão "before".
-# Para cada Q1-Q4: roda 4x, descarta a 1ª (aquece o cache), guarda a mediana
+# run-explains.sh — ritual de medição de S06 § O método.
+# Para cada query: roda 4x, descarta a 1ª (aquece o cache), guarda a mediana
 # das 3 restantes, salva o EXPLAIN da última execução (mesmo plano, já quente)
-# em qN_before.txt com Buffers: shared hit vs read visível.
+# em qN_<suffix>.txt com Buffers: shared hit vs read visível.
+#
+# Uso: ./run-explains.sh before   (Q1-Q4 ingênuas, etapa 06 — já rodado, não repetir)
+#      ./run-explains.sh after    (versões otimizadas, etapa 07)
+SUFFIX="${1:?uso: run-explains.sh before|after}"
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -46,14 +50,21 @@ run_query() {
     echo "-- EXPLAIN abaixo é da última execução (cache já quente, mesmo plano)"
     echo "--"
     echo "$last_out"
-  } > "$OUT_DIR/${id}_before.txt"
-  echo "  mediana: ${med}ms -> $OUT_DIR/${id}_before.txt"
+  } > "$OUT_DIR/${id}_${SUFFIX}.txt"
+  echo "  mediana: ${med}ms -> $OUT_DIR/${id}_${SUFFIX}.txt"
   echo
 }
 
-run_query q1 q1_volume_por_tipo_status.sql
-run_query q2 q2_divergencias_reconciliacao.sql
-run_query q3 q3_top_instituicoes.sql
-run_query q4 q4_deteccao_duplicatas.sql
+if [ "$SUFFIX" = "before" ]; then
+  run_query q1 q1_volume_por_tipo_status.sql
+  run_query q2 q2_divergencias_reconciliacao.sql
+  run_query q3 q3_top_instituicoes.sql
+  run_query q4 q4_deteccao_duplicatas.sql
+else
+  # Q1 otimizada (via CAgg) só existe na etapa 08 — aqui reescrevemos Q2/Q3/Q4
+  run_query q2 q2_divergencias_reconciliacao_optimized.sql
+  run_query q3 q3_top_instituicoes_optimized.sql
+  run_query q4 q4_optimized.sql
+fi
 
-echo "Concluído. Ver $OUT_DIR/q{1,2,3,4}_before.txt"
+echo "Concluído. Ver $OUT_DIR/qN_${SUFFIX}.txt"

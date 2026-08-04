@@ -7,7 +7,17 @@
 - [ ] ficha `scripts/ambiente/DOCKER-LOCAL.md` tem campo `<PREENCHER>` → preencher e confirmar seed concluído
 
 ## ESTADO HERDADO
-<preenchido pela etapa 07 ao fechar>
+Verificado ao fechar a etapa 07:
+- `init/timescaledb/03_indexes.sql` aplicado, com `CREATE INDEX IF NOT EXISTS` (idempotente): `idx_recon_divergent` (parcial, `WHERE abs(difference) > 0.01`), `idx_accounts_id_covering` (`INCLUDE`), `idx_tx_institution_created` (`INCLUDE`), `idx_tx_dup_detection` (parcial, `WHERE status IN ('settled','pending')`). `transactions` tem 4 índices no total (2 implícitos + 2 destes).
+- Queries otimizadas: `q2_divergencias_reconciliacao_optimized.sql`, `q3_top_instituicoes_optimized.sql`, `q4_optimized.sql` (window function), `bonus_gapfill_48h.sql`. **Q1 continua só na versão ingênua** — sua otimização é ler do CAgg, que é escopo desta etapa 08.
+- `explains/q{2,3,4}_after.txt` gravados. Medianas finais: Q2 1.584→1.511ms (índice usado mas sem ganho — gargalo é o join com transactions), Q3 1.285→394ms (3,3×), Q4 2.814→1.274ms (2,2×). Q1 tem só `q1_before.txt` (12.115ms) — **esta etapa deve gerar `q1_after.txt`** com a versão que lê de `cagg_volume_hourly`.
+- `run-explains.sh` agora recebe `before|after` como argumento e sabe quais arquivos medir em cada modo. Ao acrescentar a Q1 otimizada, incluir no ramo `after`.
+- `desafio-1/REPORT.md` criado com a tabela consolidada antes/depois; a linha de Q1 está com "(etapa 08)" no lugar do "depois" — **preencher aqui**. Também documenta o índice que não melhorou (Q2) e a limitação de Q4 (0 duplicatas no dataset sintético).
+- **`reconciliation_events` foi regerado nesta etapa** (1.442.266 linhas): a versão da etapa 05 tinha divergência percentual (86% das linhas divergiam) e `reconciled_at = now()` para todas. Corrigido para ~8% divergente (114.953 linhas) e `reconciled_at` distribuído de set/2025 a ago/2026. Os 10M de `transactions` **não** foram tocados. Desvio registrado em `99-validacao-final.md`.
+- Testes `04.6` e `06.3` do `run_all.sh` foram reescritos: asseriam "nenhum índice em transactions", que a etapa 07 invalida por design. Agora checam os índices implícitos por nome e a ausência de `Index Scan using idx_` nos `qN_before.txt`. Desvio registrado em `99-validacao-final.md`.
+- Nenhum CAgg existe ainda (`timescaledb_information.continuous_aggregates` = 0), nenhuma política de compressão ou retenção — pré-condição limpa para esta etapa.
+- `run_all.sh`: blocos 01-07, 40 pass / 0 fail / 4 skip. `audit.sh`: 83 pass / 0 fail / 1 warn / 1 skip (o script foi corrigido para enxergar `concluidas/` — não há mais FAIL "conhecido" para ignorar).
+- Containers de pé: `timescaledb` (com `shm_size: 1gb`) e `postgres-legado`, ambos healthy.
 
 ## ESCOPO
 Faz: `init/timescaledb/04_caggs_policies.sql` — `cagg_volume_hourly` e `cagg_settlement_latency_daily`, ambos `WITH NO DATA` com materialização em lotes trimestrais; políticas de refresh com `end_offset` de 1h; compressão com `segmentby`/`orderby`; política de retenção **criada e desabilitada**; e `scripts/retention-demo.sh`. Mede a taxa de compressão.

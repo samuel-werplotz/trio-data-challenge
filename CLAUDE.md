@@ -78,7 +78,7 @@ Critérios atendidos → testes no `run_all.sh` → `run_all.sh` sem FAIL → `E
 - [x] 04 schema-timescaledb · compose
 - [x] 05 seed-10m · B
 - [x] 06 queries-antes-indices · B
-- [ ] 07 indices-e-otimizacao · B
+- [x] 07 indices-e-otimizacao · B
 - [ ] 08 caggs-compressao-retencao · B
 - [ ] 09 lgpd-sanitizacao · local
 - [ ] 10 legado-e-migracao-aurora · compose

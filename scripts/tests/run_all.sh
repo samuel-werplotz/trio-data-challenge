@@ -136,9 +136,14 @@ if container_up timescaledb; then
   echo "$ERR" | grep -q 'violates check constraint' && ok 04.5 "seed_control rejeita segunda linha" \
     || fail 04.5 "seed_control não rejeitou id=2"
 
-  N_IDX=$(psql_ts "SELECT count(*) FROM pg_indexes WHERE tablename='transactions'")
-  [ "$N_IDX" = "2" ] && ok 04.6 "só os 2 índices implícitos em transactions (pkey + created_at da hypertable)" \
-    || fail 04.6 "esperava 2 índices, achei ${N_IDX:-erro}"
+  # A asserção original era "exatamente 2 índices". A etapa 07 cria índices por
+  # design, então contar o total passou a falhar por avanço legítimo da esteira
+  # (desvio registrado em 99-validacao-final.md). O que a etapa 04 de fato
+  # garante é que ELA não criou índice — nenhum dos índices de 03_indexes.sql
+  # nasce aqui, e os 2 implícitos de PK/hypertable existem.
+  N_IDX_IMPL=$(psql_ts "SELECT count(*) FROM pg_indexes WHERE tablename='transactions' AND indexname IN ('transactions_pkey','transactions_created_at_idx')")
+  [ "$N_IDX_IMPL" = "2" ] && ok 04.6 "os 2 índices implícitos existem (pkey + created_at da hypertable)" \
+    || fail 04.6 "esperava os 2 implícitos, achei ${N_IDX_IMPL:-erro}"
 else
   skip 04.1 "timescaledb não está de pé"
   skip 04.2 "timescaledb não está de pé"
@@ -202,9 +207,11 @@ N_BUF=$(grep -l 'Buffers:' desafio-1/queries/explains/*_before.txt 2>/dev/null |
 [ "$N_BUF" = "4" ] && ok 06.2 "4 arquivos com Buffers:" || fail 06.2 "esperava 4, achei $N_BUF"
 
 if seed_done; then
-  N_IDX_06=$(psql_ts "SELECT count(*) FROM pg_indexes WHERE tablename='transactions'")
-  [ "$N_IDX_06" = "2" ] && ok 06.3 "sem índice extra em transactions" \
-    || fail 06.3 "esperava 2 (implícitos), achei ${N_IDX_06:-erro}"
+  # Mesma correção de 04.6: o "antes" honesto da etapa 06 é comprovado pelos
+  # qN_before.txt (medidos sem índice), não por contar índices hoje — a etapa
+  # 07 cria índices legitimamente depois. Ver 99-validacao-final.md.
+  check 06.3 "medição 'antes' feita sem índice (evidência nos qN_before.txt)" bash -c \
+    '! grep -qE "Index (Only )?Scan using idx_" desafio-1/queries/explains/q*_before.txt'
 
   N_CAGG=$(psql_ts "SELECT count(*) FROM timescaledb_information.continuous_aggregates")
   [ "$N_CAGG" = "0" ] && ok 06.4 "nenhum continuous aggregate ainda" \
@@ -215,6 +222,33 @@ else
 fi
 
 check 06.5 "MEDICOES.md menciona mediana" grep -q "mediana" desafio-1/queries/MEDICOES.md
+
+# --- 07 indices-e-otimizacao ---
+check 07.1 "q2..q4_after.txt existem" bash -c \
+  'test -f desafio-1/queries/explains/q2_after.txt -a -f desafio-1/queries/explains/q3_after.txt -a -f desafio-1/queries/explains/q4_after.txt'
+
+if seed_done; then
+  N_IDX_07=$(psql_ts "SELECT count(*) FROM pg_indexes WHERE tablename='transactions'")
+  [ -n "$N_IDX_07" ] && [ "$N_IDX_07" -gt 2 ] 2>/dev/null && ok 07.2 "índices criados em transactions ($N_IDX_07)" \
+    || fail 07.2 "esperava >2 índices, achei ${N_IDX_07:-erro}"
+
+  PARTIAL=$(psql_ts "SELECT indexdef FROM pg_indexes WHERE indexname='idx_recon_divergent'")
+  echo "$PARTIAL" | grep -q "WHERE" && ok 07.3 "índice parcial tem cláusula WHERE" \
+    || fail 07.3 "idx_recon_divergent sem WHERE: ${PARTIAL:-ausente}"
+
+  # gapfill: 48h + bucket parcial da hora corrente, nenhum bucket nulo
+  N_NULL=$(psql_ts "SELECT count(*) FROM (SELECT time_bucket_gapfill('1 hour', created_at, now() - INTERVAL '48 hours', now()) AS hora FROM transactions WHERE created_at >= now() - INTERVAL '48 hours' AND created_at < now() GROUP BY hora) x WHERE hora IS NULL")
+  [ "$N_NULL" = "0" ] && ok 07.5 "gapfill sem bucket nulo" || fail 07.5 "gapfill com ${N_NULL:-erro} buckets nulos"
+else
+  skip 07.2 "seed não concluído"
+  skip 07.3 "seed não concluído"
+  skip 07.5 "seed não concluído"
+fi
+
+check 07.4 "Q4 otimizada sem self-join" bash -c \
+  '! grep -qiE "join +transactions" desafio-1/queries/q4_optimized.sql'
+check 07.6 "REPORT.md com tabela antes/depois" bash -c \
+  'grep -q "^| Q2 —" desafio-1/REPORT.md && grep -q "^| Q4 —" desafio-1/REPORT.md'
 
 # ===========================================================================
 

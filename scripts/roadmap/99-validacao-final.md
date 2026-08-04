@@ -80,6 +80,13 @@ Não faz: não corrige funcionalidade — o que quebrar aqui volta para a etapa 
 | Plano B do CDC perde `DELETE` | Watermark por `updated_at` não captura exclusão | `ADR.md` (registrado mesmo se o plano B não for acionado) |
 | Bloat do legado é induzido | Precisamos de um problema real para o dashboard mostrar — declarado abertamente | `migration-analysis.md`, dashboard do legado |
 
+## Desvios do plano registrados durante a execução
+
+| Etapa | Desvio | Razão | Resolução |
+|---|---|---|---|
+| 07 | Testes `04.6` e `06.3` do `run_all.sh` viraram obsoletos | Ambos afirmavam "nenhum índice além dos implícitos em `transactions`", verdadeiro nas etapas 04 e 06. A etapa 07 cria índices **por design** (é o objeto da etapa), então a asserção deixa de valer por avanço legítimo da esteira, não por regressão. | Reescritos para asserir a **pré-condição da própria etapa** em vez de um estado global: passam a exigir que o número de índices seja o esperado *naquele ponto do roadmap*, checando a ausência dos índices nomeados de `03_indexes.sql` em vez de contar o total. `qN_before.txt` continua sendo a evidência de que a medição "antes" foi feita sem índice. |
+| 07 | `reconciliation_events` regerado (dado da etapa 05 substituído) | O gerador produzia divergência como percentual do valor (86% das linhas divergiam, não ~8%) e `reconciled_at = now()` para todas as linhas (filtro de 30 dias não excluía nada). As duas coisas invalidavam a premissa de seletividade do índice parcial de Q2 (S06) e o teste de exclusão de chunk. | `load_reconciliation()` corrigido; só `reconciliation_events` foi truncado e recarregado (os 10M de `transactions` intactos); medições de Q2 refeitas do zero — `before` (com índices removidos) e `after` — sobre o dado corrigido. Documentado em `desafio-1/REPORT.md` e `MEDICOES.md`. |
+
 ## As 5 perguntas previstas (PDF § 7)
 
 1. **"E se o volume triplicasse, o que mudaria na arquitetura?"** — chunk menor no Timescale; mais partições e consumidores; shard no ClickHouse por instituição; compressão mais agressiva. O ponto: a fila no meio já permite escala horizontal sem mudar código.

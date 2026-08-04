@@ -1,0 +1,78 @@
+-- Query: q4
+-- Arquivo fonte: q4_optimized.sql
+-- Protocolo: 4 execuções, 1ª descartada (aquece cache), mediana das 3 seguintes = 1273.646ms
+-- Tempos das 3 execuções medidas (ms): 1285.803 1273.646 1270.622
+-- EXPLAIN abaixo é da última execução (cache já quente, mesmo plano)
+--
+                                                                                                                                     QUERY PLAN                                                                                                                                     
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=236937.61..237732.62 rows=318004 width=86) (actual time=1245.022..1245.030 rows=0 loops=1)
+   Output: ordenadas.id, ordenadas.anterior_id, ordenadas.external_id, ordenadas.amount, ordenadas.created_at, ordenadas.anterior_em, (EXTRACT(epoch FROM (ordenadas.created_at - ordenadas.anterior_em)))
+   Sort Key: ordenadas.created_at DESC
+   Sort Method: quicksort  Memory: 25kB
+   Buffers: shared hit=15792, temp read=7758 written=7764
+   ->  Subquery Scan on ordenadas  (cost=156621.50..198960.73 rows=318004 width=86) (actual time=1244.988..1244.996 rows=0 loops=1)
+         Output: ordenadas.id, ordenadas.anterior_id, ordenadas.external_id, ordenadas.amount, ordenadas.created_at, ordenadas.anterior_em, EXTRACT(epoch FROM (ordenadas.created_at - ordenadas.anterior_em))
+         Filter: ((ordenadas.anterior_em IS NOT NULL) AND ((ordenadas.created_at - ordenadas.anterior_em) <= '00:05:00'::interval))
+         Rows Removed by Filter: 958806
+         Buffers: shared hit=15789, temp read=7758 written=7764
+         ->  WindowAgg  (cost=156621.50..182988.64 rows=958805 width=74) (actual time=684.746..1216.323 rows=958806 loops=1)
+               Output: transactions.id, transactions.external_id, transactions.amount, transactions.created_at, NULL::transaction_status, transactions.source_account_id, transactions.destination_account_id, lag(transactions.created_at) OVER (?), lag(transactions.id) OVER (?)
+               Buffers: shared hit=15789, temp read=7758 written=7764
+               ->  Sort  (cost=156621.50..159018.51 rows=958805 width=54) (actual time=684.697..920.272 rows=958806 loops=1)
+                     Output: transactions.amount, transactions.created_at, transactions.source_account_id, transactions.destination_account_id, transactions.id, transactions.external_id
+                     Sort Key: transactions.amount, transactions.source_account_id, transactions.destination_account_id, transactions.created_at
+                     Sort Method: external merge  Disk: 62064kB
+                     Buffers: shared hit=15789, temp read=7758 written=7764
+                     ->  Result  (cost=0.00..42163.81 rows=958805 width=54) (actual time=24.727..261.224 rows=958806 loops=1)
+                           Output: transactions.amount, transactions.created_at, transactions.source_account_id, transactions.destination_account_id, transactions.id, transactions.external_id
+                           Buffers: shared hit=15783
+                           ->  Custom Scan (ChunkAppend) on public.transactions  (cost=0.00..32575.76 rows=958805 width=54) (actual time=24.724..207.242 rows=958806 loops=1)
+                                 Output: transactions.id, transactions.external_id, transactions.amount, transactions.created_at, transactions.source_account_id, transactions.destination_account_id
+                                 Startup Exclusion: true
+                                 Runtime Exclusion: false
+                                 Chunks excluded during startup: 1
+                                 Buffers: shared hit=15783
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_935_chunk  (cost=0.00..1074.28 rows=31216 width=54) (actual time=24.721..29.483 rows=31216 loops=1)
+                                       Output: _hyper_1_935_chunk.id, _hyper_1_935_chunk.external_id, _hyper_1_935_chunk.amount, _hyper_1_935_chunk.created_at, _hyper_1_935_chunk.source_account_id, _hyper_1_935_chunk.destination_account_id
+                                       Filter: (_hyper_1_935_chunk.created_at >= (now() - '7 days'::interval))
+                                       Buffers: shared hit=528
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_939_chunk  (cost=0.00..1074.24 rows=31671 width=54) (actual time=0.035..4.537 rows=31671 loops=1)
+                                       Output: _hyper_1_939_chunk.id, _hyper_1_939_chunk.external_id, _hyper_1_939_chunk.amount, _hyper_1_939_chunk.created_at, _hyper_1_939_chunk.source_account_id, _hyper_1_939_chunk.destination_account_id
+                                       Filter: (_hyper_1_939_chunk.created_at >= (now() - '7 days'::interval))
+                                       Buffers: shared hit=520
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_948_chunk  (cost=0.00..1073.23 rows=30974 width=54) (actual time=0.045..5.217 rows=30976 loops=1)
+                                       Output: _hyper_1_948_chunk.id, _hyper_1_948_chunk.external_id, _hyper_1_948_chunk.amount, _hyper_1_948_chunk.created_at, _hyper_1_948_chunk.source_account_id, _hyper_1_948_chunk.destination_account_id
+                                       Filter: (_hyper_1_948_chunk.created_at >= (now() - '7 days'::interval))
+                                       Rows Removed by Filter: 637
+                                       Buffers: shared hit=520
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_952_chunk  (cost=0.00..1073.14 rows=31608 width=54) (actual time=0.045..4.944 rows=31608 loops=1)
+                                       Output: _hyper_1_952_chunk.id, _hyper_1_952_chunk.external_id, _hyper_1_952_chunk.amount, _hyper_1_952_chunk.created_at, _hyper_1_952_chunk.source_account_id, _hyper_1_952_chunk.destination_account_id
+                                       Filter: (_hyper_1_952_chunk.created_at >= (now() - '7 days'::interval))
+                                       Buffers: shared hit=520
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_1115_chunk  (cost=0.00..26374.09 rows=777948 width=54) (actual time=0.037..106.181 rows=777948 loops=1)
+                                       Output: _hyper_1_1115_chunk.id, _hyper_1_1115_chunk.external_id, _hyper_1_1115_chunk.amount, _hyper_1_1115_chunk.created_at, _hyper_1_1115_chunk.source_account_id, _hyper_1_1115_chunk.destination_account_id
+                                       Filter: (_hyper_1_1115_chunk.created_at >= (now() - '7 days'::interval))
+                                       Buffers: shared hit=12760
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_1116_chunk  (cost=0.00..1117.45 rows=32540 width=54) (actual time=0.063..5.597 rows=32540 loops=1)
+                                       Output: _hyper_1_1116_chunk.id, _hyper_1_1116_chunk.external_id, _hyper_1_1116_chunk.amount, _hyper_1_1116_chunk.created_at, _hyper_1_1116_chunk.source_account_id, _hyper_1_1116_chunk.destination_account_id
+                                       Filter: (_hyper_1_1116_chunk.created_at >= (now() - '7 days'::interval))
+                                       Buffers: shared hit=548
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_1117_chunk  (cost=0.00..504.53 rows=14659 width=54) (actual time=0.054..2.446 rows=14659 loops=1)
+                                       Output: _hyper_1_1117_chunk.id, _hyper_1_1117_chunk.external_id, _hyper_1_1117_chunk.amount, _hyper_1_1117_chunk.created_at, _hyper_1_1117_chunk.source_account_id, _hyper_1_1117_chunk.destination_account_id
+                                       Filter: (_hyper_1_1117_chunk.created_at >= (now() - '7 days'::interval))
+                                       Buffers: shared hit=248
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_1118_chunk  (cost=0.00..282.29 rows=8188 width=54) (actual time=0.049..1.172 rows=8188 loops=1)
+                                       Output: _hyper_1_1118_chunk.id, _hyper_1_1118_chunk.external_id, _hyper_1_1118_chunk.amount, _hyper_1_1118_chunk.created_at, _hyper_1_1118_chunk.source_account_id, _hyper_1_1118_chunk.destination_account_id
+                                       Filter: (_hyper_1_1118_chunk.created_at >= (now() - '7 days'::interval))
+                                       Buffers: shared hit=139
+ Query Identifier: -5222372308186927342
+ Planning:
+   Buffers: shared hit=1890
+ Planning Time: 9.399 ms
+ JIT:
+   Functions: 43
+   Options: Inlining false, Optimization false, Expressions true, Deforming true
+   Timing: Generation 2.344 ms, Inlining 0.000 ms, Optimization 1.123 ms, Emission 23.783 ms, Total 27.250 ms
+ Execution Time: 1270.622 ms
+(69 rows)

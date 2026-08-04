@@ -261,13 +261,27 @@ def load_reconciliation():
         with conn.cursor() as cur:
             # Amostra RECONCILIATION_PCT das transações liquidadas/revertidas —
             # não faz sentido reconciliar uma transação pendente ou falha.
+            #
+            # A divergência é um valor ABSOLUTO pequeno (centavos), não um
+            # percentual do amount: percentual faria toda TED de R$100k divergir
+            # em R$100, e ~86% da tabela cairia no filtro `abs(difference) >
+            # 0.01` — o índice parcial de Q2 (S06) perde o sentido se cobre
+            # quase tudo. Aqui ~8% das linhas divergem acima de 1 centavo, que
+            # é a premissa de seletividade que S06 assume.
+            #
+            # reconciled_at acompanha a transação (+ atraso de algumas horas),
+            # em vez de now() para todas: sem isso o filtro "últimos 30 dias"
+            # de Q2 não exclui nada e a exclusão de chunks fica sem efeito.
             cur.execute(
                 "INSERT INTO reconciliation_events "
                 "(transaction_id, transaction_created_at, external_reference, "
-                " event_type, amount_expected, amount_received) "
+                " event_type, amount_expected, amount_received, reconciled_at) "
                 "SELECT id, created_at, external_id::text, "
                 "       'settlement', amount, "
-                "       amount * (1 + (random() - 0.5) * 0.002) "  # divergência residual pequena, realista
+                "       CASE WHEN random() < 0.08 "
+                "            THEN amount + (round((random() - 0.5) * 1000) / 100.0) "
+                "            ELSE amount END, "
+                "       created_at + (random() * INTERVAL '8 hours') "
                 "FROM transactions "
                 "WHERE status IN ('settled', 'reversed') "
                 "AND random() < %s",

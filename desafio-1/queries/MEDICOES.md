@@ -11,9 +11,19 @@ as etapas 07/08 vão otimizar e comparar.
 | Query | Mediana (3 execuções) | Buffers (execução medida) | Observação |
 |---|---|---|---|
 | Q1 — volume/valor por tipo+status, 6 meses | 12.115 ms | shared hit=95.670, read=0 | 100% cache (dado já visitado por `ANALYZE`/execuções anteriores). ~180 chunks varridos, JIT compila plano por chunk — custo dominante é planejamento+JIT, não I/O. |
-| Q2 — divergências de reconciliação, 30 dias | 8.103 ms | shared hit≈baixo, read=520 | Lê de disco de verdade: primeira vez que a tabela `reconciliation_events`/`accounts` é tocada nesta sessão. `t.created_at = r.transaction_created_at` no JOIN permite exclusão de chunk, mas ainda assim sem índice o scan é sequencial. |
+| Q2 — divergências de reconciliação, 30 dias | 1.584 ms | shared hit=157.938 read=170.126 | **Remedido na etapa 07** sobre o dado corrigido de `reconciliation_events` (ver nota abaixo). O valor original desta etapa (8.103 ms) foi medido sobre dado com dois defeitos de geração e não é comparável ao "depois". `t.created_at = r.transaction_created_at` no JOIN permite exclusão de chunk, mas sem índice o scan em `transactions` é sequencial. |
 | Q3 — top 20 instituições, 90 dias | 1.285 ms | shared hit=53.407, read=0 | 100% cache. 15 instituições (baixa cardinalidade) → `HashAggregate` eficiente mesmo sem índice. |
 | Q4 — duplicatas 5min, self-join (anti-padrão) | 2.814 ms | shared hit=baixo, read=499 | Mais rápida do que o esperado pelo anti-padrão de S06 — o planejador escolheu **Parallel Hash Join**, não Nested Loop ingênuo. Ainda assim é o anti-padrão: plano varre e cruza ~959k linhas em 7 dias (5x o volume de referência de S06, ~190k) sem aproveitar ordenação alguma. Comparar com a versão window function (etapa 07) deve mostrar ganho por eliminar a comparação todos-contra-todos, não necessariamente por tempo de parede nesta escala. |
+
+## Nota — Q2 foi remedida na etapa 07
+
+O `q2_before.txt` desta pasta é a **segunda** medição, feita na etapa 07 depois
+de corrigir dois defeitos do gerador de `reconciliation_events` que invalidavam
+a comparação: divergência calculada como percentual do valor (fazia 86% das
+linhas divergirem, não ~8%) e `reconciled_at = now()` para todas as linhas
+(fazia o filtro "últimos 30 dias" não excluir nada). Para o "antes" continuar
+honesto, os índices de Q2 foram removidos, a medição refeita, e só então
+recriados. Detalhe completo em `desafio-1/REPORT.md`.
 
 ## Nota de ambiente
 
