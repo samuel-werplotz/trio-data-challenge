@@ -89,7 +89,7 @@ Critérios atendidos → testes no `run_all.sh` → `run_all.sh` sem FAIL → `E
 - [x] 13.5 sync-worker-e-backup · B — executada fora da esteira como E0/E1/E2/E4
 - [x] 14 ref-sync-api-e-adr · compose
 - [x] 15 observabilidade-runbook-e-incidente · compose
-- [ ] 16 fechamento-de-lacunas-do-pdf · compose
+- [x] 16 fechamento-de-lacunas-do-pdf · compose
 - [ ] 99 validacao-final · B
 
 ## 11. Ficha de ambiente

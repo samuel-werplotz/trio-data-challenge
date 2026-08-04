@@ -907,6 +907,58 @@ else
   skip 15.9 "seed nao concluido"
 fi
 
+# --- 16 fechamento-de-lacunas-do-pdf ---
+# Cada teste guarda uma lacuna que a matriz da auditoria marcava PARCIAL/FALTA.
+check 16.2 "REPORT documenta P99 (requisito literal A4b)" \
+  bash -c 'grep -qi "p99" desafio-1/REPORT.md'
+check 16.3 "REPORT explica a retencao desabilitada e como habilitar" \
+  bash -c 'grep -qi "scheduled = false\|scheduled=false\|desabilitada" desafio-1/REPORT.md \
+        && grep -q "alter_job(1007" desafio-1/REPORT.md'
+check 16.4 "migration-analysis com 1 pagina real (>= 120 linhas)" \
+  bash -c '[ "$(wc -l < desafio-1/migration-analysis.md)" -ge 120 ]'
+# Os 4 sub-itens do PDF 3.2 B.3 — contar linhas nao basta, o conteudo precisa estar la.
+check 16.5 "migration-analysis cobre os 4 sub-itens do PDF 3.2 B.3" \
+  bash -c 'grep -qi "RDS" desafio-1/migration-analysis.md \
+        && grep -qi "replicação lógica\|DMS\|blue-green" desafio-1/migration-analysis.md \
+        && grep -qi "risco" desafio-1/migration-analysis.md \
+        && grep -qi "rollback" desafio-1/migration-analysis.md'
+check 16.6 "texto Dictionary vs JOIN existe nos documentos" \
+  bash -c 'grep -qi "dictionary" desafio-1/REPORT.md && grep -qi "dictionary" desafio-2/ADR.md'
+# C3 pede o texto COM numero: sem medicao dos dois caminhos, e opiniao.
+check 16.9 "Dictionary vs JOIN tem numero medido dos dois caminhos" \
+  bash -c 'grep -qi "dictGet" desafio-1/REPORT.md && grep -qi "JOIN" desafio-1/REPORT.md \
+        && grep -q "0,018" desafio-1/REPORT.md'
+check 16.7 "limitacao do funil de status declarada (REPORT e ADR)" \
+  bash -c 'grep -qi "transição" desafio-1/REPORT.md \
+        && grep -qi "funil de status" desafio-2/ADR.md'
+# A etapa 09 deixou o passo do ClickHouse como "futuro"; a 16 executou.
+check 16.8 "LGPD: passo do ClickHouse deixou de ser 'futuro'" \
+  bash -c '! grep -qi "não executável nem verificável hoje\|procedimento futuro" desafio-1/lgpd-sanitization.md'
+check 16.10 "LGPD registra a verificacao executada no ClickHouse" \
+  bash -c 'grep -qi "executado de ponta a ponta" desafio-1/lgpd-sanitization.md'
+# Criterio de aceite da etapa: nenhuma linha da matriz em FALTA.
+check 16.11 "matriz da auditoria sem requisito em FALTA" \
+  bash -c '! sed -n "/^| [A-Z0-9]/p" AUDITORIA-E-REPLANEJAMENTO.md | grep -q "\*\*FALTA\*\*"'
+
+# A4b na trilha carga-real: a view precisa devolver P95 E P99 por instituicao.
+if seed_done; then
+  check 16.1 "view devolve P95 e P99 por instituicao" \
+    bash -c 'docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc \
+      "SELECT count(*) FROM (SELECT source_institution, p95_seconds, p99_seconds FROM v_settlement_latency_percentiles WHERE p95_seconds IS NOT NULL AND p99_seconds IS NOT NULL LIMIT 5) x" \
+      2>/dev/null | tr -d "\r " | grep -qE "^[1-9]"'
+else
+  skip 16.1 "seed nao concluido"
+fi
+
+# Guarda do dado: a 16 executou LGPD e demo de mutacao, ambos com limpeza.
+if container_up clickhouse; then
+  N_CH16=$(ch_query "SELECT count() FROM trio_analytics.transactions_raw")
+  [ "$N_CH16" = "10000000" ] && ok 16.12 "ClickHouse intacto apos os testes da 16 ($N_CH16)" \
+    || fail 16.12 "esperava 10000000 em transactions_raw, achei $N_CH16"
+else
+  skip 16.12 "clickhouse fora do ar"
+fi
+
 echo "----"
 echo "$PASS_N pass, $FAIL_N fail, $SKIP_N skip"
 [ "$FAIL_N" -eq 0 ] || exit 1

@@ -163,6 +163,22 @@ inofensiva. Só a do raw conflita, e só ela fica parada.
 | `cagg_volume_hourly` | 2 anos | true |
 | `cagg_settlement_latency_daily` | 2 anos | true |
 
+**O comando que habilita**, quando o conflito não existir (produção real, onde
+os 90 dias são a política desejada):
+
+```sql
+-- job_id 1007 é a retenção do raw; os outros dois (1004, 1005) já estão ligados.
+SELECT alter_job(1007, scheduled => true);
+
+-- Conferir:
+SELECT job_id, proc_name, hypertable_name, scheduled, schedule_interval
+  FROM timescaledb_information.jobs WHERE job_id >= 1000 ORDER BY job_id;
+```
+
+A partir daí o job roda no intervalo agendado e remove chunks inteiramente
+anteriores a `now() - 90 dias`. **Não é reversível** — por isso fica desligada
+enquanto o dataset de 12 meses for o objeto da avaliação.
+
 ## Limitação declarada — P95/P99 sem o toolkit
 
 S03 especifica `percentile_agg` (TDigest) para o CAgg de latência. **A
@@ -179,6 +195,32 @@ Adotamos o plano B previsto pelo próprio S03:
   reprocessar o bruto, e a média sai exata de `sum/count`.
 - O **P95/P99 sai de `percentile_cont`** na view `v_settlement_latency_percentiles`,
   sobre o raw filtrado.
+
+**O requisito do PDF § 3.2 A.4b é P95 *e* P99 de latência de liquidação por
+instituição — e é isso que a view entrega**, na granularidade dia × instituição:
+
+```sql
+SELECT bucket::date, source_institution, settled_count,
+       round(p95_seconds::numeric, 1) AS p95,
+       round(p99_seconds::numeric, 1) AS p99
+  FROM v_settlement_latency_percentiles
+ WHERE bucket >= now() - INTERVAL '3 days'
+ ORDER BY bucket DESC, source_institution;
+```
+
+Saída real (2026-08-04, segundos):
+
+| dia | instituição | liquidadas | P95 | P99 |
+|---|---|---|---|---|
+| 2026-08-04 | 001 | 246.488 | 55.101,4 | 114.519,8 |
+| 2026-08-04 | 033 | 42.029 | 56.627,2 | 114.910,8 |
+| 2026-08-04 | 077 | 28.849 | 55.698,9 | 118.384,2 |
+| 2026-08-04 | 104 | 53.564 | 54.075,5 | 114.837,3 |
+
+Os valores altos (P95 ≈ 15h) são propriedade do **dataset sintético**, não da
+consulta: o gerador distribui `settled_at` ao longo de dias, não de segundos.
+A forma da métrica é a que o requisito pede; a magnitude reflete o dado que
+existe.
 
 **O que se perde:** os percentis não vêm pré-computados, então essa query
 ainda toca a hypertable. **Por que não dá para materializar mesmo assim:**
@@ -275,6 +317,93 @@ filtrado por sucesso. Na nossa `status_funnel`, `status` é coluna do
 `status='settled'` na leitura (`sumIf` sobre o valor já desagregado por
 `countMerge`), não na agregação. Erro pego rodando a query de verdade, não
 copiando o SQL de S04 sem testar.
+
+## Dictionary vs JOIN — quando usar cada um (PDF § 3.2 C.3)
+
+`dict_institutions` resolve o código da instituição (`'001'`) para o nome
+(`'Instituição Parceira 1'`) sem trazer a tabela do legado para o caminho
+quente. A alternativa seria uma `JOIN` contra o PostgreSQL a cada consulta.
+
+**Medido nos dois caminhos**, mediana de 3 execuções, mesmo dado e mesma
+resposta:
+
+| Padrão de uso | `dictGet` | `JOIN postgresql()` | Diferença |
+|---|---|---|---|
+| **Lookup por linha** (90 dias) | **0,018 s** | 0,054 s | **2,9× mais rápido** |
+| `GROUP BY` sobre 10M linhas | 0,093 s | 0,077 s | equivalente |
+| `GROUP BY` com filtro de 30 dias | 0,028 s | 0,034 s | equivalente |
+
+**O número que importa é o primeiro**, porque é o padrão da API: resolver o
+nome em cada linha do resultado. É onde o Dictionary ganha, e é onde ele foi
+posto para trabalhar (`/institutions/{code}/health`).
+
+**Por que os outros dois empatam — e por que isso não enfraquece a escolha.**
+Num `GROUP BY`, a tabela de referência tem 15 linhas: o ClickHouse a carrega
+uma vez, faz broadcast e o custo se dilui na agregação. O empate é honesto e
+está aqui de propósito — **Dictionary não é mais rápido em tudo**, e vender
+isso como ganho universal seria falso.
+
+**Quando preferir Dictionary:**
+
+| Critério | Por quê |
+|---|---|
+| Lookup por linha em consulta quente | 2,9× medido; a diferença cresce com o número de linhas resolvidas |
+| Dado de referência pequeno e estável | 15 linhas em **42,91 KiB** de RAM (`system.dictionaries`) — cabe em memória sem negociação |
+| Origem externa que não deve ser consultada a cada query | O `LIFETIME(240–360s)` amortiza; a JOIN vai ao PostgreSQL **toda vez** |
+| Resposta precisa sobreviver à origem fora do ar | O Dictionary serve da memória; a JOIN falha |
+
+**Quando preferir JOIN:**
+
+| Critério | Por quê |
+|---|---|
+| Tabela grande demais para a memória | `HASHED` carrega tudo; centenas de MB por réplica deixam de compensar |
+| Consistência transacional estrita | O Dictionary é sempre até `LIFETIME` segundos velho; a JOIN lê o estado atual |
+| Uso raro, fora do caminho quente | Não paga a complexidade de manter um Dictionary |
+| Junção por múltiplas colunas com predicados | É JOIN relacional de verdade, não lookup chave→valor |
+
+**O custo que o Dictionary cobra** e que o número de latência não mostra:
+memória residente por réplica, mais uma peça a operar (recarga, frescor,
+alerta próprio — `refsync_dictionary_age_seconds`), e **dado que pode estar
+até 6 minutos velho**. Para cadastro de instituição, que muda em escala de
+semanas, é irrelevante. Para saldo ou limite, seria inaceitável — aí a JOIN
+é a resposta certa.
+
+## Funil de status — mede estado, não transição (limitação declarada)
+
+O PDF § 3.2 C.2b pede um funil de status **com tempo médio em cada estágio**.
+A MV `status_funnel` entrega a contagem e o tempo por status, mas é preciso
+ser explícito sobre o que ela **não** mede:
+
+**A origem não guarda histórico de transições.** `transactions` tem uma coluna
+`status` que é **sobrescrita** a cada mudança (`pending` → `settled`), e um
+único `updated_at`. Não existe tabela de eventos de mudança de estado, nem
+`status_history`, nem log de transição.
+
+Consequência direta:
+
+| O que o funil mede | O que ele **não** mede |
+|---|---|
+| Quantas transações estão **hoje** em cada status | Quantas **passaram** por cada status |
+| `settled_at - created_at` para as liquidadas | Quanto tempo ficaram em `pending` antes de falhar |
+| Distribuição do estado final | O caminho percorrido até ele |
+
+Uma transação que foi `pending` → `failed` → (reprocessada) → `settled`
+aparece no funil **apenas como `settled`**. Os dois estágios intermediários
+não deixaram rastro na origem, então nenhuma modelagem no destino os recupera.
+
+**Por que não foi "corrigido":** capturar transição exigiria mudar o schema da
+origem — tabela de eventos de status, ou `DELETE`+`INSERT` versionado em vez
+de `UPDATE`. É mudança no sistema transacional de pagamentos, decidida por
+quem opera aquele sistema, não pela camada analítica. O que a análise pode
+fazer é **declarar a limitação em vez de deixar o leitor supor** que o funil
+mede jornada quando ele mede fotografia.
+
+**O que seria necessário para medir de verdade**, se o requisito se tornar
+firme: uma tabela `transaction_status_events` (append-only) na origem, com
+`(tx_id, status_anterior, status_novo, mudou_em)`. A partir dela, o tempo em
+cada estágio sai de `lead(mudou_em) - mudou_em`, e o funil vira jornada real.
+O pipeline atual capturaria essa tabela sem alteração de desenho — é a origem
+que precisa mudar, não o destino.
 
 ## Ambiente
 

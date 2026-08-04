@@ -120,6 +120,20 @@ mesma janela não duplica: a versão maior vence. Foi **testado** — reprocessa
 zero manteve `count() FINAL` idêntico. Sem essa propriedade, nenhum dos quatro
 movimentos acima seria seguro.
 
+### Limitação declarada: o funil de status mede estado, não transição
+
+A MV `status_funnel` responde "quantas transações estão em cada status", não
+"quantas passaram por cada status". **A origem não guarda histórico de
+transições**: `transactions.status` é sobrescrito a cada mudança, e há um único
+`updated_at`. Uma transação `pending` → `failed` → `settled` aparece no funil
+só como `settled`.
+
+Não é limitação do destino: capturar transição exige tabela de eventos na
+**origem** (`transaction_status_events`, append-only), o que é mudança no
+sistema transacional de pagamentos — decisão de quem opera aquele sistema. O
+pipeline atual capturaria essa tabela sem alteração de desenho. Detalhado em
+`desafio-1/REPORT.md` § *Funil de status*.
+
 ### Limitação declarada: o `DELETE`
 
 O micro-batch por watermark **não captura `DELETE` físico**. Uma linha removida

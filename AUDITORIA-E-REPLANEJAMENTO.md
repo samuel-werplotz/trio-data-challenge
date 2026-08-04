@@ -124,6 +124,12 @@ Três mudanças de processo:
 
 ## FASE 3 — MATRIZ DE RASTREABILIDADE
 
+> **Atualizada em 2026-08-04, ao fechar a etapa 16.** A versão original desta
+> matriz é o retrato do momento da auditoria, quando o CDC tinha acabado de ser
+> descartado e as etapas 13.5–16 não existiam. As linhas **FALTA** e **PARCIAL**
+> abaixo foram reconferidas uma a uma **contra o ambiente rodando**, não contra o
+> plano. O histórico do diagnóstico permanece nas Fases 1, 2 e 4.
+
 Uma linha por requisito do PDF. Legenda: **OK** = entregue e verificado · **PARCIAL** = existe mas não atende o texto integral · **FALTA** = inexistente.
 
 ### Desafio 1 — Parte A (TimescaleDB)
@@ -134,12 +140,12 @@ Uma linha por requisito do PDF. Legenda: **OK** = entregue e verificado · **PAR
 | A2 | `transactions` como hypertable + chunk interval justificado | idem + `REPORT.md` | **OK** | — |
 | A3 | ≥10M transações, 12 meses, distribuição realista | `desafio-1/seed/` | **OK** | 2 linhas de teste a remover |
 | A4a | CAgg: volume/valor por tipo, por hora | `04_caggs_policies.sql` | **OK** | — |
-| A4b | CAgg: P95/P99 de latência por instituição, por dia | idem | **PARCIAL** | `timescaledb_toolkit` ausente → plano B sem `percentile_agg`. **Documentar explicitamente**, é requisito literal |
-| A5 | Retenção 90d raw / 2 anos CAgg / compressão 7d | idem | **PARCIAL** | Retenção criada mas **desabilitada** (job 1007 `scheduled=f`). Justificado, mas precisa estar no REPORT |
+| A4b | CAgg: P95/P99 de latência por instituição, por dia | `v_settlement_latency_percentiles` + `REPORT.md` | **OK** | Fechado na 16. `timescaledb_toolkit` ausente da imagem → `percentile_cont` em view entrega P95 **e** P99 por instituição/dia. Saída real no REPORT; motivo do caminho alternativo documentado |
+| A5 | Retenção 90d raw / 2 anos CAgg / compressão 7d | `04_caggs_policies.sql` + `REPORT.md` | **OK** | Fechado na 16. As 3 políticas documentadas, com o motivo do `scheduled=false` no raw (90d × dataset de 12 meses) e o comando exato que habilita (`alter_job(1007, scheduled => true)`) |
 | A6 | Q1–Q4 com EXPLAIN antes/depois | `queries/` + `explains/` | **OK** | — |
 | A7 | Por query: índices justificados, impacto do particionamento, plano comentado | `REPORT.md` | **OK** | Ponto forte: o índice que **não** melhorou está documentado |
 | A8 | `time_bucket_gapfill`/`locf` — série contínua 48h | `bonus_gapfill_48h.sql` | **OK** | — |
-| A9 | Sanitização de chunks comprimidos com PII (LGPD) | `lgpd-sanitization.md` | **OK** | Passo de propagação ao CH é "futuro" — fechar agora que o CH existe |
+| A9 | Sanitização de chunks comprimidos com PII (LGPD) | `lgpd-sanitization.md` | **OK** | Fechado na 16: procedimento **executado de ponta a ponta**. Verificado que o ClickHouse não guarda PII (só `source_account_id`), então não há o que propagar — o passo deixou de ser "futuro" e virou evidência |
 
 ### Desafio 1 — Parte B (PostgreSQL legado)
 
@@ -147,7 +153,7 @@ Uma linha por requisito do PDF. Legenda: **OK** = entregue e verificado · **PAR
 |---|---|---|---|---|
 | B1 | Schema legado (users, contas, configs) + seed | `02_legacy.sql` | **OK** | — |
 | B2 | ≥2 queries complexas otimizadas + EXPLAIN | `legacy_q1/q2` + explains | **OK** | — |
-| B3 | Doc de 1 página: EC2 vs Aurora vs RDS, critérios, migração, rollback | `migration-analysis.md` | **PARCIAL** | 60 linhas. Verificar se cobre os **4** sub-itens (custo/perf/HA/overhead; DMS/lógica/blue-green; riscos; rollback) |
+| B3 | Doc de 1 página: EC2 vs Aurora vs RDS, critérios, migração, rollback | `migration-analysis.md` | **OK** | Fechado na 16: 210 linhas cobrindo os 4 sub-itens em seções próprias — (a) comparação das 3 opções, (b) 3 estratégias com a escolhida justificada, (c) 8 riscos com mitigação, (d) rollback com janela de 72h e critério de aborto |
 
 ### Desafio 1 — Parte C (ClickHouse)
 
@@ -155,50 +161,66 @@ Uma linha por requisito do PDF. Legenda: **OK** = entregue e verificado · **PAR
 |---|---|---|---|---|
 | C1 | Schema + engine, ORDER BY, PARTITION BY, codecs justificados | `init/clickhouse/01_schema.sql` | **OK** | — |
 | C2a | MV: resumo diário por instituição e tipo (count, sum, avg, p95) | `mv_daily_by_institution` | **OK** | — |
-| C2b | MV: funil de status + tempo médio em cada estágio | `mv_status_funnel` | **PARCIAL** | Limitação assumida (sem histórico de transições). Declarar no REPORT |
-| C3 | ≥1 Dictionary + uso em query + por que não JOIN | `dict_institutions` | **PARCIAL** | Dictionary existe e resolve; falta o **texto** "quando e por que preferir a JOIN" |
+| C2b | MV: funil de status + tempo médio em cada estágio | `mv_status_funnel` + `REPORT.md` + `ADR.md` | **PARCIAL — justificado** | Fechado na 16 no que era possível fechar. A MV entrega contagem e tempo por status; **não mede transição** porque a origem sobrescreve `status` e não guarda histórico. Corrigir exigiria mudar o schema do sistema transacional. Limitação declarada nos dois documentos, com o que seria necessário para medir de verdade |
+| C3 | ≥1 Dictionary + uso em query + por que não JOIN | `dict_institutions` + `REPORT.md` | **OK** | Fechado na 16: texto com número **medido** dos dois caminhos — lookup por linha 0,018s (dictGet) × 0,054s (JOIN), **2,9×**; e o empate honesto em GROUP BY, onde o Dictionary não ganha |
 | C4 | Query Grafana Pix 24h vs D-1, sub-segundo | `grafana_pix_24h_vs_d1.sql` | **OK** | 8ms medido |
-| C5 | **Cenário: ClickHouse servindo uma aplicação (API → JSON)** | — | **FALTA** | Requisito literal, nada existe |
+| C5 | **Cenário: ClickHouse servindo uma aplicação (API → JSON)** | `desafio-2/pipeline/api/` | **OK** | Entregue na 14: API FastAPI em `:8000` com 3 endpoints de negócio, pool, cache de 10s, `query_ms` e timeout. `/institutions/{code}/health` é decisão automatizada, não visualização |
 
 ### Desafio 2
 
 | # | Requisito (PDF § 4.2) | Onde está | Status | Gap |
 |---|---|---|---|---|
-| 2A1 | Pipeline TS→CH + **justificativa escrita** da abordagem vs alternativas | `pipeline/consumer/` | **PARCIAL** | Código existe e é bom; **o pipeline não funciona** e a justificativa não está escrita |
-| 2A2a | Idempotente | `ReplacingMergeTree` + `_version` | **PARCIAL** | Mecanismo correto; depende do pipeline voltar a funcionar |
+| 2A1 | Pipeline TS→CH + **justificativa escrita** da abordagem vs alternativas | `pipeline/sync-worker/` + `ADR.md` | **OK** | Pipeline por micro-batch funcionando (13.5); justificativa escrita na 14. O experimento com Debezium ficou no profile `cdc-experimento` como artefato da decisão |
+| 2A2a | Idempotente | `ReplacingMergeTree` + `_version` | **OK** | Demonstrado em `demo-sync-worker.sh`: reprocessar manteve `count() FINAL` idêntico (10.000.001 antes e depois) |
 | 2A2b | Retry, DLQ, logging | `sink.py`, `main.py` | **OK** | Testado antes do travamento |
 | 2A2c | Observabilidade: logs estruturados, métricas de lag/throughput | `metrics.py` | **OK** | Bug R7/R8 a corrigir |
-| 2A2d | **Demonstrável no docker-compose (rode e funcione)** | — | **FALTA** | **Não funciona hoje.** Critério de aceite do PDF |
-| 2A3 | Tratamento de mutação (pending→settled) demonstrado na prática | `demo-mutation.sh` | **PARCIAL** | Script existe e rodou uma vez; hoje não roda |
-| 2B1 | Pipeline secundário: legado → Dictionary | — | **FALTA** | `ref-sync` só existe no compose |
-| 2B2 | Como o pipeline se comportaria numa migração para Aurora | — | **FALTA** | Texto |
-| 2C1 | Diagrama: componentes + AWS + fluxos/SLAs + pontos de falha | `diagrams/` vazio | **FALTA** | |
-| 2C2 | ADR 1–2 páginas com as 4 perguntas | — | **FALTA** | |
+| 2A2d | **Demonstrável no docker-compose (rode e funcione)** | `docker-compose.yml` | **OK** | 11 serviços de pé; `--profile core` (10) e `--profile full` (13) resolvem sem erro. `demo-sync-worker.sh` roda de ponta a ponta |
+| 2A3 | Tratamento de mutação (pending→settled) demonstrado na prática | `demo-sync-worker.sh` | **OK** | Reexecutado na 16: INSERT→`pending`, UPDATE→`settled` no ClickHouse, as 2 versões convivendo sem FINAL, `OPTIMIZE` colapsando para 1 |
+| 2B1 | Pipeline secundário: legado → Dictionary | `pipeline/ref-sync/` | **OK** | Entregue na 14: batch de 5 min, detecção por `(count, max(updated_at))`, métrica de frescor. Propagação provada em laço vivo |
+| 2B2 | Como o pipeline se comportaria numa migração para Aurora | `ADR.md` § Migração para Aurora | **OK** | Entregue na 14: sobrevive sem alteração de código; tabela do que muda, com o reader endpoint como ganho e a rotação de credencial do Dictionary como único ponto de atenção real |
+| 2C1 | Diagrama: componentes + AWS + fluxos/SLAs + pontos de falha | `desafio-2/diagrams/` | **OK** | Entregue na 14: 3 `.mmd` validados com `mermaid-cli`. Inclui **Hex** e apps consumidoras, serviços AWS, SLAs nas setas e 7 pontos de falha com mitigação |
+| 2C2 | ADR 1–2 páginas com as 4 perguntas | `desafio-2/ADR.md` | **OK** | Entregue na 14: as 4 perguntas literais em seções próprias, refletindo o que de fato aconteceu com o CDC; consequências negativas e limitação do `DELETE` declaradas |
 
 ### Desafio 3
 
 | # | Requisito (PDF § 5.2) | Onde está | Status | Gap |
 |---|---|---|---|---|
-| 3A1 | Backup dos **3** bancos: tipo, frequência/retenção, script funcional, destino AWS | — | **FALTA** | |
-| 3A2 | Recovery drill: simular perda, restaurar, 3 contagens com timestamp | — | **FALTA** | |
-| 3A3 | Runbook: storage 92%, sanitizar chunks 6+ meses sem downtime | — | **FALTA** | |
-| 3B1 | 4 dashboards (TS, CH, Pipeline, Legado) | 0 dashboards | **FALTA** | |
-| 3B2 | ≥5 alertas: métrica, threshold, severidade, ação, CloudWatch/SNS | — | **FALTA** | |
-| 3C | Incidente SEV-1: investigação, ≥5 hipóteses, resolução, pós-incidente, comunicação | — | **FALTA** | |
+| 3A1 | Backup dos **3** bancos: tipo, frequência/retenção, script funcional, destino AWS | `desafio-3/backup/` | **OK** | Entregue na 13.5: pgBackRest → MinIO (S3-compatível) nos 2 PostgreSQL, `BACKUP` nativo no ClickHouse. Reconferido na 16: `full backup: 20260804-140710F`, status ok |
+| 3A2 | Recovery drill: simular perda, restaurar, 3 contagens com timestamp | `restore-drill.sh` | **OK** | Entregue na 13.5, com RTO medido. Restaura em instância paralela (5499), nunca sobre o principal — teste `E4.14` guarda isso |
+| 3A3 | Runbook: storage 92%, sanitizar chunks 6+ meses sem downtime | `desafio-3/runbook.md` | **OK** | Entregue na 15: os 5 itens do PDF, SQL verificado contra o banco (156 chunks de 6+ meses, 1.111 MB) e a guarda `cagg_watermark` antes do DROP |
+| 3B1 | 4 dashboards (TS, CH, Pipeline, Legado) | `init/grafana/dashboards/` | **OK** | Entregue na 15: 4 dashboards provisionados por arquivo, carregando **dado real** pelas 3 datasources (teste `15.19`) |
+| 3B2 | ≥5 alertas: métrica, threshold, severidade, ação, CloudWatch/SNS | `desafio-3/grafana/alertas.md` + `alert_rules.yml` | **OK** | Entregue na 15: **6** alertas com os 5 campos, carregados e `health=ok`. O de pipeline parado usa condição dupla para não dar falso positivo com banco ocioso |
+| 3C | Incidente SEV-1: investigação, ≥5 hipóteses, resolução, pós-incidente, comunicação | `desafio-3/incident-response.md` | **OK** | Entregue na 15: **7** hipóteses cobrindo as duas pistas do enunciado (manutenção e security group); 5 das 8 ações pós-incidente são preventivas |
 
 ### Critérios de aceitação mínimos (PDF § 6.1)
 
-| # | Critério | Status hoje |
-|---|---|---|
-| 1 | `docker-compose up -d` sobe tudo sem erros | **FALHA** (R3, R4) |
-| 2 | Seed roda e popula com volume relevante | **OK** |
-| 3 | Queries do Desafio 1 com EXPLAIN documentado | **OK** |
-| 4 | ≥1 pipeline TS→CH end-to-end demonstrável | **FALHA** |
-| 5 | ≥1 dashboard Grafana consultando ClickHouse | **FALHA** |
-| 6 | Documentação cobre decisões com justificativa | **PARCIAL** |
-| 7 | Análise PG→Aurora presente e fundamentada | **PARCIAL** |
+Duas colunas: como estava na auditoria, e como está ao fechar a etapa 16.
 
-**2 de 7 plenamente atendidos.** É esta linha que define se a entrega é aceita.
+| # | Critério | Na auditoria | **Hoje** | Evidência |
+|---|---|---|---|---|
+| 1 | `docker-compose up -d` sobe tudo sem erros | FALHA (R3, R4) | **OK** | 11 serviços de pé; `--profile core` (10) e `full` (13) resolvem sem erro. Testes `02.2`/`02.7` |
+| 2 | Seed roda e popula com volume relevante | OK | **OK** | 10.000.000 transações, 12 meses |
+| 3 | Queries do Desafio 1 com EXPLAIN documentado | OK | **OK** | 10 arquivos em `queries/explains/`, `REPORT.md` |
+| 4 | ≥1 pipeline TS→CH end-to-end demonstrável | FALHA | **OK** | `sync-worker` rodando; `demo-sync-worker.sh` reexecutado na 16 |
+| 5 | ≥1 dashboard Grafana consultando ClickHouse | FALHA | **OK** | 4 dashboards com dado real; teste `15.19` |
+| 6 | Documentação cobre decisões com justificativa | PARCIAL | **OK** | `ADR.md`, `REPORT.md`, `runbook.md`, `incident-response.md`, `alertas.md` |
+| 7 | Análise PG→Aurora presente e fundamentada | PARCIAL | **OK** | `migration-analysis.md`, 210 linhas, 4 sub-itens |
+
+**7 de 7 atendidos** (eram 2 de 7 na auditoria).
+
+### A única linha que permanece PARCIAL — e por quê
+
+**C2b (funil de status com tempo em cada estágio).** A MV entrega contagem e
+tempo por status, mas mede **estado atual, não transição**: a origem sobrescreve
+`transactions.status` a cada mudança e não guarda histórico. Uma transação
+`pending` → `failed` → `settled` aparece só como `settled`.
+
+Fechar de verdade exigiria uma tabela de eventos append-only **no sistema
+transacional de pagamentos** — decisão de quem opera aquele sistema, fora do
+alcance da camada analítica. A limitação está declarada em `desafio-1/REPORT.md`
+e em `desafio-2/ADR.md`, junto do que seria necessário para medir de verdade.
+
+**Nenhuma linha permanece em FALTA.**
 
 ---
 

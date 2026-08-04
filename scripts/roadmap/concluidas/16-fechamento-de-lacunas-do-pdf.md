@@ -40,14 +40,14 @@ Não faz: não reabre decisão de arquitetura; não refaz medição já registra
 8. Acrescentar o bloco `# --- 16 fechamento-de-lacunas-do-pdf ---` em `scripts/tests/run_all.sh`.
 
 ## CRITÉRIOS DE ACEITE
-- [ ] P95 **e** P99 de latência por instituição/dia disponíveis, com o caminho usado documentado
-- [ ] `REPORT.md` declara as duas retenções, o motivo do `scheduled=false` e o comando que habilita
-- [ ] `migration-analysis.md` cobre os 4 sub-itens do PDF § 3.2 B.3
-- [ ] Limitação do funil de status declarada no `REPORT.md` e no `ADR.md`
-- [ ] Texto "Dictionary vs JOIN" existe, com número medido dos dois caminhos
-- [ ] Procedimento LGPD no ClickHouse **executado**, não descrito como futuro
-- [ ] Matriz da auditoria § FASE 3 sem nenhuma linha em FALTA
-- [ ] Toda linha que permanecer PARCIAL tem justificativa escrita do porquê
+- [x] P95 **e** P99 de latência por instituição/dia disponíveis, com o caminho usado documentado — `v_settlement_latency_percentiles` já entregava; saída real no `REPORT.md` e motivo do caminho alternativo (`percentile_cont`, sem toolkit). Testes `16.1`/`16.2`
+- [x] `REPORT.md` declara as duas retenções, o motivo do `scheduled=false` e o comando que habilita — `alter_job(1007, scheduled => true)`, job conferido no banco. Teste `16.3`
+- [x] `migration-analysis.md` cobre os 4 sub-itens do PDF § 3.2 B.3 — 60 → **210 linhas**, uma seção por sub-item. Testes `16.4`/`16.5`
+- [x] Limitação do funil de status declarada no `REPORT.md` e no `ADR.md` — teste `16.7`
+- [x] Texto "Dictionary vs JOIN" existe, com número medido dos dois caminhos — **0,018s × 0,054s (2,9×)** no lookup por linha; empate em `GROUP BY` reportado também. Testes `16.6`/`16.9`
+- [x] Procedimento LGPD no ClickHouse **executado**, não descrito como futuro — testes `16.8`/`16.10`
+- [x] Matriz da auditoria § FASE 3 sem nenhuma linha em FALTA — teste `16.11`; critérios do PDF § 6.1 passaram de 2/7 para **7/7**
+- [x] Toda linha que permanecer PARCIAL tem justificativa escrita do porquê — só **C2b** permanece, justificada
 
 ## TESTES
 | id | trilha | comando | esperado |
@@ -68,16 +68,25 @@ git checkout -- desafio-1/REPORT.md desafio-1/migration-analysis.md desafio-1/lg
 > Etapa majoritariamente documental; a única execução é o procedimento LGPD, que roda sobre conta sintética descartável.
 
 ## STATUS
-Estado: PENDENTE
-Premissas assumidas: —
-Desvios do plano: —
+Estado: CONCLUÍDA
+
+Premissas assumidas:
+- **A4b e A5 já estavam atendidos no produto**, não no texto. A view de percentis já entregava P95 e P99 por instituição/dia, e as 3 políticas de retenção já existiam com a justificativa correta. O gap era documental — o PDF avalia o que está escrito, e o que não está documentado não conta.
+- **C2b permanece PARCIAL, por decisão.** Medir transição de status exigiria tabela de eventos append-only na **origem** — mudança no sistema transacional de pagamentos, que a Seção 2 põe fora do escopo e que não é decisão da camada analítica. A entrega é a limitação declarada nos dois documentos, com o caminho descrito.
+- **Dictionary vs JOIN medido em 3 padrões de uso, não em um.** Reportar só o lookup por linha (onde o Dictionary ganha 2,9×) seria escolher o cenário favorável; o empate em `GROUP BY` está na mesma tabela.
+- **LGPD verificado pela ausência.** A prova de que não há PII no ClickHouse é uma varredura de `system.columns` que devolve zero colunas de dado pessoal, mais o teste de propagação com conta sintética. Verificação negativa é evidência quando a busca é exaustiva.
+
+Desvios do plano:
+1. **O passo 6 inverteu a conclusão do documento original.** A etapa 09 descreveu a propagação do apagamento ao ClickHouse como procedimento a executar quando o CH existisse. Executado, o resultado foi que **não há propagação a fazer**: `accounts_dim` nunca foi criada e `transactions_raw` referencia o titular só por `source_account_id`. O passo foi reescrito como verificação (com evidência) em vez de procedimento, e o procedimento hipotético ficou registrado para o caso de uma dimensão com PII ser materializada no futuro.
+2. **A matriz da auditoria foi reescrita, não só conferida.** O `PASSO 7` pedia conferir; a matriz estava desatualizada em **21 linhas** — era o retrato do momento da auditoria, quando as etapas 13.5–16 não existiam. Cada linha foi reconferida **contra o ambiente rodando** (containers de pé, backup, demo de mutação reexecutada) e atualizada. Os critérios do PDF § 6.1 passaram de 2/7 para 7/7.
+3. **Teste `12.6` quebrou durante a etapa e expôs uma armadilha real.** O `ALTER TABLE ... DELETE` que removeu a transação sintética da `transactions_raw` **não removeu o agregado correspondente nas 2 MVs** — MV no ClickHouse é gatilho de inserção, não view materializada que recalcula. Raw voltou a 10.000.000 e as MVs ficaram em 10.000.001. Corrigido removendo e reconstruindo apenas a fatia divergente (`2026-08-04`/`001`/`pix`) a partir da raw. **É a mesma classe de armadilha da etapa 12** (lá o `INSERT SELECT` duplicou o que a MV já havia capturado): mexer na raw sem tratar a MV deixa as duas fora de sincronia, nos dois sentidos.
 
 ## FECHAMENTO
-- [ ] Critérios atendidos
-- [ ] Testes no run_all.sh
-- [ ] run_all.sh sem FAIL
-- [ ] ESTADO HERDADO da próxima preenchido
-- [ ] Bloco no LOG-EXECUCAO.md
-- [ ] Desvio? → atualizar 99-validacao-final.md
-- [ ] Commit checkpoint
-- [ ] Mover pra concluidas/. Marcar [x] no CLAUDE.md
+- [x] Critérios atendidos
+- [x] Testes no run_all.sh (bloco `# --- 16 fechamento-de-lacunas-do-pdf ---`, 12 testes)
+- [x] run_all.sh sem FAIL — 171 pass, 0 fail, 3 skip
+- [x] ESTADO HERDADO da próxima preenchido (99)
+- [x] Bloco no LOG-EXECUCAO.md
+- [x] Desvio? → registrado em `99-validacao-final.md`
+- [x] Commit checkpoint
+- [x] Mover pra concluidas/. Marcar [x] no CLAUDE.md

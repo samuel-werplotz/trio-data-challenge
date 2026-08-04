@@ -101,22 +101,63 @@ concorrentes gravando o mesmo `'ANONIMIZADO'` em `holder_document` colidiriam
 em qualquer índice futuro sobre a coluna. O hash amarra no `id`, que é único
 por definição.
 
-### Passo 2 — propagar ao ClickHouse
+### Passo 2 — propagar ao ClickHouse: **não é necessário, e isso foi verificado**
 
-*Procedimento documentado para quando o CDC (etapa 13) e o ClickHouse (etapa
-11) existirem neste ambiente — não executável nem verificável hoje, porque
-nenhum dos dois está de pé ainda.*
+> **Executado de ponta a ponta em 2026-08-04** (etapa 16), com o ClickHouse e o
+> pipeline de pé. A conclusão inverteu o que este documento supunha quando foi
+> escrito na etapa 09: **não há PII para propagar**.
 
-O CDC captura o `UPDATE` automaticamente e o `ReplacingMergeTree` substitui a
-versão antiga por `_version`. Mas as versões antigas continuam em disco até o
-merge. Para exclusão comprovada:
+**O que a verificação mostrou.** Nenhuma tabela de `trio_analytics` guarda dado
+pessoal. A varredura por colunas candidatas devolve apenas nomes de
+**instituição** — razão social de banco, dado público, não dado pessoal:
 
 ```sql
-OPTIMIZE TABLE trio_analytics.accounts_dim FINAL;
+SELECT name, type FROM system.columns
+ WHERE database = 'trio_analytics'
+   AND (name ILIKE '%document%' OR name ILIKE '%holder%'
+        OR name ILIKE '%name%' OR name ILIKE '%cpf%' OR name ILIKE '%email%');
+-- name, short_name  →  ambas de dict_institutions (instituição, não titular)
 ```
 
-E, para garantia adicional, `ALTER TABLE ... DELETE WHERE` sobre as linhas
-antigas — aceitável porque é operação rara e de baixo volume.
+`transactions_raw` referencia o titular apenas por **`source_account_id`
+(inteiro)**. `accounts_dim` — citado na versão original deste passo — **nunca
+foi criada**: a PII vive só em `accounts`, no TimescaleDB, que não é replicada
+para o ClickHouse. É consequência direta da decisão de schema, não sorte.
+
+**Teste executado**, sobre conta sintética descartável:
+
+| # | Ação | Resultado |
+|---|---|---|
+| 1 | Criar conta sintética (`id=1000112`) + 1 transação | `holder_name='Titular Teste Etapa 16'`, `holder_document='99988877766'` |
+| 2 | Esperar o sync-worker propagar | Linha chega ao ClickHouse com `source_account_id=1000112`, `amount=123.45` — **sem nome, sem documento** |
+| 3 | `CALL anonimizar_conta(1000112, ...)` | Origem: `ANONIMIZADO` / `ANON-b596276…` |
+| 4 | Reconferir o ClickHouse | Linha **inalterada** — nada a anonimizar, porque nada de pessoal havia chegado |
+| 5 | Histórico transacional na origem | Preservado (1 transação, intacta) |
+| 6 | Auditoria | `lgpd_erasure_log`: `document_hash=ba8c0ec7…`, `affected_rows=1`, `backups_pending=true` |
+| 7 | Limpeza | Conta e transação sintéticas removidas nas duas pontas; **10.000.000 linhas em ambos** |
+
+**Por que este é o resultado forte, e não uma tarefa que ficou por fazer.** O
+melhor procedimento de propagação é o que não precisa existir: se a PII nunca
+sai da origem, a exclusão é atômica em um lugar só, e não há janela em que o
+dado esteja apagado no transacional e vivo no analítico. Foi por isso que
+`transactions` e os CAggs foram desenhados livres de PII desde S01.
+
+**Quando a propagação seria necessária** — e o procedimento continua válido para
+esse caso: se algum dia uma dimensão com PII for materializada no ClickHouse
+(`accounts_dim`), o `UPDATE` de anonimização chegaria pelo pipeline, o
+`ReplacingMergeTree` substituiria por `_version`, e as versões antigas
+permaneceriam em disco **até o merge**. Aí seriam necessários:
+
+```sql
+-- Força o merge, colapsando as versões antigas
+OPTIMIZE TABLE trio_analytics.accounts_dim FINAL;
+
+-- Garantia adicional: remove fisicamente as linhas antigas.
+-- Aceitável por ser operação rara e de baixíssimo volume — mutation em
+-- ClickHouse reescreve partes inteiras e não deve virar rotina.
+ALTER TABLE trio_analytics.accounts_dim
+  DELETE WHERE account_id = :account_id AND _version < :versao_nova;
+```
 
 ### Passo 3 — backups
 
@@ -249,8 +290,9 @@ conforme política de retenção.
 
 ## Checklist de verificação
 
-Executado por `desafio-1/scripts/lgpd-erasure-demo.sh`; os 2 primeiros itens
-e o 5º são verificáveis hoje, os itens 3 e 4 exigem etapas futuras (11 e 13):
+Executado por `desafio-1/scripts/lgpd-erasure-demo.sh`. **Os 5 itens são
+verificáveis hoje** — na etapa 09 os itens 3 e 4 dependiam de etapas futuras;
+com o ClickHouse e o pipeline de pé, foram executados na etapa 16:
 
 ```sql
 -- 1. A PII sumiu da origem?
@@ -261,15 +303,20 @@ SELECT holder_name, holder_document FROM accounts WHERE id = :account_id;
 SELECT count(*) FROM transactions WHERE source_account_id = :account_id;
 -- inalterado
 
--- 3. Propagou ao ClickHouse? [requer etapa 11 — ClickHouse não existe ainda]
-SELECT holder_name FROM accounts_dim FINAL WHERE account_id = :account_id;
--- ANONIMIZADO
+-- 3. E no ClickHouse? [VERIFICADO na etapa 16 — nada a propagar]
+--    Não existe accounts_dim: nenhuma tabela de trio_analytics guarda PII.
+--    A verificação é pela ausência, e ela é positiva:
+SELECT name FROM system.columns
+ WHERE database = 'trio_analytics'
+   AND (name ILIKE '%document%' OR name ILIKE '%holder%' OR name ILIKE '%cpf%');
+-- 0 linhas — o titular só aparece como source_account_id (inteiro)
 
 -- 4. Os CAggs continuam corretos? [não aplicável: nunca guardam PII]
 SELECT sum(tx_count) FROM cagg_volume_hourly WHERE bucket >= '2026-01-01';
 
 -- 5. A auditoria registrou?
-SELECT * FROM lgpd_erasure_log ORDER BY executed_at DESC LIMIT 1;
+SELECT document_hash, requester, affected_rows, backups_pending
+  FROM lgpd_erasure_log ORDER BY executed_at DESC LIMIT 1;
 ```
 
 O item 2 é o que mais gente esquece: **provar que a exclusão não destruiu o

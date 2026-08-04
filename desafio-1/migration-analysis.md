@@ -10,16 +10,166 @@
 | Dívidas técnicas | `SERIAL` em vez de `IDENTITY`; `TIMESTAMP` sem fuso em toda tabela; `VARCHAR(n)` com limite arbitrário; sem particionamento |
 | Bloat medido | `legacy_accounts`: **83,3% de linhas mortas**, 70 MB para 80.000 linhas úteis (~6×). **Induzido de propósito** (5 rodadas de `UPDATE` sem `VACUUM`) para dar evidência real à recomendação — um banco impecável ao lado tornaria isto opinião, não argumento. |
 
-## Estratégia de cutover
+## (a) EC2 autogerenciado × RDS × Aurora — a comparação de destino
 
-1. **Provisionar Aurora PostgreSQL** (engine-compatible) em Multi-AZ.
-2. **Carga full via DMS/`pg_dump`** — 86 MB, minutos.
-3. **CDC do DMS** (não o Debezium do pipeline TimescaleDB→ClickHouse) mantendo Aurora sincronizado durante a validação.
-4. **Validação**: contagem por tabela + checksum (`sum(balance)`, mesmo princípio do exercício de recuperação de S07 Parte 3).
-5. **Corte**: pausar escritas no legado → lag do DMS a zero → repontar aplicação → retomar escritas.
-6. **Rollback**: legado read-only por 72h com replicação reversa, caso o corte precise desfazer.
+O PDF § 3.2 B.3 pede a comparação entre as três opções, não a defesa de uma.
+As três são viáveis; mudam o custo, o esforço operacional e o que se ganha.
 
-## Custo, performance, HA
+| Critério | EC2 autogerenciado | RDS PostgreSQL | Aurora PostgreSQL |
+|---|---|---|---|
+| **Custo base** | Menor por hora de instância; paga-se em pessoa | Intermediário; storage provisionado | ~20–30% acima do RDS por vCPU; storage por uso real |
+| **Custo real (TCO)** | O maior — inclui plantão, patch, tuning de backup | Médio | Menor em equipe pequena: elimina trabalho, não só servidor |
+| **Escala de leitura** | Réplica manual (streaming), promoção manual | Até 5 réplicas, lag de segundos | Até 15 réplicas, **lag < 100 ms**, reader endpoint único |
+| **HA / RTO** | Patroni ou script próprio; RTO em minutos | Multi-AZ com failover automático; RTO 1–2 min | Failover **< 30 s**; storage já replicado em 3 AZs |
+| **Durabilidade** | EBS + backup que você opera | Snapshot + PITR gerenciados | **6 cópias em 3 AZs**, PITR nativo por segundo |
+| **Overhead operacional** | Alto: patch, vacuum, backup, monitoramento, failover | Baixo | Baixo, com storage que não exige dimensionamento prévio |
+| **Elasticidade** | Redimensionar = downtime | Redimensionar = failover | Serverless v2 escala sem downtime |
+| **Trava de fornecedor** | Nenhuma | Baixa (PostgreSQL puro) | **Média** — storage é proprietário; sair exige dump/restore |
+| **Bloat** | `autovacuum` tunado à mão | Mesmo mecanismo | **Mesmo mecanismo** — Aurora *não* resolve bloat |
+
+**Recomendação: Aurora PostgreSQL**, com uma ressalva honesta.
+
+*Por quê:* o legado é a origem do `ref-sync`, e o **reader endpoint** é o ganho
+concreto — hoje toda leitura cai no mesmo nó que atende escrita. O failover
+automático importa mais aqui do que em qualquer outro componente: é instância
+única, sem réplica, e um pagamento não espera failover manual.
+
+*A ressalva:* **86 MB de banco não justificam Aurora por performance.** Se a
+decisão fosse só sobre este volume, RDS Multi-AZ entregaria o mesmo com menos
+custo e sem trava de storage. A justificativa é de **trajetória** — o legado
+cresce e é fonte de sistema de pagamento — não do estado atual. Vender Aurora
+como ganho de performance para 86 MB seria enganoso.
+
+**Quando RDS seria a escolha certa:** se o banco permanecer pequeno e estável,
+se houver exigência de portabilidade entre nuvens, ou se o time já opera RDS e
+não tem apetite para mais um motor.
+
+## (b) Estratégia de migração — três caminhos, um escolhido
+
+| Estratégia | Downtime | Complexidade | Quando usar |
+|---|---|---|---|
+| **`pg_dump`/`restore`** | Minutos a horas | Baixa | Banco pequeno e janela de manutenção aceita |
+| **DMS com CDC** | Segundos | Média | Downtime precisa ser mínimo; heterogeneidade |
+| **Replicação lógica nativa** | Segundos | Média | PostgreSQL → PostgreSQL, mesma versão maior |
+| **Blue-green (RDS)** | < 1 min | Baixa (gerenciada) | AWS gerencia a réplica e o switchover |
+
+**Escolhido: replicação lógica nativa**, com `pg_dump` como plano B.
+
+*Por quê nativa e não DMS:* origem e destino são ambos PostgreSQL 16. O DMS
+existe para heterogeneidade (Oracle→Postgres) e cobra por isso em complexidade
+— tarefa, endpoints, instância de replicação, mapeamento de tipos. Para
+homogêneo, a replicação lógica é o caminho mais curto e usa o mecanismo do
+próprio banco.
+
+*Por quê `pg_dump` é plano B viável e não fallback vergonhoso:* **86 MB**
+restauram em minutos. Se a replicação lógica der problema, a janela de
+manutenção noturna é suficiente — e este é o argumento mais forte a favor de
+migrar cedo, enquanto o banco ainda é pequeno.
+
+**Passos do cutover:**
+
+1. **Provisionar** Aurora PostgreSQL 16, Multi-AZ, na mesma VPC.
+2. **Preparar o schema** — só DDL, sem dado:
+   ```bash
+   pg_dump --schema-only -h postgres-legado -U trio trio_legado | psql -h <aurora> -U trio trio_legado
+   ```
+3. **Publicação na origem / assinatura no destino:**
+   ```sql
+   -- origem
+   CREATE PUBLICATION pub_legado FOR ALL TABLES;
+   -- destino
+   CREATE SUBSCRIPTION sub_legado
+     CONNECTION 'host=postgres-legado dbname=trio_legado user=trio'
+     PUBLICATION pub_legado;   -- copia inicial + streaming contínuo
+   ```
+4. **Validar** — contagem por tabela **e** checksum de valor, não só linhas:
+   ```sql
+   SELECT 'legacy_accounts' AS t, count(*), sum(balance) FROM legacy_accounts
+   UNION ALL SELECT 'legacy_users', count(*), NULL FROM legacy_users
+   UNION ALL SELECT 'partner_institutions', count(*), NULL FROM partner_institutions
+   UNION ALL SELECT 'institution_configs', count(*), NULL FROM institution_configs;
+   ```
+   Contagem igual com soma diferente denuncia corrupção de tipo — o erro que
+   passa despercebido quando só se contam linhas.
+5. **Aguardar o lag zerar:**
+   ```sql
+   SELECT slot_name, active,
+          pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn)) AS lag
+     FROM pg_replication_slots;
+   ```
+6. **Corte:** aplicação em read-only → lag a zero → repontar string de conexão
+   (**apontando leitura para o reader endpoint**) → retomar escrita.
+7. **`ANALYZE` no destino** — estatísticas **não** vêm pela replicação, e sem
+   isso o Aurora começa com o mesmo problema de estimativa medido abaixo:
+   ```sql
+   ANALYZE VERBOSE;
+   ```
+
+## (c) Riscos e mitigações
+
+| # | Risco | Prob. | Impacto | Mitigação |
+|---|---|---|---|---|
+| 1 | **Estatísticas não migram** → planner erra do lado novo | **Alta** | Médio | `ANALYZE` obrigatório no cutover (passo 7). É o risco medido neste próprio documento: 509.298 × 80.000 linhas |
+| 2 | **Bloat vai junto** — replicação copia dado lógico, não físico | **Alta** | Baixo | Aceitar (a cópia inicial já chega sem bloat) ou `VACUUM FULL` antes; Aurora não resolve bloat sozinho |
+| 3 | **`SERIAL` dessincroniza** — sequências não avançam pela replicação lógica | **Alta** | **Crítico** | `setval()` em toda sequência antes de liberar escrita. Esquecer = violação de PK na primeira inserção |
+| 4 | Slot de replicação órfão enche o WAL da origem | Média | Alto | Alerta de tamanho do slot; `DROP SUBSCRIPTION` remove o slot ao final |
+| 5 | `TIMESTAMP` sem fuso interpretado de forma diferente | Média | Alto | `timezone` idêntico nos dois; a dívida real é projeto à parte |
+| 6 | Aplicação com string de conexão fixa em código | Média | Médio | Endpoint por variável/Secrets Manager antes de migrar |
+| 7 | Custo acima do previsto (Serverless v2 escalando) | Média | Médio | Teto de ACU + alarme de billing na 1ª semana |
+| 8 | Ref-sync apontado para o writer por engano | Baixa | Médio | Apontar para o **reader**; é o ganho que a migração habilita |
+
+**O risco nº 3 é o que mais derruba migração de PostgreSQL** e o menos citado:
+a replicação lógica copia linhas, não o estado das sequências. O destino fica
+com todo o dado e `nextval()` em 1.
+
+```sql
+-- Antes de liberar escrita, para CADA sequência:
+SELECT setval('legacy_accounts_id_seq', (SELECT max(id) FROM legacy_accounts));
+SELECT setval('legacy_users_id_seq',    (SELECT max(id) FROM legacy_users));
+SELECT setval('partner_institutions_id_seq', (SELECT max(id) FROM partner_institutions));
+SELECT setval('institution_configs_id_seq',  (SELECT max(id) FROM institution_configs));
+```
+
+> Este projeto já esbarrou nesta classe de erro: na etapa 10, o seed assumia
+> `id` contíguo a partir de 1, e `SERIAL` **não é transacional** — um rollback
+> deixou buracos e quebrou a FK. A lição vale igual no cutover.
+
+## (d) Plano de rollback
+
+**Critério de aborto, decidido antes do corte** — sem isso a decisão vira
+discussão sob pressão:
+
+| Sintoma | Ação |
+|---|---|
+| Divergência de contagem ou checksum | **Aborta**, não corta |
+| Lag não zera em 15 min | **Aborta**, reagenda |
+| Erro de aplicação após o corte | Rollback imediato (abaixo) |
+| Latência > 2× a linha de base | Rollback se não normalizar em 30 min |
+
+**Janela de reversão: 72 h.** O legado fica **de pé e intacto**, em read-only,
+durante todo o período. Rollback é repontar a string de conexão de volta.
+
+```
+T+0h   Corte. Legado read-only, NÃO desligado.
+T+0-2h Validação intensiva: contagem, checksum, latência, erro de aplicação.
+T+2h   Replicação reversa (Aurora → legado) para não perder o que foi escrito
+       depois do corte. É o que torna o rollback real em vez de teórico.
+T+72h  Sem incidente → legado desativado (snapshot final antes).
+```
+
+**Rollback dentro das primeiras 2 h** (antes da replicação reversa): repontar
+a aplicação para o legado. Nada foi perdido — ele estava read-only, e o que
+entrou no Aurora precisa ser reaplicado à mão (volume pequeno nesse intervalo).
+
+**Rollback entre 2 h e 72 h:** a replicação reversa já mantém o legado
+atualizado. Repontar e promover para read-write.
+
+**Depois de 72 h** não há rollback — há **migração de volta**, com o mesmo
+procedimento em sentido inverso. Por isso a janela é explícita: chamar de
+"rollback" algo que exige uma migração completa é enganar a si mesmo no
+planejamento.
+
+## Custo, performance, HA — resumo
 
 | Critério | Atual (autogerenciado) | Aurora PostgreSQL |
 |---|---|---|
