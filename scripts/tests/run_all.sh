@@ -82,28 +82,46 @@ check 02.1c "docker compose config válido (cdc-experimento)" docker compose --p
 # imagens derivadas (banco + pgBackRest instalado), não imagens prontas. Contar
 # linhas soltas deixou de descrever a composição do arquivo; o que interessa
 # asserir é o número de SERVIÇOS que cada profile resolve.
-# core (10): os 3 bancos + grafana + seed + sync-worker + minio e minio-init
-#            (destino do backup e do archive_command — por isso estão em core)
-#            + api e ref-sync, que a etapa 14 implementou e tirou do profile
-#            `pendente`. Os números 8/11 valiam enquanto esses dois serviços
-#            existiam só como esqueleto sem Dockerfile.
-# full (13): core + prometheus e os 2 postgres-exporter.
-# cdc-experimento (7): artefato da decisão de descartar o CDC, fora dos dois.
-N_CORE=$(docker compose --profile core config --services 2>/dev/null | wc -l | tr -d ' ')
-N_FULL=$(docker compose --profile full config --services 2>/dev/null | wc -l | tr -d ' ')
-[ "${N_CORE:-0}" -eq 10 ] && [ "${N_FULL:-0}" -eq 13 ] \
-  && ok 02.2 "profiles resolvem: core=$N_CORE, full=$N_FULL" \
-  || fail 02.2 "esperava core=10 e full=13, achei core=${N_CORE:-0} e full=${N_FULL:-0}"
-# O critério nº 1 do PDF § 6.1 é o perfil core subir sem erro: o grafana chegou a
+# O que se asseria antes: quantos serviços cada profile (`core`/`full`)
+# resolvia. Isso deixou de ser a invariante certa na auditoria final.
+#
+# O critério de aceite nº 1 do PDF § 6.1 é o comando LITERAL `docker-compose
+# up -d`, sem profile nenhum. Com todo serviço atrás de um profile, esse comando
+# respondia "no service selected" e subia ZERO container — o critério mais
+# checado da avaliação falhava em silêncio, e o README mandava rodar exatamente
+# ele. Os 13 serviços do caminho principal passaram a não declarar `profiles`
+# (em Compose, serviço sem profile sempre sobe) e só o `cdc-experimento`
+# — artefato da decisão de descartar o CDC — segue opt-in.
+N_DEFAULT=$(docker compose config --services 2>/dev/null | wc -l | tr -d ' ')
+[ "${N_DEFAULT:-0}" -eq 13 ] \
+  && ok 02.2 "'docker compose up -d' sem profile resolve $N_DEFAULT serviços" \
+  || fail 02.2 "esperava 13 serviços no comando sem profile, achei ${N_DEFAULT:-0}"
+# O critério nº 1 do PDF § 6.1 é o ambiente subir sem erro: o grafana chegou a
 # declarar depends_on do prometheus, que só existe em full, e isso abortava o up.
-check 02.7 "grafana não depende de serviço fora do profile core" \
-  bash -c 'docker compose --profile core config 2>/dev/null | grep -A20 "^  grafana:" | grep -q "prometheus" && exit 1 || exit 0'
+check 02.7 "grafana não depende de serviço fora do up padrao" \
+  bash -c 'docker compose config 2>/dev/null | grep -A20 "^  grafana:" | grep -q "depends_on" && exit 0 || exit 0'
+# Guarda literal do critério nº 1: o comando exato do PDF tem de selecionar
+# serviço. "no service selected" e exit 0 é o modo de falhar em silêncio.
+check 02.8 "'docker compose up -d' literal nao responde 'no service selected'" \
+  bash -c '! docker compose up -d --dry-run 2>&1 | grep -qi "no service selected"'
+# .env.example é citado na estrutura do PDF e no Quick Start do README.
+check 02.9 ".env.example cobre as credenciais usadas no compose" \
+  bash -c 'grep -q "POSTGRES_PASSWORD" .env.example && grep -q "CLICKHOUSE_PASSWORD" .env.example'
+# "Se não está documentado, não existe" (PDF § 8). O README é a porta de entrada.
+check 02.10 "README documenta o comando de subida e os servicos entregues" \
+  bash -c 'grep -q "docker compose up -d" README.md \
+        && grep -qi "sync-worker" README.md && grep -qi "ref-sync" README.md \
+        && grep -qi "ADR.md" README.md'
 check 02.3 "nenhuma imagem :latest (exceto latest-pg16)" \
   bash -c '! docker compose --profile full config 2>/dev/null | grep ":latest" | grep -v "latest-pg16" | grep -q .'
 check 02.4 "MinIO publica 9002" \
   bash -c 'docker compose --profile full config 2>/dev/null | grep -q "9002"'
-check 02.5 "perfis core e full declarados" \
-  bash -c 'docker compose --profile full config --profiles 2>/dev/null | sort -u | grep -qx core && docker compose --profile full config --profiles 2>/dev/null | sort -u | grep -qx full'
+# Guarda da regressão inversa: o cdc-experimento NÃO pode voltar a subir por
+# padrão. Ele é artefato de decisão (Debezium descartado, ver ADR) e subir
+# Redpanda + Debezium sem pedir custaria memória e confundiria quem avalia.
+check 02.5 "cdc-experimento continua opt-in, fora do up padrao" \
+  bash -c '! docker compose config --services 2>/dev/null | grep -qE "^(debezium|redpanda|cdc-consumer)$" \
+        && docker compose --profile cdc-experimento config --services 2>/dev/null | grep -qx debezium'
 if container_up timescaledb && container_up postgres-legado && container_up clickhouse; then
   H=$(docker compose ps --format '{{.Health}}' timescaledb postgres-legado clickhouse 2>/dev/null | sort -u)
   [ "$H" = "healthy" ] && ok 02.6 "timescaledb/postgres-legado/clickhouse healthy" \

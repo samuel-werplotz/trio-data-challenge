@@ -27,7 +27,6 @@ services:
     image: trio/timescaledb-pgbackrest:pg16
     container_name: trio-timescaledb
     restart: unless-stopped
-    profiles: ["core", "full", "cdc-experimento"]
     # default de 64MB do Docker estoura em hash join grande (ex.: Q4 self-join
     # de S06, o anti-padrão medido de propósito na etapa 06) — sem isso a query
     # nem chega a rodar para ser medida.
@@ -112,7 +111,6 @@ services:
     image: trio/postgres-legado-pgbackrest:16
     container_name: trio-postgres-legado
     restart: unless-stopped
-    profiles: ["core", "full"]
     ports:
       - "5433:5432"
     environment:
@@ -166,7 +164,6 @@ services:
     image: clickhouse/clickhouse-server:24.8
     container_name: trio-clickhouse
     restart: unless-stopped
-    profiles: ["core", "full", "cdc-experimento"]
     ports:
       - "8123:8123"   # HTTP
       - "9000:9000"   # Native
@@ -208,7 +205,6 @@ services:
     image: grafana/grafana:11.3.0
     container_name: trio-grafana
     restart: unless-stopped
-    profiles: ["core", "full"]
     ports:
       - "3000:3000"
     environment:
@@ -247,7 +243,6 @@ services:
     build:
       context: ./desafio-1/seed
     container_name: trio-seed
-    profiles: ["core", "full"]
     environment:
       <<: *pg-common
     depends_on:
@@ -270,7 +265,6 @@ services:
       context: ./desafio-2/pipeline/sync-worker
     container_name: trio-sync-worker
     restart: unless-stopped
-    profiles: ["core", "full"]
     ports:
       - "8001:8001"   # metricas Prometheus
     environment:
@@ -411,7 +405,6 @@ services:
       context: ./desafio-2/pipeline/ref-sync
     container_name: trio-ref-sync
     restart: unless-stopped
-    profiles: ["core", "full"]
     ports:
       - "8002:8002"   # metricas Prometheus (frescor do Dictionary)
     environment:
@@ -440,7 +433,6 @@ services:
       context: ./desafio-2/pipeline/api
     container_name: trio-api
     restart: unless-stopped
-    profiles: ["core", "full"]
     ports:
       - "8000:8000"
     environment:
@@ -461,7 +453,6 @@ services:
     image: prom/prometheus:v2.54.1
     container_name: trio-prometheus
     restart: unless-stopped
-    profiles: ["full"]
     ports:
       - "9090:9090"
     volumes:
@@ -479,7 +470,6 @@ services:
     image: prometheuscommunity/postgres-exporter
     container_name: trio-pg-exporter-ts
     restart: unless-stopped
-    profiles: ["full"]
     ports:
       - "9187:9187"
     environment:
@@ -499,7 +489,6 @@ services:
     image: prometheuscommunity/postgres-exporter
     container_name: trio-pg-exporter-legado
     restart: unless-stopped
-    profiles: ["full"]
     ports:
       - "9188:9187"
     environment:
@@ -523,7 +512,6 @@ services:
     # 'core' desde o E4: e o destino dos backups dos 3 bancos, e o
     # archive_command do WAL escreve nele a cada segmento. Entra tambem em
     # cdc-experimento porque os bancos dependem dele para subir.
-    profiles: ["core", "full", "cdc-experimento"]
     ports:
       - "9002:9000"
       - "9001:9001"
@@ -557,7 +545,6 @@ services:
   minio-init:
     image: minio/mc
     container_name: trio-minio-init
-    profiles: ["core", "full", "cdc-experimento"]
     depends_on:
       minio:
         condition: service_healthy
@@ -565,30 +552,6 @@ services:
       sh -c "mc --insecure alias set trio https://minio:9000 ${MINIO_ROOT_USER:-trio} ${MINIO_ROOT_PASSWORD:-trio12345} &&
              mc --insecure mb --ignore-existing trio/trio-backups &&
              echo 'bucket trio-backups pronto'"
-
-  # ===========================================================================
-  #  15. backup — pgBackRest / clickhouse-backup agendado (desafio-3/backup)
-  # ===========================================================================
-  # profile 'pendente' ate a etapa E4 (pgBackRest 2 stanzas + clickhouse-backup).
-  # E4 tambem religa o archive_mode do timescaledb, hoje off por falta do binario.
-  backup:
-    build:
-      context: ./desafio-3/backup
-    container_name: trio-backup
-    profiles: ["pendente"]
-    environment:
-      <<: *pg-common
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-trio}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-trio2024}
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-trio}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-trio12345}
-    depends_on:
-      minio:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 512M
 
 volumes:
   timescaledb_data:
