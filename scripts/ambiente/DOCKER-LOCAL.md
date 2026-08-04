@@ -9,8 +9,8 @@ Ambiente real de execução. **Enquanto houver `<PREENCHER>` neste arquivo, toda
 - RAM disponível para Docker: **8.3 GB** (`docker info --format '{{.MemTotal}}'` = 8329084928 bytes) ← **abaixo dos 32GB que S08 assume**. Ver nota de risco abaixo.
 - Disco livre: **282 GB** livres no drive C: (925 GB total, 644 GB usados) — folgado para seed ~4GB + backups + WAL
 - Portas livres 5432/5433/8123/9000/3000/9092/8083/9090/9002/8000/8001/8002: **todas livres** (verificado com ambiente derrubado via `docker compose --profile full down`)
-- Seed de 10M concluído: não (etapa 05 ainda BLOQUEADA — aguardando esta ficha)
-- Tempo real do seed: —
+- Seed de 10M concluído: **sim** — 2026-08-04
+- Tempo real do seed: **1m57s** (10.000.000 linhas, 84.874 linhas/s médio, 6 workers paralelos). Muito abaixo do alvo de ~20min de S02 — a estimativa do vault assumia hardware mais modesto; 8.3GB de RAM local + `COPY BINARY` em lotes de 50k performou bem acima do esperado.
 - WSL2 backend ativo: **sim** (`Kernel Version: 6.6.87.2-microsoft-standard-WSL2`, `Operating System: Docker Desktop`)
 
 ## Como preencher

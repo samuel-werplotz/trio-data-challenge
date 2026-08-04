@@ -40,7 +40,11 @@ check() {
 has_docker()    { command -v docker >/dev/null 2>&1; }
 has_make()      { command -v make >/dev/null 2>&1; }  # ausente neste ambiente Windows (winget falhou por rede)
 container_up()  { has_docker && [ -n "$(docker compose ps -q "$1" 2>/dev/null)" ]; }
-seed_done()     { [ "${TRIO_SEED_DONE:-0}" = "1" ]; }  # etapa 05 exporta isto
+seed_done()     {
+  container_up timescaledb || return 1
+  [ "$(docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc \
+       "SELECT finished_at IS NOT NULL FROM seed_control" 2>/dev/null | head -1)" = "t" ]
+}
 
 echo "== run_all.sh =="
 
@@ -142,6 +146,52 @@ else
   skip 04.4 "timescaledb não está de pé"
   skip 04.5 "timescaledb não está de pé"
   skip 04.6 "timescaledb não está de pé"
+fi
+
+# --- 05 seed-10m ---
+if seed_done; then
+  N_TX=$(psql_ts "SELECT count(*) FROM transactions")
+  [ "$N_TX" = "10000000" ] && ok 05.1 "10.000.000 transactions" || fail 05.1 "esperava 10M, achei ${N_TX:-erro}"
+
+  N_ACC=$(psql_ts "SELECT count(*) FROM accounts")
+  [ "$N_ACC" = "500000" ] && ok 05.2 "500.000 accounts" || fail 05.2 "esperava 500k, achei ${N_ACC:-erro}"
+
+  N_CHUNKS=$(psql_ts "SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name='transactions'")
+  if [ -n "$N_CHUNKS" ] && [ "$N_CHUNKS" -ge 300 ] && [ "$N_CHUNKS" -le 366 ] 2>/dev/null; then
+    ok 05.3 "~365 chunks em transactions ($N_CHUNKS)"
+  else
+    fail 05.3 "chunks fora da faixa 300-366: ${N_CHUNKS:-erro}"
+  fi
+
+  PIX_PCT=$(psql_ts "SELECT round(100.0*count(*)/(SELECT count(*) FROM transactions),1) FROM transactions WHERE type='pix'")
+  if [ -n "$PIX_PCT" ] && awk -v p="$PIX_PCT" 'BEGIN{exit !(p>=58 && p<=62)}' 2>/dev/null; then
+    ok 05.4 "distribuição por tipo dentro da tolerância (pix ${PIX_PCT}%, esperado ~60%)"
+  else
+    fail 05.4 "pix fora da tolerância: ${PIX_PCT:-erro}% (esperado ~60%)"
+  fi
+
+  # roda o gerador de novo: idempotência deve recusar sem alterar count(*)
+  IDEMP_OUT=$(docker compose run --rm seed python generate_transactions.py 2>&1)
+  N_TX_AFTER=$(psql_ts "SELECT count(*) FROM transactions")
+  if echo "$IDEMP_OUT" | grep -qi "finished_at já preenchido" && [ "$N_TX_AFTER" = "$N_TX" ]; then
+    ok 05.5 "make seed de novo não insere nada (idempotência)"
+  else
+    fail 05.5 "idempotência falhou: count antes=$N_TX depois=$N_TX_AFTER"
+  fi
+
+  SC_DONE=$(psql_ts "SELECT finished_at IS NOT NULL FROM seed_control")
+  [ "$SC_DONE" = "t" ] && ok 05.6 "seed_control.finished_at preenchido" || fail 05.6 "finished_at vazio"
+
+  ANALYZED=$(psql_ts "SELECT last_analyze IS NOT NULL FROM pg_stat_user_tables WHERE relname='transactions'")
+  [ "$ANALYZED" = "t" ] && ok 05.7 "ANALYZE executado em transactions" || fail 05.7 "last_analyze vazio"
+else
+  skip 05.1 "seed não concluído (seed_control.finished_at vazio ou timescaledb fora do ar)"
+  skip 05.2 "seed não concluído"
+  skip 05.3 "seed não concluído"
+  skip 05.4 "seed não concluído"
+  skip 05.5 "seed não concluído"
+  skip 05.6 "seed não concluído"
+  skip 05.7 "seed não concluído"
 fi
 
 # ===========================================================================

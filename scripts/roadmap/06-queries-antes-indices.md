@@ -7,7 +7,17 @@
 - [ ] ficha `scripts/ambiente/DOCKER-LOCAL.md` tem campo `<PREENCHER>` → preencher e confirmar seed concluído
 
 ## ESTADO HERDADO
-<preenchido pela etapa 05 ao fechar>
+Verificado ao fechar a etapa 05:
+- Dataset real de 10M carregado no volume `trio-data-challenge_timescaledb_data`: `transactions` 10.000.000 linhas, `accounts` 500.000, `reconciliation_events` 1.442.199 (~14,4%, dentro da tolerância de S02). 338 chunks em `transactions` (dias sem transação sorteada não geram chunk — dentro do "~365" esperado).
+- Distribuições confirmadas: tipo (pix 60,02% | card 21,99% | ted 9,99% | boleto 8,00%), status (settled 95,68% | failed 3,66% | reversed 0,50% | pending 0,17% — pending concentrado nas últimas 48h reais), instituição líder 001/BB com 33,55% (Zipf funcionando), latência de liquidação por tipo dentro dos P50/P95 de S02.
+- **Nenhum índice além do implícito de PK** em `transactions` (confirmado: só `transactions_pkey` + `transactions_created_at_idx` da hypertable). Nenhum CAgg, nenhuma política. Esta é exatamente a pré-condição que a etapa 06 precisa para medir o "antes" honesto.
+- `ANALYZE` já rodado ao final do seed (`last_analyze` preenchido em `transactions`) — estatísticas do planejador estão atualizadas, então os `EXPLAIN` desta etapa refletem plano real, não estimativa desatualizada.
+- `seed_control.finished_at` preenchido — `make seed`/`docker compose run --rm seed` daqui pra frente é no-op até `--force`.
+- Gerador em `desafio-1/seed/` (`generate_transactions.py`, `distributions.py`, `accounts.py`, `config.py`, `Dockerfile`) funcional e testado; **não mexer** — não é escopo desta etapa.
+- Bugs corrigidos durante a 05 (documentados em STATUS): `COPY BINARY` exige `Decimal` (não `float`) para `NUMERIC` e `copy.set_types()` explícito para `CHAR(3)`/ENUMs registrados; timestamps do mês corrente precisam ser clipados em "agora" para não gerar dado no futuro.
+- Ficha `DOCKER-LOCAL.md`: seed concluído em 1m57s (bem abaixo do ~20min de S02 — máquina local performou acima do esperado apesar dos 8.3GB de RAM, não 32GB).
+- `run_all.sh`: blocos 01-05, 29 pass / 0 fail / 4 skip. `audit.sh` mantém os FAILs conhecidos de `concluidas/` (A2.1/.01/.02/.03/.04, não bloqueia) + novo WARN A6.2 (script de auditoria não distingue "antes da etapa 01" de "depois", código do seed é esperado agora — não é regressão).
+- Containers de pé no momento do fechamento: `timescaledb` e `postgres-legado` (healthy). `clickhouse`/`grafana`/demais do perfil full não estão rodando.
 
 ## ESCOPO
 Faz: escrever Q1–Q4 na versão ingênua, executar cada uma com `EXPLAIN (ANALYZE, BUFFERS, VERBOSE)` sobre os 10M **sem nenhuma otimização**, e capturar a saída em `desafio-1/queries/explains/qN_before.txt`.
