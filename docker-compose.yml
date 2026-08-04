@@ -252,7 +252,7 @@ services:
   #  7. Debezium Connect — captura CDC do TimescaleDB (pgoutput)
   # ===========================================================================
   debezium:
-    image: debezium/connect:2.7
+    image: debezium/connect:2.7.3.Final
     container_name: trio-debezium
     restart: unless-stopped
     profiles: ["full"]
