@@ -83,7 +83,7 @@ Critérios atendidos → testes no `run_all.sh` → `run_all.sh` sem FAIL → `E
 - [x] 09 lgpd-sanitizacao · local
 - [x] 10 legado-e-migracao-aurora · compose
 - [x] 11 schema-clickhouse · compose
-- [ ] 12 backfill-e-query-subsegundo · B
+- [x] 12 backfill-e-query-subsegundo · B
 - [ ] 13 pipeline-cdc · B
 - [ ] 14 ref-sync-api-e-adr · compose
 - [ ] 15 backup-observabilidade-e-incidente · compose

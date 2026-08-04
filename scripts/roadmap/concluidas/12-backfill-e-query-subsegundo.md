@@ -32,13 +32,13 @@ Não faz: **não passa pelo Kafka** — o backfill dos 10M é direto PG→ClickH
 8. Acrescentar o bloco `# --- 12 backfill-e-query-subsegundo ---` em `scripts/tests/run_all.sh`.
 
 ## CRITÉRIOS DE ACEITE
-- [ ] `SELECT count(*) FROM transactions_raw` = 10.000.000
-- [ ] `count() FINAL` bate com o `count(*)` (sem duplicata introduzida pelo backfill)
-- [ ] Contagem por mês bate com a origem nos 12 meses
-- [ ] As 2 MVs estão populadas e seus agregados batem com a agregação direta na raw
-- [ ] Query Pix 24h vs D-1 mede **< 1000 ms** em `system.query_log`, mediana de 3
-- [ ] O número medido está registrado no `REPORT.md`, com `read_rows`
-- [ ] Backfill não passou pelo Kafka
+- [x] `SELECT count(*) FROM transactions_raw` = 10.000.000
+- [x] `count() FINAL` bate com o `count(*)` (sem duplicata introduzida pelo backfill)
+- [x] Contagem por mês bate com a origem nos 12 meses
+- [x] As 2 MVs estão populadas e seus agregados batem com a agregação direta na raw
+- [x] Query Pix 24h vs D-1 mede **< 1000 ms** em `system.query_log`, mediana de 3 (medido: 7ms)
+- [x] O número medido está registrado no `REPORT.md`, com `read_rows` (5.882)
+- [x] Backfill não passou pelo Kafka (`postgresql()` table function, direto PG→CH)
 
 ## TESTES
 | id | trilha | comando | esperado |
@@ -60,16 +60,19 @@ TRUNCATE TABLE status_funnel;"
 > Destrutivo: apaga o backfill. O schema (etapa 11) permanece. Confirmar antes de rodar.
 
 ## STATUS
-Estado: BLOQUEADA
-Premissas assumidas: —
-Desvios do plano: —
+Estado: CONCLUÍDA
+Premissas assumidas:
+- `scripts/backfill-clickhouse.sh` na raiz de `scripts/`, não em `desafio-1/scripts/` — este é backfill de infraestrutura (PG→CH), não um demo de feature do desafio 1 como `retention-demo.sh`/`lgpd-erasure-demo.sh`.
+- Query do Grafana salva em `desafio-1/queries/grafana_pix_24h_vs_d1.sql` (não existia local definido no ESCOPO).
+
+Desvios do plano: 3, todos em `99-validacao-final.md` — MV já ativa duplicando o backfill (achado real, não do plano); query ilustrativa de S04 não compilava contra o schema real (`countIfMerge` vs `status` no GROUP BY); teste `11.6` invalidado por avanço legítimo de escopo.
 
 ## FECHAMENTO
-- [ ] Critérios atendidos
-- [ ] Testes no run_all.sh
-- [ ] run_all.sh sem FAIL
-- [ ] ESTADO HERDADO da próxima preenchido
-- [ ] Bloco no LOG-EXECUCAO.md
-- [ ] Desvio? → atualizar 99-validacao-final.md
+- [x] Critérios atendidos
+- [x] Testes no run_all.sh (12.1–12.7)
+- [x] run_all.sh sem FAIL — 81 pass / 0 fail / 3 skip
+- [x] ESTADO HERDADO da próxima preenchido
+- [x] Bloco no LOG-EXECUCAO.md
+- [x] Desvio? → atualizado 99-validacao-final.md
 - [ ] Commit checkpoint
 - [ ] Mover pra concluidas/. Marcar [x] no CLAUDE.md

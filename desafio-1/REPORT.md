@@ -203,6 +203,79 @@ As colunas foram mantidas porque o schema é contrato de S03, mas ambas levam
 comentário de aviso no DDL, e a Q3 via CAgg **não** calcula taxa de falha —
 essa vem do `cagg_volume_hourly`, que agrega por `status` sem filtrar nada.
 
+## ClickHouse — backfill e query sub-segundo (etapa 12)
+
+Backfill direto PostgreSQL→ClickHouse via `postgresql()` table function, em
+12 blocos mensais (S05 § Backfill inicial), sem passar pelo Kafka —
+`scripts/backfill-clickhouse.sh`, 56s no total.
+
+| Verificação | Resultado |
+|---|---|
+| `count(*)` em `transactions_raw` | 10.000.000 (bate com a origem) |
+| `count() FINAL` (dedup) | 10.000.000 — sem duplicata introduzida pelo backfill |
+| Contagem por mês (12 blocos) CH vs PG | idêntica nos 12 meses |
+| `countMerge` total em `daily_by_institution` | 10.000.000 |
+| `countMerge` total em `status_funnel` | 10.000.000 |
+
+### A armadilha real: MV já ativa duplica o backfill
+
+As 2 MVs (criadas na etapa 11) são **gatilho de inserção**, não view — e já
+estavam ativas quando o backfill do raw rodou. Elas capturaram sozinhas cada
+um dos 12 blocos mensais inseridos em `transactions_raw`. Rodar o
+`INSERT SELECT` de backfill das MVs *depois* disso (como S04 descreve para o
+cenário "MV criada depois do dado já carregado") duplicou tudo: **20.000.000
+agregados em vez de 10.000.000**, verificado com `countMerge` agrupado.
+
+Corrigido truncando as 2 tabelas de agregação e rodando o `INSERT SELECT`
+uma única vez, sem novo `INSERT` em `transactions_raw` no meio — aí sim os
+20M viraram 10M exatos. `scripts/backfill-clickhouse.sh` agora checa se a
+tabela de agregação já tem linhas antes de rodar o `INSERT SELECT`, para não
+reproduzir o erro numa reexecução.
+
+**A lição, além do número:** "MV é gatilho, backfill posterior é obrigatório"
+(S04) é meia verdade sem o contexto de *quando* a MV foi criada em relação
+ao backfill do raw. Aqui a ordem real (schema com MV ativa → backfill do raw)
+é diferente do cenário canônico que S04 descreve (dado já carregado → MV
+criada depois) — e a mesma frase de aviso vira armadilha inversa se aplicada
+sem atenção à ordem real dos eventos.
+
+### Query do Grafana em sub-segundo — Pix 24h vs D-1
+
+Requisito do PDF: taxa de sucesso de Pix por instituição por hora nas
+últimas 24h, comparada ao mesmo horário do dia anterior, sub-segundo mesmo
+com centenas de milhões de registros.
+
+Protocolo de S04 § Como medimos: `SET log_queries=1`, `SYSTEM FLUSH LOGS`,
+mediana de 3 execuções (1ª descartada) via `system.query_log`.
+
+| Execução | `query_duration_ms` | `read_rows` |
+|---|---|---|
+| 1 (descartada) | 10 | 5.882 |
+| 2 | 7 | 5.882 |
+| 3 | 7 | 5.882 |
+| 4 | 46 | 5.882 |
+
+**Mediana: 7 ms** — muito abaixo do alvo de <1000ms. `read_rows` = 5.882 em
+todas as execuções (a MV agregada, não os 10M da raw).
+
+Os 4 fatores que entregam o sub-segundo (comentados em
+`desafio-1/queries/grafana_pix_24h_vs_d1.sql`): lê de `status_funnel`
+(MV agregada, dezenas de milhares de linhas) em vez da raw; uma passada
+para os dois períodos (48h com classificação por `if()`, não 2 SELECTs);
+`type='pix'` é a 1ª coluna do `ORDER BY` de `status_funnel` — índice esparso
+corta a maior parte do dado logo no início; filtro de 48h toca no máximo
+2 partições mensais.
+
+**Correção real sobre a query ilustrativa de S04:** o SQL de referência usa
+`countIfMerge(cnt)` assumindo que `cnt` já veio de um `countIfState`
+filtrado por sucesso. Na nossa `status_funnel`, `status` é coluna do
+`GROUP BY` (uma linha por hora/instituição/status), e `cnt` foi gravado com
+`countState()` puro — `countIfMerge` sobre um estado sem filtro embutido dá
+`ILLEGAL_TYPE_OF_ARGUMENT`. A query real deriva "sucesso" filtrando
+`status='settled'` na leitura (`sumIf` sobre o valor já desagregado por
+`countMerge`), não na agregação. Erro pego rodando a query de verdade, não
+copiando o SQL de S04 sem testar.
+
 ## Ambiente
 
 `shm_size: 1gb` no serviço `timescaledb` (default do Docker é 64 MB): sem

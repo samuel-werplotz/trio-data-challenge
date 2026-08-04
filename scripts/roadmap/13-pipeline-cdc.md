@@ -8,7 +8,16 @@
 - [ ] 2h sem CDC funcionando sobre hypertable → **PARAR, relatar, aguardar decisão**. Acionar o plano B (micro-batch por watermark) é decisão de arquitetura, não do agente — mesmo estando previsto em S05
 
 ## ESTADO HERDADO
-<preenchido pela etapa 12 ao fechar>
+Verificado ao fechar a etapa 12:
+- **Backfill completo**: `transactions_raw` com 10.000.000 linhas, `count() FINAL` idêntico (sem duplicata), contagem por mês bate exatamente com o TimescaleDB nos 12 meses. As 2 MVs (`daily_by_institution`, `status_funnel`) populadas e conferidas contra agregação direta na raw. Backfill rodou **direto PG→ClickHouse via `postgresql()`**, sem Kafka — `scripts/backfill-clickhouse.sh`.
+- **Ordem obrigatória cumprida até aqui**: schema ClickHouse (11) → backfill raw (12) → backfill MVs (12) → **falta só o conector Debezium**, que é exatamente o escopo desta etapa. Registrá-lo antes do backfill teria causado corrida entre as duas escritas — não é o caso, backfill já terminou.
+- **Armadilha real encontrada no backfill**: as 2 MVs já eram gatilho de inserção ativo quando o backfill do raw rodou, e capturaram os 12 blocos sozinhas — um `INSERT SELECT` de backfill rodado depois duplicou tudo (20M vs 10M). Corrigido truncando e reaplicando uma vez. **Relevante para esta etapa**: se o conector Debezium for registrado e depois algum re-processamento de MV for necessário, a mesma armadilha se aplica — checar se a MV já capturou antes de rodar `INSERT SELECT` de novo.
+- **Query do Grafana Pix 24h vs D-1 medida**: mediana 7ms, muito abaixo do alvo de 1000ms, `read_rows`=5.882 (lê da MV agregada). A query ilustrativa de S04 (`countIfMerge`) não rodava contra o schema real — corrigida em `desafio-1/queries/grafana_pix_24h_vs_d1.sql`.
+- `postgres-legado`: inalterado desde a etapa 10 — schema, seed e bloat presentes; é a origem do `dict_institutions` usado pelas queries do ClickHouse.
+- `timescaledb`: inalterado desde a etapa 09 — 10.000.000 `transactions`, 2 CAggs, compressão e retenção ativas. **É a origem que o Debezium vai capturar via CDC** a partir de agora.
+- **`docker compose --profile core` continua quebrado** (bug pré-existente, `grafana`→`prometheus`, não desta trilha de etapas) — subir serviços novos por nome direto (`docker compose up -d <serviço>`), não via `--profile`.
+- Containers de pé: `timescaledb`, `postgres-legado`, `clickhouse`, todos healthy. **Redpanda/Debezium Connect ainda não subiram** — são desta etapa.
+- `run_all.sh`: blocos 01–12, **81 pass / 0 fail / 3 skip**. `audit.sh`: 83 pass / 0 fail / 1 warn / 1 skip. Três desvios em `99-validacao-final.md`: duplicação do backfill de MV corrigida; query ilustrativa de S04 corrigida; teste `11.6` ajustado por avanço de escopo.
 
 ## ESCOPO
 Faz: publication manual com `publish_via_partition_root = true`, registro do conector Debezium (`pgoutput`, `snapshot.mode: no_data`, RegexRouter como rede de segurança), consumidor Python com DLQ, retry exponencial e métricas Prometheus em `:8001/metrics`, e `scripts/demo-mutation.sh`.

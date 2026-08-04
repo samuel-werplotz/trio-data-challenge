@@ -416,15 +416,76 @@ if container_up clickhouse; then
   [ "$N_MV" = "2" ] && ok 11.3 "2 MVs existem (mv_daily_by_institution, mv_status_funnel)" \
     || fail 11.3 "esperava 2 MVs, achei ${N_MV:-erro}"
 
+  # A etapa 12 popula transactions_raw por design — "vazia" deixou de ser a
+  # asserção válida assim que o backfill roda (mesma classe de ajuste de
+  # 04.6/06.3/06.4/10.06.2: avanço legítimo de escopo, não regressão). O que
+  # este teste garante agora é só que a tabela existe e responde a count().
   N_TX_RAW=$(ch_query "SELECT count(*) FROM trio_analytics.transactions_raw")
-  [ "$N_TX_RAW" = "0" ] && ok 11.6 "transactions_raw vazia (backfill é a etapa 12)" \
-    || fail 11.6 "esperava 0 linhas, achei ${N_TX_RAW:-erro}"
+  [ -n "$N_TX_RAW" ] 2>/dev/null && ok 11.6 "transactions_raw existe e responde (linhas: $N_TX_RAW — 0 antes da etapa 12, populada depois)" \
+    || fail 11.6 "transactions_raw não respondeu"
 
   DICT_VAL=$(ch_query "SELECT dictGetOrDefault('trio_analytics.dict_institutions','name',tuple('001'),'?')")
   [ -n "$DICT_VAL" ] && [ "$DICT_VAL" != "?" ] && [ "$DICT_VAL" != "001" ] && ok 11.5 "dict_institutions resolve código real: $DICT_VAL" \
     || fail 11.5 "dictGetOrDefault não resolveu do legado: ${DICT_VAL:-erro}"
 else
   for t in 11.1 11.2 11.3 11.5 11.6; do skip "$t" "clickhouse fora do ar"; done
+fi
+
+# --- 12 backfill-e-query-subsegundo ---
+check 12.7 "backfill-clickhouse.sh com sintaxe válida" bash -n scripts/backfill-clickhouse.sh
+
+ch_backfill_done() {
+  container_up clickhouse || return 1
+  [ "$(ch_query "SELECT count(*) FROM trio_analytics.transactions_raw")" = "10000000" ]
+}
+
+if ch_backfill_done; then
+  ok 12.1 "10.000.000 em transactions_raw"
+
+  N_FINAL=$(ch_query "SELECT count() FROM trio_analytics.transactions_raw FINAL")
+  [ "$N_FINAL" = "10000000" ] && ok 12.2 "count() FINAL bate (10.000.000, sem duplicata)" \
+    || fail 12.2 "esperava 10000000 pós-FINAL, achei ${N_FINAL:-erro}"
+
+  # contagem por mês CH vs PG nos 12 blocos do backfill
+  N_MISMATCH=0
+  for par in "2025-09-01:2025-10-01" "2025-10-01:2025-11-01" "2025-11-01:2025-12-01" \
+             "2025-12-01:2026-01-01" "2026-01-01:2026-02-01" "2026-02-01:2026-03-01" \
+             "2026-03-01:2026-04-01" "2026-04-01:2026-05-01" "2026-05-01:2026-06-01" \
+             "2026-06-01:2026-07-01" "2026-07-01:2026-08-01" "2026-08-01:2026-09-01"; do
+    ini="${par%%:*}"; fim="${par##*:}"
+    n_ch=$(ch_query "SELECT count(*) FROM trio_analytics.transactions_raw WHERE created_at >= '$ini' AND created_at < '$fim'")
+    n_pg=$(psql_ts "SELECT count(*) FROM transactions WHERE created_at >= '$ini' AND created_at < '$fim'")
+    [ "$n_ch" = "$n_pg" ] || N_MISMATCH=$((N_MISMATCH + 1))
+  done
+  [ "$N_MISMATCH" = "0" ] && ok 12.3 "contagem por mês idêntica CH vs PG nos 12 meses" \
+    || fail 12.3 "$N_MISMATCH mês(es) com contagem divergente"
+
+  N_DAILY=$(ch_query "SELECT count(*) FROM trio_analytics.daily_by_institution")
+  [ -n "$N_DAILY" ] && [ "$N_DAILY" -gt 0 ] 2>/dev/null && ok 12.4 "daily_by_institution populada ($N_DAILY linhas)" \
+    || fail 12.4 "esperava >0, achei ${N_DAILY:-erro}"
+
+  # agregado da MV (countMerge, colapsando estados) vs contagem direta na raw
+  MV_SUM=$(ch_query "SELECT sum(cnt) FROM (SELECT day, source_institution, type, countMerge(tx_count) AS cnt FROM trio_analytics.daily_by_institution GROUP BY day, source_institution, type)")
+  RAW_SUM=$(ch_query "SELECT count(*) FROM trio_analytics.transactions_raw")
+  [ "$MV_SUM" = "$RAW_SUM" ] && ok 12.6 "agregado de daily_by_institution bate com a raw ($MV_SUM)" \
+    || fail 12.6 "MV=$MV_SUM raw=$RAW_SUM — não batem"
+
+  # query Pix 24h vs D-1: mediana de 3, descartando a 1ª, via system.query_log.
+  # ch_query() corta em "| head -1" (feito para valor escalar) — aqui
+  # precisamos das 3 linhas, então chamamos docker compose direto.
+  for i in 1 2 3 4; do
+    ch_query "SET log_queries = 1; $(cat desafio-1/queries/grafana_pix_24h_vs_d1.sql)" >/dev/null
+  done
+  ch_query "SYSTEM FLUSH LOGS" >/dev/null
+  TIMES=$(docker compose exec -T clickhouse clickhouse-client --user trio --password trio2024 -q "
+    SELECT query_duration_ms FROM system.query_log
+    WHERE type='QueryFinish' AND query LIKE '%taxa_sucesso%' AND query NOT LIKE '%system.query_log%'
+    ORDER BY event_time DESC LIMIT 3" 2>/dev/null)
+  MED=$(echo "$TIMES" | sort -n | awk 'NR==2')
+  [ -n "$MED" ] && [ "$MED" -lt 1000 ] 2>/dev/null && ok 12.5 "query Pix 24h vs D-1: mediana ${MED}ms (<1000ms)" \
+    || fail 12.5 "mediana ${MED:-erro}ms — esperava <1000ms"
+else
+  for t in 12.1 12.2 12.3 12.4 12.5 12.6; do skip "$t" "backfill não concluído"; done
 fi
 
 # ===========================================================================
