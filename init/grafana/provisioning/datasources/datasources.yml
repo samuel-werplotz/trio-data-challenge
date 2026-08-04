@@ -1,0 +1,57 @@
+# =============================================================================
+#  Grafana — Provisioning de Datasources
+#  Todos os bancos da Trio pré-configurados para uso imediato
+# =============================================================================
+
+apiVersion: 1
+
+datasources:
+  # TimescaleDB — Banco transacional principal
+  - name: TimescaleDB
+    type: postgres
+    access: proxy
+    url: timescaledb:5432
+    database: trio_transactions
+    user: trio
+    secureJsonData:
+      password: trio2024
+    jsonData:
+      sslmode: disable
+      maxOpenConns: 10
+      maxIdleConns: 5
+      connMaxLifetime: 14400
+      postgresVersion: 1600
+      timescaledb: true
+    isDefault: true
+    editable: true
+
+  # PostgreSQL Legado
+  - name: PostgreSQL Legado
+    type: postgres
+    access: proxy
+    url: postgres-legado:5432
+    database: trio_legado
+    user: trio
+    secureJsonData:
+      password: trio2024
+    jsonData:
+      sslmode: disable
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+      postgresVersion: 1600
+    editable: true
+
+  # ClickHouse — Aplicações e consultas
+  - name: ClickHouse
+    type: grafana-clickhouse-datasource
+    access: proxy
+    jsonData:
+      host: clickhouse
+      port: 9000
+      protocol: native
+      username: trio
+      defaultDatabase: trio_analytics
+    secureJsonData:
+      password: trio2024
+    editable: true

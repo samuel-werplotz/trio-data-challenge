@@ -1,0 +1,199 @@
+###############################################################################
+#  Trio Grupo Financeiro — Desafio Técnico: Engenheiro de Dados Sênior
+#  docker-compose.yml (ambiente base)
+#
+#  Uso:
+#    cp .env.example .env
+#    docker-compose up -d
+#
+#  Serviços:
+#    - TimescaleDB 2.x  (porta 5432) — banco transacional principal
+#    - PostgreSQL 16     (porta 5433) — legado transacional
+#    - ClickHouse        (porta 8123 HTTP / 9000 native) — aplicações e consultas
+#    - Grafana           (porta 3000) — dashboards
+#
+#  Este arquivo é o ponto de partida. Evolua conforme necessário:
+#  adicione volumes, scripts de init, serviços extras (Kafka, Debezium, etc).
+###############################################################################
+
+version: "3.9"
+
+x-common-env: &pg-common
+  POSTGRES_USER: ${POSTGRES_USER:-trio}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trio2024}
+
+services:
+  # ===========================================================================
+  #  TimescaleDB — Banco transacional principal
+  #  Imagem oficial Timescale com extensões habilitadas
+  # ===========================================================================
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: trio-timescaledb
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      <<: *pg-common
+      POSTGRES_DB: trio_transactions
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+      - ./init/timescaledb:/docker-entrypoint-initdb.d:ro
+    command:
+      - "postgres"
+      - "-c" 
+      - "shared_preload_libraries=timescaledb"
+      - "-c"
+      - "timescaledb.telemetry_level=off"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "shared_buffers=512MB"
+      - "-c"
+      - "effective_cache_size=1536MB"
+      - "-c"
+      - "work_mem=16MB"
+      - "-c"
+      - "maintenance_work_mem=256MB"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "effective_io_concurrency=200"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_wal_senders=5"
+      - "-c"
+      - "max_replication_slots=5"
+      - "-c"
+      - "log_min_duration_statement=500"
+      - "-c"
+      - "pg_stat_statements.track=all"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trio} -d trio_transactions"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  # ===========================================================================
+  #  PostgreSQL 16 — Legado transacional
+  #  Simula o banco legado que pode migrar para Aurora/RDS
+  # ===========================================================================
+  postgres-legado:
+    image: postgres:16-bookworm
+    container_name: trio-postgres-legado
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      <<: *pg-common
+      POSTGRES_DB: trio_legado
+    volumes:
+      - postgres_legado_data:/var/lib/postgresql/data
+      - ./init/postgres-legado:/docker-entrypoint-initdb.d:ro
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_preload_libraries=pg_stat_statements"
+      - "-c"
+      - "max_connections=100"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "effective_cache_size=768MB"
+      - "-c"
+      - "work_mem=8MB"
+      - "-c"
+      - "log_min_duration_statement=500"
+      - "-c"
+      - "pg_stat_statements.track=all"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trio} -d trio_legado"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  # ===========================================================================
+  #  ClickHouse — Motor de dados para aplicações e consultas
+  #  HTTP API na 8123, Native protocol na 9000
+  # ===========================================================================
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: trio-clickhouse
+    restart: unless-stopped
+    ports:
+      - "8123:8123"   # HTTP
+      - "9000:9000"   # Native
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-trio}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-trio2024}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_DB: trio_analytics
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+      - ./init/clickhouse:/docker-entrypoint-initdb.d:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--user", "${CLICKHOUSE_USER:-trio}", "--password", "${CLICKHOUSE_PASSWORD:-trio2024}", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  # ===========================================================================
+  #  Grafana — Dashboards e observabilidade
+  #  Acesso: http://localhost:3000 (admin / admin)
+  #  Datasources pré-configurados via provisioning
+  # ===========================================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: trio-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./init/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      postgres-legado:
+        condition: service_healthy
+
+volumes:
+  timescaledb_data:
+    driver: local
+  postgres_legado_data:
+    driver: local
+  clickhouse_data:
+    driver: local
+  clickhouse_logs:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  default:
+    name: trio-data-network
+    driver: bridge
