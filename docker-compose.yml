@@ -396,19 +396,21 @@ services:
   # ===========================================================================
   #  9. ref-sync — batch 5 min, legado -> Dictionary do ClickHouse
   # ===========================================================================
-  # profile 'pendente': o Dockerfile ainda nao existe (etapa E3). Enquanto
-  # estiver aqui, 'up --profile core|full' nao tenta buildar e nao quebra.
-  # Ao implementar, devolver para ["full"].
+  # Batch de 5 min, nao CDC: dado de referencia muda em semanas e nao paga o
+  # custo de um slot de replicacao logica a mais no legado (D05).
   ref-sync:
     build:
       context: ./desafio-2/pipeline/ref-sync
     container_name: trio-ref-sync
     restart: unless-stopped
-    profiles: ["pendente"]
+    profiles: ["core", "full"]
     ports:
-      - "8002:8002"
+      - "8002:8002"   # metricas Prometheus (frescor do Dictionary)
     environment:
       <<: *pg-common
+      # Origem e o legado, nao o TimescaleDB — dai o host e o db explicitos.
+      LEGACY_PGHOST: postgres-legado
+      LEGACY_POSTGRES_DB: trio_legado
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-trio}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-trio2024}
     depends_on:
@@ -424,14 +426,13 @@ services:
   # ===========================================================================
   #  10. api — serve consultas ClickHouse à aplicação (desafio-1/desafio-2)
   # ===========================================================================
-  # profile 'pendente' ate a etapa E3 criar o Dockerfile (requisito PDF 3.2 C.5:
-  # ClickHouse servindo uma aplicacao, nao so dashboards). Voltar para ["core","full"].
+  # Requisito PDF 3.2 C.5: ClickHouse servindo uma aplicacao, nao so dashboards.
   api:
     build:
       context: ./desafio-2/pipeline/api
     container_name: trio-api
     restart: unless-stopped
-    profiles: ["pendente"]
+    profiles: ["core", "full"]
     ports:
       - "8000:8000"
     environment:

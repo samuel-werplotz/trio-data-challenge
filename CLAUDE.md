@@ -1,9 +1,10 @@
 # Trio Data Challenge — orquestrador
 
 ## 1. Operação
-- Próxima etapa = menor `NN` em `scripts/roadmap/` que **não** esteja em `scripts/roadmap/concluidas/`.
+- Próxima etapa = menor `NN` em `scripts/roadmap/` fora de `concluidas/` (ordem numérica: `13` < `13.5` < `14`). `CONCLUÍDA`/`DESCARTADA` no `## STATUS` já fechou: mover e seguir.
 - Ler **só** esse `.md` + este arquivo. Executar os `PASSOS`. Fechar pelo checklist da Seção 9.
 - Etapa `BLOQUEADA` não se executa: resolver o `IMPEDITIVOS` primeiro ou pular para a próxima liberada.
+- **O PDF é o contrato final, não este roadmap.** Nenhum requisito pode ficar sem entrega ou justificativa escrita; a etapa 16 faz essa varredura.
 
 ## 2. Escopo travado (não reabrir)
 | Fora do escopo | Motivo |
@@ -84,9 +85,11 @@ Critérios atendidos → testes no `run_all.sh` → `run_all.sh` sem FAIL → `E
 - [x] 10 legado-e-migracao-aurora · compose
 - [x] 11 schema-clickhouse · compose
 - [x] 12 backfill-e-query-subsegundo · B
-- [ ] 13 pipeline-cdc · B
-- [ ] 14 ref-sync-api-e-adr · compose
-- [ ] 15 backup-observabilidade-e-incidente · compose
+- [x] 13 pipeline-cdc · B — **DESCARTADA**, causa-raiz provada; substituída pela 13.5
+- [x] 13.5 sync-worker-e-backup · B — executada fora da esteira como E0/E1/E2/E4
+- [x] 14 ref-sync-api-e-adr · compose
+- [ ] 15 observabilidade-runbook-e-incidente · compose
+- [ ] 16 fechamento-de-lacunas-do-pdf · compose
 - [ ] 99 validacao-final · B
 
 ## 11. Ficha de ambiente

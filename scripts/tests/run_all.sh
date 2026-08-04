@@ -82,15 +82,18 @@ check 02.1c "docker compose config válido (cdc-experimento)" docker compose --p
 # imagens derivadas (banco + pgBackRest instalado), não imagens prontas. Contar
 # linhas soltas deixou de descrever a composição do arquivo; o que interessa
 # asserir é o número de SERVIÇOS que cada profile resolve.
-# core (8): os 3 bancos + grafana + seed + sync-worker + minio e minio-init
-#           (destino do backup e do archive_command — por isso estão em core).
-# full (11): core + prometheus e os 2 postgres-exporter.
+# core (10): os 3 bancos + grafana + seed + sync-worker + minio e minio-init
+#            (destino do backup e do archive_command — por isso estão em core)
+#            + api e ref-sync, que a etapa 14 implementou e tirou do profile
+#            `pendente`. Os números 8/11 valiam enquanto esses dois serviços
+#            existiam só como esqueleto sem Dockerfile.
+# full (13): core + prometheus e os 2 postgres-exporter.
 # cdc-experimento (7): artefato da decisão de descartar o CDC, fora dos dois.
 N_CORE=$(docker compose --profile core config --services 2>/dev/null | wc -l | tr -d ' ')
 N_FULL=$(docker compose --profile full config --services 2>/dev/null | wc -l | tr -d ' ')
-[ "${N_CORE:-0}" -eq 8 ] && [ "${N_FULL:-0}" -eq 11 ] \
+[ "${N_CORE:-0}" -eq 10 ] && [ "${N_FULL:-0}" -eq 13 ] \
   && ok 02.2 "profiles resolvem: core=$N_CORE, full=$N_FULL" \
-  || fail 02.2 "esperava core=8 e full=11, achei core=${N_CORE:-0} e full=${N_FULL:-0}"
+  || fail 02.2 "esperava core=10 e full=13, achei core=${N_CORE:-0} e full=${N_FULL:-0}"
 # O critério nº 1 do PDF § 6.1 é o perfil core subir sem erro: o grafana chegou a
 # declarar depends_on do prometheus, que só existe em full, e isso abortava o up.
 check 02.7 "grafana não depende de serviço fora do profile core" \
@@ -677,6 +680,125 @@ check E4.13 "RTO e RPO documentados com numero medido" \
 # instancia paralela transformaria o teste de backup no proprio incidente.
 check E4.14 "drill restaura em instancia paralela, nao sobre o principal" \
   bash -c 'grep -q "DRILL_PORT=5499" desafio-3/backup/restore-drill.sh && grep -q "pg1-path=\$DRILL_DIR" desafio-3/backup/restore-drill.sh'
+
+# --- 14 ref-sync-api-e-adr ---
+# Artefatos escritos (trilha local, sem dependência de container).
+check 14.5 "diagramas .mmd existem (>= 2)" \
+  bash -c '[ "$(ls -1 desafio-2/diagrams/*.mmd 2>/dev/null | wc -l)" -ge 2 ]'
+check 14.6 "ADR responde as 4 perguntas do PDF 4.2 C.2" \
+  bash -c 'grep -q "^## Por que não um ETL tradicional?" desafio-2/ADR.md \
+        && grep -q "^## Como escalar se o volume 10x?" desafio-2/ADR.md \
+        && grep -q "^## Onde entra o legado PostgreSQL/Aurora" desafio-2/ADR.md \
+        && grep -q "^## Quais serviços AWS alavancaria" desafio-2/ADR.md'
+# A limitação do DELETE é o que se perde ao trocar CDC por watermark: se sumir
+# do ADR, a entrega perde a admissão de custo que o PDF cobra.
+check 14.7 "ADR registra a limitação do DELETE" \
+  bash -c 'grep -qi "DELETE" desafio-2/ADR.md && grep -qi "não captura .DELETE. físico\|DELETE. físico" desafio-2/ADR.md'
+check 14.8 "ADR responde a migração para Aurora (PDF 4.2 B.2)" \
+  bash -c 'grep -qi "sobreviveria sem alterações" desafio-2/ADR.md && grep -qi "reader" desafio-2/ADR.md'
+# PDF 4.2 C.1 exige mais que as caixas: AWS, SLAs e falhas com mitigação.
+check 14.9 "diagrama AWS traz VPC, subnets, S3 e CloudWatch" \
+  bash -c 'grep -qi "VPC" desafio-2/diagrams/02-arquitetura-aws.mmd \
+        && grep -qi "Subnet" desafio-2/diagrams/02-arquitetura-aws.mmd \
+        && grep -qi "S3" desafio-2/diagrams/02-arquitetura-aws.mmd \
+        && grep -qi "CloudWatch" desafio-2/diagrams/02-arquitetura-aws.mmd'
+check 14.10 "diagramas trazem SLAs de latência/freshness" \
+  bash -c 'grep -qi "SLA\|freshness" desafio-2/diagrams/02-arquitetura-aws.mmd'
+check 14.11 "diagrama de falhas traz mitigação" \
+  bash -c 'grep -qi "mitiga" desafio-2/diagrams/03-pontos-de-falha.mmd'
+# Hex é nomeado pelo enunciado; omitir um componente citado é lacuna visível.
+check 14.12 "diagramas incluem Hex e aplicações consumidoras" \
+  bash -c 'grep -qi "Hex" desafio-2/diagrams/01-topologia-atual.mmd \
+        && grep -qi "Hex" desafio-2/diagrams/02-arquitetura-aws.mmd \
+        && grep -qi "consumidora" desafio-2/diagrams/01-topologia-atual.mmd'
+check 14.13 "ref_sync.py comenta por que batch e não CDC" \
+  bash -c 'grep -qi "POR QUE BATCH E NÃO CDC" desafio-2/pipeline/ref-sync/ref_sync.py'
+# Guarda de regressão do contrato da Seção 2: CDC no legado é decisão travada.
+check 14.14 "ref-sync não usa replicação lógica no legado" \
+  bash -c '! grep -qiE "replication_slot|pgoutput|CREATE PUBLICATION" desafio-2/pipeline/ref-sync/ref_sync.py'
+
+# Serviços de pé (trilha compose). SKIP quando o ambiente não está subido.
+if container_up api; then
+  check 14.1 "os 3 endpoints respondem 200" \
+    bash -c '[ "$(curl -s -o /dev/null -w "%{http_code}" localhost:8000/ops/volume-now)" = "200" ] \
+          && [ "$(curl -s -o /dev/null -w "%{http_code}" "localhost:8000/institutions/001/health?hours=24")" = "200" ] \
+          && [ "$(curl -s -o /dev/null -w "%{http_code}" localhost:8000/fraud/duplicates)" = "200" ]'
+  check 14.2 "toda resposta traz query_ms" \
+    bash -c 'curl -s localhost:8000/ops/volume-now | grep -q "query_ms" \
+          && curl -s "localhost:8000/institutions/001/health?hours=24" | grep -q "query_ms" \
+          && curl -s localhost:8000/fraud/duplicates | grep -q "query_ms"'
+  # Cache de 10s: a 2a chamada idêntica não vai ao ClickHouse, então query_ms
+  # cai ordens de grandeza.
+  #
+  # A comparação é MISS contra HIT, não duas chamadas quaisquer. Comparar dois
+  # acertos seguidos seria instável de propósito errado: ambos ficam na casa de
+  # 0,006–0,010 ms e o ruído de agendamento decide qual é menor — o teste
+  # falharia por jitter, com o cache funcionando. O parâmetro único por execução
+  # ($$) garante que a 1a chamada é sempre um miss de verdade, e não uma entrada
+  # deixada por outro teste ou por uma execução anterior da suíte.
+  #
+  # Determinístico também porque a API roda com 1 worker (ver o Dockerfile): com
+  # 2+, cada processo teria seu próprio cache e a 2a chamada poderia cair no
+  # worker sem a entrada — falha por sorteio de processo, não por cache quebrado.
+  # window_seconds aceita 1..3600, então o resto por 3600 sempre cai na faixa
+  # válida — parâmetro fora do intervalo devolveria 422 sem query_ms e o teste
+  # falharia por URL inválida, não por cache.
+  check 14.3 "cache de 10s: hit tem query_ms muito menor que miss" \
+    bash -c 'U="localhost:8000/fraud/duplicates?hours=6&window_seconds=$(( ($$ % 3600) + 1 ))";
+             MISS=$(curl -s "$U" | sed -n "s/.*\"query_ms\":\([0-9.]*\).*/\1/p");
+             HIT=$(curl -s "$U" | sed -n "s/.*\"query_ms\":\([0-9.]*\).*/\1/p");
+             awk -v m="$MISS" -v h="$HIT" "BEGIN{exit !(m>0 && h<m/10)}"'
+  # Asserta as duas pontas: 1a chamada cached=false, 2a cached=true. Só olhar a
+  # 2a passaria mesmo com uma entrada deixada por outro teste — a 1a precisa ser
+  # um miss comprovado para a 2a significar alguma coisa.
+  #
+  # window_seconds (1..3600) em vez de minutes (1..60): a chave precisa ser
+  # inédita dentro do TTL de 10s, e 60 valores possíveis colidem com execuções
+  # recentes da própria suíte. $$ é o PID, que não se repete nessa janela.
+  check 14.15 "cache marcado na resposta (miss depois hit)" \
+    bash -c 'U="localhost:8000/fraud/duplicates?hours=3&window_seconds=$(( ($$ % 3600) + 1 ))";
+             curl -s "$U" | grep -q "\"cached\":false" || exit 1;
+             curl -s "$U" | grep -q "\"cached\":true"'
+  check 14.16 "/health toca o ClickHouse de fato" \
+    bash -c 'curl -s localhost:8000/health | grep -q "\"clickhouse\":\"ok\""'
+  # Instituição inexistente é 404 de negócio, não 503 de infraestrutura.
+  check 14.17 "instituição sem dados responde 404, não 503" \
+    bash -c '[ "$(curl -s -o /dev/null -w "%{http_code}" localhost:8000/institutions/ZZZ/health)" = "404" ]'
+  check 14.18 "API expõe métricas Prometheus" \
+    bash -c 'curl -s localhost:8000/metrics | grep -q "api_requests_total"'
+  # O nome vem do Dictionary (ref-sync), não de literal no código: prova o
+  # caminho legado -> Dictionary -> API inteiro.
+  check 14.19 "resposta resolve nome via dict_institutions" \
+    bash -c 'curl -s "localhost:8000/institutions/001/health?hours=24" | grep -q "Institui"'
+else
+  for t in 14.1 14.2 14.3 14.15 14.16 14.17 14.18 14.19; do skip "$t" "api fora do ar"; done
+fi
+
+if container_up ref-sync && container_up clickhouse; then
+  check 14.20 "ref-sync expõe métrica de frescor do Dictionary" \
+    bash -c 'curl -s localhost:8002/metrics | grep -q "refsync_dictionary_age_seconds"'
+  check 14.21 "ref-sync concluiu ao menos um ciclo com sucesso" \
+    bash -c 'curl -s localhost:8002/metrics | grep -q "refsync_last_success_timestamp [0-9]"'
+  # 14.4: mudança no legado chega ao Dictionary. Faz UPDATE, força o ciclo e
+  # RESTAURA o valor original — teste não pode deixar resíduo no dado.
+  if legado_seed_done; then
+    check 14.4 "UPDATE no legado aparece no Dictionary apos o ciclo" \
+      bash -c 'M="TESTE-14-4-$$";
+        docker exec trio-postgres-legado psql -qU trio -d trio_legado -c \
+          "UPDATE partner_institutions SET name='"'"'$M'"'"', updated_at=now() WHERE code='"'"'001'"'"'" >/dev/null 2>&1 || exit 1;
+        docker restart trio-ref-sync >/dev/null 2>&1; sleep 12;
+        V=$(docker exec trio-clickhouse clickhouse-client -u trio --password trio2024 -q \
+          "SELECT dictGetOrDefault('"'"'trio_analytics.dict_institutions'"'"','"'"'name'"'"',tuple('"'"'001'"'"'),'"'"'?'"'"')" 2>/dev/null | tr -d "\r");
+        docker exec trio-postgres-legado psql -qU trio -d trio_legado -c \
+          "UPDATE partner_institutions SET name='"'"'Instituição Parceira 1'"'"', updated_at=now() WHERE code='"'"'001'"'"'" >/dev/null 2>&1;
+        docker restart trio-ref-sync >/dev/null 2>&1;
+        [ "$V" = "$M" ]'
+  else
+    skip 14.4 "legado sem seed"
+  fi
+else
+  for t in 14.4 14.20 14.21; do skip "$t" "ref-sync ou clickhouse fora do ar"; done
+fi
 
 echo "----"
 echo "$PASS_N pass, $FAIL_N fail, $SKIP_N skip"

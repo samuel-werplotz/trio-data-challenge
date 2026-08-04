@@ -1,0 +1,54 @@
+%% 03-pontos-de-falha.mmd - item d do PDF 4.2 C.1: pontos de falha e
+%% estrategias de mitigacao. Separado dos outros dois diagramas de proposito:
+%% empilhar mitigacao em cima da topologia deixaria os dois ilegiveis.
+%% F3 e F6 nao sao hipoteses: aconteceram neste projeto e a mitigacao descrita
+%% e a que esta no repositorio, nao a que se gostaria de ter.
+flowchart LR
+    subgraph f1g["F1 · Origem indisponível"]
+        F1["Timescale/Aurora fora<br/>ou em failover"]
+        M1["Retry exponencial 1-2-4-8-16s<br/>watermark persistido: retoma<br/>de onde parou, sem perder janela<br/>Multi-AZ: failover automático"]
+    end
+
+    subgraph f2g["F2 · Pipeline parado (SEV-1)"]
+        F2["sync-worker morto ou travado<br/>dashboard congela e<br/>ninguém percebe"]
+        M2["sync_last_success_timestamp<br/>envelhece — alarme em 5 min<br/>Contador não serve: 'parou de<br/>crescer' = 'não houve movimento'<br/>ECS reinicia task morta"]
+    end
+
+    subgraph f3g["F3 · CDC inviável (ocorreu)"]
+        F3["Debezium não captura<br/>escrita em hypertable:<br/>publish_via_partition_root<br/>não age sobre chunk"]
+        M3["Micro-batch por watermark<br/>substituiu o CDC no caminho<br/>principal · perde DELETE,<br/>limitação declarada no ADR"]
+    end
+
+    subgraph f4g["F4 · ClickHouse indisponível"]
+        F4["Destino fora:<br/>escrita e leitura falham"]
+        M4["Escrita: watermark não avança,<br/>reprocessa na volta<br/>Leitura: API responde 503<br/>ReplacingMergeTree torna a<br/>reescrita idempotente"]
+    end
+
+    subgraph f5g["F5 · Dado de referência velho"]
+        F5["ref-sync parado:<br/>Dictionary desatualizado<br/>sem ninguém notar"]
+        M5["refsync_dictionary_age_seconds<br/>alerta acima de 15 min<br/>LIFETIME 240-360s recarrega<br/>sozinho mesmo com o worker fora"]
+    end
+
+    subgraph f6g["F6 · Query travada segura conexão"]
+        F6["Consulta cara ocupa<br/>o pool e a API para"]
+        M6["max_execution_time = 5s<br/>aborta NO SERVIDOR (Code 159)<br/>Pool limitado a 8: contrapressão<br/>Cache 10s absorve rajada"]
+    end
+
+    subgraph f7g["F7 · Perda de dado / região"]
+        F7["Corrupção, exclusão<br/>acidental ou perda de AZ"]
+        M7["pgBackRest WAL contínuo -> S3<br/>RPO < 5 min · restore drill testado<br/>S3 versionado + lifecycle<br/>Réplicas em 2 AZ"]
+    end
+
+    F1 --> M1
+    F2 --> M2
+    F3 --> M3
+    F4 --> M4
+    F5 --> M5
+    F6 --> M6
+    F7 --> M7
+
+    classDef falha fill:#5e2d2d,stroke:#301717,color:#fff
+    classDef mit fill:#2d5016,stroke:#152a09,color:#fff
+
+    class F1,F2,F3,F4,F5,F6,F7 falha
+    class M1,M2,M3,M4,M5,M6,M7 mit

@@ -1,0 +1,83 @@
+%% 02-arquitetura-aws.mmd — o destino em produção (PDF § 4.2 C.1).
+%% Atende os 4 itens que o enunciado exige do diagrama de arquitetura:
+%%   (a) todos os componentes, incluindo Hex e as aplicações consumidoras;
+%%   (b) os serviços AWS envolvidos (VPC, subnets, S3, CloudWatch, Secrets);
+%%   (c) direção dos fluxos E os SLAs esperados (latência e freshness);
+%%   (d) pontos de falha e estratégias de mitigação — ver 03-pontos-de-falha.mmd.
+flowchart TB
+    subgraph internet["Internet / SaaS"]
+        HEX["Hex (SaaS)<br/>exploração ad-hoc<br/>Data Champions"]
+        APPS["Aplicações consumidoras<br/>roteamento de Pix · antifraude<br/>painel de operações"]
+    end
+
+    subgraph vpc["AWS VPC 10.0.0.0/16"]
+        subgraph pub["Subnet pública 10.0.1.0/24"]
+            ALB["Application Load Balancer<br/>TLS termination<br/>SLA: p99 < 100ms"]
+            NAT["NAT Gateway<br/>saída controlada"]
+        end
+
+        subgraph privapp["Subnet privada — aplicação 10.0.10.0/24"]
+            ECSAPI["ECS Fargate — api<br/>2–10 tasks · autoscaling<br/>SLA: p95 < 50ms"]
+            ECSSW["ECS Fargate — sync-worker<br/>SLA: freshness < 30s"]
+            ECSRS["ECS Fargate — ref-sync<br/>SLA: freshness < 5 min"]
+        end
+
+        subgraph privdata["Subnet privada — dados 10.0.20.0/24"]
+            TSC[("Timescale Cloud<br/>transactions<br/>Multi-AZ")]
+            AUR[("Aurora PostgreSQL<br/>legado · writer + reader<br/>Multi-AZ")]
+            CHC[("ClickHouse Cloud<br/>raw + MVs + Dictionary<br/>réplicas em 2 AZ")]
+        end
+
+        subgraph obs["Observabilidade"]
+            CW["CloudWatch<br/>logs · métricas · alarmes"]
+            AMG["Amazon Managed Grafana<br/>dashboards"]
+        end
+    end
+
+    subgraph aws["Serviços AWS gerenciados"]
+        S3[("S3<br/>backups pgBackRest<br/>+ clickhouse-backup<br/>versionamento + lifecycle")]
+        SM["Secrets Manager<br/>credenciais com rotação"]
+        PL["PrivateLink<br/>acesso privado ao SaaS"]
+    end
+
+    APPS -->|"HTTPS<br/>p99 < 100ms"| ALB
+    ALB -->|"roteia"| ECSAPI
+
+    TSC -->|"SELECT incremental por watermark<br/>freshness < 30s"| ECSSW
+    ECSSW -->|"INSERT batch ≤ 50k"| CHC
+
+    AUR -->|"reader endpoint<br/>não pesa no writer"| ECSRS
+    ECSRS -->|"RELOAD DICTIONARY<br/>freshness ≤ 5 min"| CHC
+
+    CHC -->|"agregados p50 ~8ms"| ECSAPI
+    ECSAPI -->|"decisão automatizada<br/>success_rate + P95"| APPS
+
+    CHC -->|"leitura analítica"| AMG
+    CHC -.->|"via PrivateLink"| PL
+    PL -.-> HEX
+
+    TSC -.->|"WAL archive contínuo<br/>RPO < 5 min"| S3
+    AUR -.->|"snapshot + PITR"| S3
+    CHC -.->|"backup incremental"| S3
+
+    SM -.->|"credenciais"| ECSAPI
+    SM -.->|"credenciais"| ECSSW
+    SM -.->|"credenciais"| ECSRS
+
+    ECSAPI -.->|"logs + métricas"| CW
+    ECSSW -.->|"freshness + lag"| CW
+    ECSRS -.->|"dictionary_age"| CW
+    CW -->|"alarme SEV-1<br/>pipeline parado > 5 min"| AMG
+    NAT -.-> ECSSW
+
+    classDef awsvc fill:#7a4b1e,stroke:#3d2510,color:#fff
+    classDef data fill:#1f4e5f,stroke:#0d2b35,color:#fff
+    classDef app fill:#2d5016,stroke:#152a09,color:#fff
+    classDef ext fill:#4a2d5e,stroke:#241730,color:#fff
+    classDef mon fill:#5e2d2d,stroke:#301717,color:#fff
+
+    class S3,SM,PL,NAT,ALB awsvc
+    class TSC,AUR,CHC data
+    class ECSAPI,ECSSW,ECSRS app
+    class HEX,APPS ext
+    class CW,AMG mon

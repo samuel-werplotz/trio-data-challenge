@@ -1,0 +1,5 @@
+# Versões fixadas: reprodutibilidade é requisito do projeto.
+# Mesmas versões do sync-worker — um só conjunto de dependências para revisar.
+psycopg[binary]==3.2.3
+clickhouse-connect==0.8.3
+prometheus-client==0.21.0
