@@ -6,3 +6,8 @@ __pycache__/
 *.sql.gz
 *.bak
 queries/explains/*.raw
+
+# Chave privada do certificado do MinIO. É auto-assinada e só vale para o
+# ambiente local, mas chave privada não se versiona — nem de brincadeira.
+# Regenerar com: bash desafio-3/backup/gen-certs.sh
+desafio-3/backup/minio-certs/private.key
