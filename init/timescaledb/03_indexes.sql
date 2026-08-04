@@ -37,3 +37,24 @@ CREATE INDEX IF NOT EXISTS idx_tx_institution_created
 CREATE INDEX IF NOT EXISTS idx_tx_dup_detection
     ON transactions (source_account_id, destination_account_id, amount, created_at)
     WHERE status IN ('settled','pending');
+
+-- ---------------------------------------------------------------------------
+-- idx_tx_updated_at — pré-requisito do sync-worker (micro-batch por watermark).
+-- A janela incremental é `WHERE updated_at >= marca`, e sem este índice ela vira
+-- Seq Scan de 10M + Sort a cada ciclo (medido: 85.587 buffers para 1 linha).
+--
+-- ATENÇÃO ao usar: o índice sozinho não basta. A hypertable é particionada por
+-- created_at, então filtrar só por updated_at não exclui chunk nenhum (o plano
+-- mostra "Chunks excluded during startup: 0") e o planner varre os 338. A query
+-- do worker precisa carregar TAMBÉM um predicado em created_at:
+--
+--   WHERE updated_at >= :marca - interval '30 seconds'
+--     AND created_at >= :marca - interval '7 days'
+--
+-- Com os dois predicados: 85.587 -> 17 buffers, e o Merge Append sobre índices
+-- já ordenados dispensa o Sort do ORDER BY. Medição em PREMISSAS-VERIFICADAS.md.
+--
+-- CONCURRENTLY não é aceito aqui: "hypertables do not support concurrent index
+-- creation". A criação normal propaga para os 338 chunks em ~1,4s.
+-- ---------------------------------------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_tx_updated_at ON transactions (updated_at, id);

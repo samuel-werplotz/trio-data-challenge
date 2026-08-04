@@ -70,16 +70,23 @@ check 01.6 ".gitignore cobre .env"       grep -q '^\.env$' .gitignore
 check 01.7 "sem material de estudo no repo" bash -c 'test ! -e vault-estudo -a -z "$(ls *.pdf 2>/dev/null)"'
 
 # --- 02 compose-evoluido ---
-# Sem --profile nenhum serviço resolve (todos os 15 têm profiles: core/full) —
-# por isso os testes de config usam --profile full, que resolve o conjunto completo.
-check 02.1 "docker compose config válido" docker compose --profile full config -q
-if has_docker; then
-  N_IMG=$(docker compose --profile full config 2>/dev/null | grep -c '^\s*image:')
-  [ "$N_IMG" -eq 10 ] && ok 02.2 "10 serviços com image: (+5 build local = 15)" \
-    || fail 02.2 "esperava 10 image:, achei $N_IMG"
-else
-  skip 02.2 "docker indisponível"
-fi
+# Os 15 serviços estão distribuídos em 4 profiles: core/full (caminho principal),
+# cdc-experimento (Debezium/Redpanda/consumer — artefato da decisão de descartar o
+# CDC) e pendente (ref-sync/api/backup, sem Dockerfile até E3/E4). Por isso a
+# contagem lê o arquivo inteiro: `config` só resolve o profile pedido, e o que se
+# quer asserir aqui é a composição do compose, não de um recorte dele.
+check 02.1 "docker compose config válido (core)" docker compose --profile core config -q
+check 02.1b "docker compose config válido (full)" docker compose --profile full config -q
+check 02.1c "docker compose config válido (cdc-experimento)" docker compose --profile cdc-experimento config -q
+N_IMG=$(grep -c '^\s*image:' docker-compose.yml)
+N_BUILD=$(grep -c '^\s*build:' docker-compose.yml)
+[ "$N_IMG" -eq 10 ] && [ "$N_BUILD" -eq 5 ] \
+  && ok 02.2 "10 serviços com image: + 5 build local = 15" \
+  || fail 02.2 "esperava 10 image: e 5 build:, achei $N_IMG e $N_BUILD"
+# O critério nº 1 do PDF § 6.1 é o perfil core subir sem erro: o grafana chegou a
+# declarar depends_on do prometheus, que só existe em full, e isso abortava o up.
+check 02.7 "grafana não depende de serviço fora do profile core" \
+  bash -c 'docker compose --profile core config 2>/dev/null | grep -A20 "^  grafana:" | grep -q "prometheus" && exit 1 || exit 0'
 check 02.3 "nenhuma imagem :latest (exceto latest-pg16)" \
   bash -c '! docker compose --profile full config 2>/dev/null | grep ":latest" | grep -v "latest-pg16" | grep -q .'
 check 02.4 "MinIO publica 9002" \
@@ -489,6 +496,27 @@ else
 fi
 
 # ===========================================================================
+
+# --- E0/E1 estabilizacao e premissas ---
+# Guardas de regressao do que a auditoria corrigiu. Cada um trava a volta de um
+# problema que ja aconteceu neste projeto — nao sao testes hipoteticos.
+check E0.1 "nenhum replication slot orfao (retinha 17,7 GB de WAL)" \
+  bash -c '[ "$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "select count(*) from pg_replication_slots" 2>/dev/null)" = "0" ]'
+check E0.2 "archive_mode off ate o pgBackRest existir (evita WAL infinito)" \
+  bash -c '[ "$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "show archive_mode" 2>/dev/null)" = "off" ]'
+check E0.3 "pg_wal sob controle (< 200 segmentos)" \
+  bash -c '[ "$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "select count(*) from pg_ls_waldir()" 2>/dev/null)" -lt 200 ]'
+check E0.4 "transactions com exatamente 10M (sem linha de teste sobrando)" \
+  bash -c '[ "$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "select count(*) from transactions" 2>/dev/null)" = "10000000" ]'
+check E0.5 "nenhuma linha sintetica de diagnostico em transactions" \
+  bash -c '[ "$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "select count(*) from transactions where source_institution in ('"'"'DEMO-CDC'"'"','"'"'DIAG-TEST'"'"','"'"'E1-PREMISSA'"'"')" 2>/dev/null)" = "0" ]'
+check E1.1 "trigger de updated_at propagado aos chunks (base do watermark)" \
+  bash -c '[ "$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "select count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid where c.relname like '"'"'_hyper_1_%_chunk'"'"' and t.tgname='"'"'trg_transactions_updated_at'"'"'" 2>/dev/null)" -gt 300 ]'
+check E1.2 "indice idx_tx_updated_at existe (sem ele a janela e Seq Scan de 10M)" \
+  bash -c 'docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "select 1 from pg_indexes where tablename='"'"'transactions'"'"' and indexname='"'"'idx_tx_updated_at'"'"'" 2>/dev/null | grep -q 1'
+check E1.3 "janela do watermark usa Index Scan, nao Seq Scan (predicado duplo)" \
+  bash -c 'docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "explain select id from transactions where updated_at >= now() - interval '"'"'30 seconds'"'"' and created_at >= now() - interval '"'"'7 days'"'"' order by updated_at, id limit 50000" 2>/dev/null | grep -q "Index Scan"'
+check E1.4 "premissas verificadas documentadas" test -f PREMISSAS-VERIFICADAS.md
 
 echo "----"
 echo "$PASS_N pass, $FAIL_N fail, $SKIP_N skip"

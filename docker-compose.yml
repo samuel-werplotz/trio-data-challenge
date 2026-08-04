@@ -23,7 +23,7 @@ services:
     image: timescale/timescaledb:latest-pg16
     container_name: trio-timescaledb
     restart: unless-stopped
-    profiles: ["core", "full"]
+    profiles: ["core", "full", "cdc-experimento"]
     # default de 64MB do Docker estoura em hash join grande (ex.: Q4 self-join
     # de S06, o anti-padrão medido de propósito na etapa 06) — sem isso a query
     # nem chega a rodar para ser medida.
@@ -72,10 +72,14 @@ services:
       - "log_min_duration_statement=500"
       - "-c"
       - "pg_stat_statements.track=all"
+      # archive_mode fica OFF ate a etapa E4 instalar o pgBackRest de fato.
+      # Ligado apontando para um binario inexistente, o archive_command falha
+      # com exit 127 a cada segmento; o Postgres nao recicla WAL nao-arquivado
+      # e o pg_wal cresce sem limite (chegou a 17,7 GB neste ambiente).
+      # Arquivamento quebrado e pior que arquivamento desligado: dá a ilusao
+      # de ter PITR e ainda enche o disco. E4 religa junto com o repo do backup.
       - "-c"
-      - "archive_mode=on"
-      - "-c"
-      - "archive_command=pgbackrest --stanza=timescale archive-push %p"
+      - "archive_mode=off"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trio} -d trio_transactions"]
       interval: 5s
@@ -137,7 +141,7 @@ services:
     image: clickhouse/clickhouse-server:24.8
     container_name: trio-clickhouse
     restart: unless-stopped
-    profiles: ["core", "full"]
+    profiles: ["core", "full", "cdc-experimento"]
     ports:
       - "8123:8123"   # HTTP
       - "9000:9000"   # Native
@@ -189,8 +193,12 @@ services:
         condition: service_healthy
       postgres-legado:
         condition: service_healthy
-      prometheus:
-        condition: service_started
+      # prometheus NAO entra aqui: ele so existe no profile 'full', e o grafana
+      # roda em 'core' e 'full'. Um depends_on para servico ausente do profile
+      # faz o 'docker compose --profile core up' abortar — era o motivo de o
+      # criterio nº 1 do PDF ("sobe sem erros") falhar. No profile full o
+      # prometheus sobe junto de qualquer forma; o Grafana so o consulta via
+      # datasource, entao nao precisa dele para iniciar.
     deploy:
       resources:
         limits:
@@ -217,13 +225,34 @@ services:
           memory: 2G
 
   # ===========================================================================
+  #  ARTEFATO DE DECISAO — profile "cdc-experimento", fora do caminho critico
+  #
+  #  A abordagem CDC (Debezium -> Redpanda -> consumidor) foi construida,
+  #  medida e DESCARTADA: publish_via_partition_root nao funciona sobre
+  #  hypertable. Uma hypertable do TimescaleDB nao e tabela particionada
+  #  nativa do PostgreSQL (relkind='r', chunk com relispartition='f'), entao
+  #  o parametro nao tem relacao pai/filho sobre a qual agir e as escritas
+  #  em chunk nunca entram na publication.
+  #
+  #  Provado isolando a decodificacao logica, sem Debezium no circuito:
+  #    pg_logical_slot_peek_binary_changes            -> 0 mudancas
+  #    ALTER PUBLICATION ... ADD TABLE <chunk>        -> 6 mudancas na hora
+  #
+  #  Fica no repositorio porque o PDF 4.2 A.1 cobra "por que essa abordagem e
+  #  nao as outras?" — e a resposta vale mais com a alternativa construida do
+  #  que descartada no papel. Subir so com:  docker compose --profile cdc-experimento up
+  #
+  #  Pipeline real da entrega: micro-batch por watermark (sync-worker, E2).
+  # ===========================================================================
+
+  # ===========================================================================
   #  6. Redpanda — broker Kafka-compatível para o pipeline CDC (desafio-2)
   # ===========================================================================
   redpanda:
     image: redpandadata/redpanda:v24.2.7
     container_name: trio-redpanda
     restart: unless-stopped
-    profiles: ["full"]
+    profiles: ["cdc-experimento"]
     ports:
       - "9092:9092"
       - "9644:9644"
@@ -255,7 +284,7 @@ services:
     image: debezium/connect:2.7.3.Final
     container_name: trio-debezium
     restart: unless-stopped
-    profiles: ["full"]
+    profiles: ["cdc-experimento"]
     ports:
       - "8083:8083"
     environment:
@@ -288,7 +317,7 @@ services:
       context: ./desafio-2/pipeline/consumer
     container_name: trio-cdc-consumer
     restart: unless-stopped
-    profiles: ["full"]
+    profiles: ["cdc-experimento"]
     ports:
       - "8001:8001"
     environment:
@@ -310,12 +339,15 @@ services:
   # ===========================================================================
   #  9. ref-sync — batch 5 min, legado -> Dictionary do ClickHouse
   # ===========================================================================
+  # profile 'pendente': o Dockerfile ainda nao existe (etapa E3). Enquanto
+  # estiver aqui, 'up --profile core|full' nao tenta buildar e nao quebra.
+  # Ao implementar, devolver para ["full"].
   ref-sync:
     build:
       context: ./desafio-2/pipeline/ref-sync
     container_name: trio-ref-sync
     restart: unless-stopped
-    profiles: ["full"]
+    profiles: ["pendente"]
     ports:
       - "8002:8002"
     environment:
@@ -335,12 +367,14 @@ services:
   # ===========================================================================
   #  10. api — serve consultas ClickHouse à aplicação (desafio-1/desafio-2)
   # ===========================================================================
+  # profile 'pendente' ate a etapa E3 criar o Dockerfile (requisito PDF 3.2 C.5:
+  # ClickHouse servindo uma aplicacao, nao so dashboards). Voltar para ["core","full"].
   api:
     build:
       context: ./desafio-2/pipeline/api
     container_name: trio-api
     restart: unless-stopped
-    profiles: ["core", "full"]
+    profiles: ["pendente"]
     ports:
       - "8000:8000"
     environment:
@@ -444,11 +478,13 @@ services:
   # ===========================================================================
   #  15. backup — pgBackRest / clickhouse-backup agendado (desafio-3/backup)
   # ===========================================================================
+  # profile 'pendente' ate a etapa E4 (pgBackRest 2 stanzas + clickhouse-backup).
+  # E4 tambem religa o archive_mode do timescaledb, hoje off por falta do binario.
   backup:
     build:
       context: ./desafio-3/backup
     container_name: trio-backup
-    profiles: ["full"]
+    profiles: ["pendente"]
     environment:
       <<: *pg-common
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-trio}
