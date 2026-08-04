@@ -7,7 +7,16 @@
 (vazio = liberado)
 
 ## ESTADO HERDADO
-<preenchido pela etapa 02 ao fechar>
+Verificado ao fechar a etapa 02:
+- `docker-compose.yml` na raiz com os 15 serviços de S08, perfis `core`/`full` em todo serviço (sem profile default — `docker compose config` sozinho resolve `services: {}`; usar `--profile full` ou `--profile core`).
+- Serviços com `image:` (10): timescaledb, postgres-legado, clickhouse, grafana, redpanda, debezium, prometheus, pg-exporter-ts, pg-exporter-legado, minio. Serviços com `build:` (5, sem Dockerfile ainda): seed (`./desafio-1/seed`), cdc-consumer (`./desafio-2/pipeline/consumer`), ref-sync (`./desafio-2/pipeline/ref-sync`), api (`./desafio-2/pipeline/api`), backup (`./desafio-3/backup`).
+- Healthcheck com `start_period` em 6 serviços: timescaledb, postgres-legado, clickhouse, redpanda, debezium, minio. `grafana` depende de `timescaledb`+`clickhouse`+`postgres-legado` (`service_healthy`) e `prometheus` (`service_started`), sem healthcheck próprio.
+- Cadeia de dependências de S08 aplicada (seed, debezium, cdc-consumer, grafana).
+- MinIO publica 9002 externamente (9000 é nativo do ClickHouse dentro da rede).
+- Validado com Docker de pé: os 4 serviços do core com imagem pronta (timescaledb, postgres-legado, clickhouse, grafana) sobem via `docker compose up -d <serviço...>` e os 3 com healthcheck próprio ficam `healthy` sem intervenção manual. `--profile core up -d` completo (com seed/api) só será validável após as etapas 05/14 criarem os Dockerfiles.
+- `prometheus` reinicia em loop se subir sozinho: falta `./init/prometheus` (config ainda não existe, fora do escopo da 02 e da 03).
+- `.env` criado localmente a partir de `.env.example` (não versionado — coberto pelo `.gitignore`).
+- `scripts/tests/run_all.sh` com blocos `01` (7 checks) e `02` (6 checks, 02.6 é SKIP sem containers de pé).
 
 ## ESCOPO
 Faz: `Makefile` com todos os alvos de S08 e um `help` auto-documentado, mais `scripts/wait-healthy.sh` e `scripts/health-check.sh`.

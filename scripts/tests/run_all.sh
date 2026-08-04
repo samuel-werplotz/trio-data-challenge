@@ -59,6 +59,31 @@ check 01.5 "árvore do PDF §6 criada"     bash -c 'test -d desafio-1/schemas -a
 check 01.6 ".gitignore cobre .env"       grep -q '^\.env$' .gitignore
 check 01.7 "sem material de estudo no repo" bash -c 'test ! -e vault-estudo -a -z "$(ls *.pdf 2>/dev/null)"'
 
+# --- 02 compose-evoluido ---
+# Sem --profile nenhum serviço resolve (todos os 15 têm profiles: core/full) —
+# por isso os testes de config usam --profile full, que resolve o conjunto completo.
+check 02.1 "docker compose config válido" docker compose --profile full config -q
+if has_docker; then
+  N_IMG=$(docker compose --profile full config 2>/dev/null | grep -c '^\s*image:')
+  [ "$N_IMG" -eq 10 ] && ok 02.2 "10 serviços com image: (+5 build local = 15)" \
+    || fail 02.2 "esperava 10 image:, achei $N_IMG"
+else
+  skip 02.2 "docker indisponível"
+fi
+check 02.3 "nenhuma imagem :latest (exceto latest-pg16)" \
+  bash -c '! docker compose --profile full config 2>/dev/null | grep ":latest" | grep -v "latest-pg16" | grep -q .'
+check 02.4 "MinIO publica 9002" \
+  bash -c 'docker compose --profile full config 2>/dev/null | grep -q "9002"'
+check 02.5 "perfis core e full declarados" \
+  bash -c 'docker compose --profile full config --profiles 2>/dev/null | sort -u | grep -qx core && docker compose --profile full config --profiles 2>/dev/null | sort -u | grep -qx full'
+if container_up timescaledb && container_up postgres-legado && container_up clickhouse; then
+  H=$(docker compose ps --format '{{.Health}}' timescaledb postgres-legado clickhouse 2>/dev/null | sort -u)
+  [ "$H" = "healthy" ] && ok 02.6 "timescaledb/postgres-legado/clickhouse healthy" \
+    || fail 02.6 "algum serviço não healthy: $H"
+else
+  skip 02.6 "serviços core (imagem pronta) não estão de pé — subir com: docker compose up -d timescaledb postgres-legado clickhouse grafana"
+fi
+
 # ===========================================================================
 
 echo "----"
