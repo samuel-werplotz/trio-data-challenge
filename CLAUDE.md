@@ -74,7 +74,7 @@ Critérios atendidos → testes no `run_all.sh` → `run_all.sh` sem FAIL → `E
 `B` = nasce BLOQUEADA (trilha `carga-real`). Marcar `[x]` ao fechar.
 - [x] 01 baseline-e-estrutura · local
 - [x] 02 compose-evoluido · compose
-- [ ] 03 makefile-e-healthcheck · compose
+- [x] 03 makefile-e-healthcheck · compose
 - [ ] 04 schema-timescaledb · compose
 - [ ] 05 seed-10m · B
 - [ ] 06 queries-antes-indices · B

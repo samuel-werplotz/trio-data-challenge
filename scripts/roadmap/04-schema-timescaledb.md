@@ -7,7 +7,15 @@
 (vazio = liberado)
 
 ## ESTADO HERDADO
-<preenchido pela etapa 03 ao fechar>
+Verificado ao fechar a etapa 03:
+- `docker-compose.yml` (etapa 02) com os 15 serviços; parâmetros do TimescaleDB de S08 já aplicados em `command:` — conferir se batem com S01 § Parâmetros ajustados antes de reescrever.
+- `Makefile` na raiz com 23 alvos (`help` default). Alvos que dependem de script/SQL inexistente falham com mensagem nomeando a etapa dona — `indexes` e `policies` continuam apontando para `init/timescaledb/03_indexes.sql`/`04_caggs_policies.sql`, que esta etapa (04) **não** cria.
+- `scripts/wait-healthy.sh` e `scripts/health-check.sh` executáveis, testados com o core de pé (timescaledb/postgres-legado/clickhouse healthy).
+- `init/timescaledb/00_init.sql` só tem `CREATE EXTENSION timescaledb CASCADE` + `pg_stat_statements` — nenhuma tabela ainda. Roda antes de qualquer arquivo novo em `init/timescaledb/` (ordem alfabética do entrypoint do Postgres).
+- Ambiente Windows sem `make` no PATH (winget falhou por rede/Sourceforge) — `make help`/`make -n up`/`make check` foram validados via container Docker auxiliar (`docker:27-cli` com `make`+`docker-compose` instalados, `COMPOSE_PROJECT_NAME=trio-data-challenge`, socket montado). `run_all.sh` faz `SKIP` em 03.1/03.2/03.5 quando `make` está ausente — se a etapa 04 quiser usar `make` diretamente, aplicar o mesmo workaround ou instalar `make` manualmente antes.
+- `.env` local presente (a partir de `.env.example`), não versionado.
+- `run_all.sh`: blocos 01/02/03, 16 pass / 0 fail / 4 skip (2 do core sem containers de pé, 2 de make ausente).
+- `audit.sh` segue com FAIL conhecido em A2.1/A2.01/A2.02 (script não conta `scripts/roadmap/concluidas/`) — defeito do próprio script de auditoria do plano, não do produto; documentado em STATUS da etapa 02 e 03, não bloqueia.
 
 ## ESCOPO
 Faz: `init/timescaledb/01_schema.sql` (ENUMs, `accounts`, `transactions` + hypertable de 1 dia, `reconciliation_events` + hypertable de 7 dias, trigger de `updated_at`) e `init/timescaledb/02_seed_marker.sql` (`seed_control`). Destino final do DDL principal também em `desafio-1/schemas/01_timescale_schema.sql`, conforme o `arquivo_destino` de S01.

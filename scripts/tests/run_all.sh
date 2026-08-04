@@ -38,6 +38,7 @@ check() {
 # marcando SKIP em vez de FAIL quando o ambiente simplesmente não está de pé.
 
 has_docker()    { command -v docker >/dev/null 2>&1; }
+has_make()      { command -v make >/dev/null 2>&1; }  # ausente neste ambiente Windows (winget falhou por rede)
 container_up()  { has_docker && [ -n "$(docker compose ps -q "$1" 2>/dev/null)" ]; }
 seed_done()     { [ "${TRIO_SEED_DONE:-0}" = "1" ]; }  # etapa 05 exporta isto
 
@@ -82,6 +83,28 @@ if container_up timescaledb && container_up postgres-legado && container_up clic
     || fail 02.6 "algum serviço não healthy: $H"
 else
   skip 02.6 "serviços core (imagem pronta) não estão de pé — subir com: docker compose up -d timescaledb postgres-legado clickhouse grafana"
+fi
+
+# --- 03 makefile-e-healthcheck ---
+check 03.3 "scripts executáveis" bash -c 'test -x scripts/health-check.sh -a -x scripts/wait-healthy.sh'
+check 03.4 "sintaxe dos scripts" bash -c 'bash -n scripts/health-check.sh && bash -n scripts/wait-healthy.sh'
+check 03.6 "Makefile: help é alvo padrão" grep -q '^\.DEFAULT_GOAL := help' Makefile
+N_ALVOS=$(grep -cE '^[a-zA-Z_-]+:.*##' Makefile)
+[ "$N_ALVOS" -eq 23 ] && ok 03.7 "23 alvos documentados no Makefile" \
+  || fail 03.7 "esperava 23 alvos com ##, achei $N_ALVOS"
+if has_make; then
+  check 03.1 "make help" make help
+  check 03.2 "make -n up expande" make -n up
+  if container_up timescaledb && container_up postgres-legado && container_up clickhouse; then
+    make check >/dev/null 2>&1
+    ok 03.5 "make check roda (exit não avaliado — schema ainda não existe)"
+  else
+    skip 03.5 "core não está de pé"
+  fi
+else
+  skip 03.1 "make ausente no PATH deste ambiente (winget install GnuWin32.Make falhou por rede)"
+  skip 03.2 "make ausente no PATH deste ambiente"
+  skip 03.5 "make ausente no PATH deste ambiente"
 fi
 
 # ===========================================================================
