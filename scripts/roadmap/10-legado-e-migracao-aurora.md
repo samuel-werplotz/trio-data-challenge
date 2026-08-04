@@ -7,7 +7,14 @@
 (vazio = liberado)
 
 ## ESTADO HERDADO
-<preenchido pela etapa 09 ao fechar>
+Verificado ao fechar a etapa 09:
+- `timescaledb`: 10.000.000 `transactions`, 500.000 `accounts`, 1.442.266 `reconciliation_events`. 2 CAggs materializados (`cagg_volume_hourly`, `cagg_settlement_latency_daily`), compressão ativa em `transactions` (5,0× total/23,5× tabela), retenção do raw parada (90d), retenção dos CAggs ligada (2 anos). Nenhum dado real alterado desde então.
+- `init/timescaledb/05_lgpd_erasure.sql` aplicado: `pgcrypto` habilitado, `lgpd_erasure_log` criada, `PROCEDURE anonimizar_conta(id, requester)`. `desafio-1/lgpd-sanitization.md` cobre as 3 camadas do problema e as 3 estratégias (A/B/C), com a escolha da tabela lateral já implementada em `accounts` desde a etapa 04.
+- `desafio-1/scripts/lgpd-erasure-demo.sh` e `desafio-1/scripts/retention-demo.sh` (etapa 08) seguem o mesmo padrão: dado sintético, `trap cleanup EXIT`, nunca tocam nas 500k contas/10M transações reais. Ambos testados e confirmados sem resíduo.
+- **`postgres-legado` está de pé e healthy, mas vazio** — só o `00_init.sql` de bootstrap rodou até aqui (nenhum schema de negócio, nenhum seed). É pré-condição limpa para esta etapa: ainda não existe `SERIAL`/bloat/tabela de parâmetros no legado.
+- **Nenhuma etapa até aqui tocou ClickHouse ou o pipeline CDC.** O checklist de S09 (LGPD) documentou os passos 3/4 (ClickHouse) como procedimento futuro não executável, porque a etapa 11 (schema ClickHouse) e 13 (pipeline CDC) ainda não rodaram.
+- `run_all.sh`: blocos 01–09, **60 pass / 0 fail / 4 skip**. `audit.sh`: 83 pass / 0 fail / 1 warn / 1 skip. Nenhum desvio de plano registrado na etapa 09 (`99-validacao-final.md` não mudou desde a 08).
+- Containers de pé: `timescaledb` e `postgres-legado`, ambos healthy.
 
 ## ESCOPO
 Faz: `desafio-1/schemas/02_legacy.sql` com o schema legado (`SERIAL`, `TIMESTAMP` sem timezone, `VARCHAR` — escolhas legadas deliberadas), seed de 50k usuários + 80k contas + a tabela de **parâmetros de configuração de instituições parceiras**, bloat induzido em 5 rodadas, 2 queries complexas com `EXPLAIN` antes/depois, e `desafio-1/migration-analysis.md` de 1 página.

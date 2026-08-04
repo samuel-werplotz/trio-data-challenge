@@ -324,6 +324,38 @@ check 08.11 "q1_after.txt existe (Q1 via CAgg medida)" test -f desafio-1/queries
 check 08.12 "REPORT.md com taxa de compressão e retenção" bash -c \
   'grep -q "Compressão —" desafio-1/REPORT.md && grep -q "Retenção —" desafio-1/REPORT.md'
 
+# --- 09 lgpd-sanitizacao ---
+check 09.1 "lgpd-sanitization.md existe" test -f desafio-1/lgpd-sanitization.md
+N_STRAT=$(grep -ci 'crypto\|tabela lateral\|descomprimir' desafio-1/lgpd-sanitization.md 2>/dev/null || echo 0)
+[ "$N_STRAT" -ge 3 ] 2>/dev/null && ok 09.2 "3 estratégias mencionadas (achei $N_STRAT ocorrências)" \
+  || fail 09.2 "esperava >=3, achei ${N_STRAT:-erro}"
+check 09.6 "lgpd-erasure-demo.sh com sintaxe válida" bash -n desafio-1/scripts/lgpd-erasure-demo.sh
+
+if seed_done; then
+  REGCLASS=$(psql_ts "SELECT to_regclass('lgpd_erasure_log')")
+  [ "$REGCLASS" = "lgpd_erasure_log" ] && ok 09.3 "lgpd_erasure_log existe" \
+    || fail 09.3 "esperava tabela existente, achei ${REGCLASS:-erro}"
+
+  # 09.4: roda o demo de ponta a ponta (conta sintética, nunca real) e checa
+  # que o UPDATE+log aconteceram — mesmo padrão do retention-demo da etapa 08.
+  if bash desafio-1/scripts/lgpd-erasure-demo.sh >/tmp/lgpd_demo_out.txt 2>&1; then
+    grep -q "OK: PII removida" /tmp/lgpd_demo_out.txt && ok 09.4 "anonimizar_conta roda fim a fim (demo)" \
+      || fail 09.4 "demo rodou mas não confirmou o resultado esperado"
+  else
+    fail 09.4 "lgpd-erasure-demo.sh saiu com erro"
+  fi
+
+  N_PII=$(psql_ts "SELECT count(*) FROM information_schema.columns WHERE table_name='transactions' AND column_name IN ('holder_name','holder_document','cpf','email')")
+  [ "$N_PII" = "0" ] && ok 09.5 "transactions sem coluna de PII" \
+    || fail 09.5 "esperava 0 colunas de PII em transactions, achei ${N_PII:-erro}"
+
+  N_ACC_HT=$(psql_ts "SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name='accounts'")
+  [ "$N_ACC_HT" = "0" ] && ok 09.7 "accounts não é hypertable (UPDATE direto funciona)" \
+    || fail 09.7 "esperava accounts fora de hypertables, achei ${N_ACC_HT:-erro}"
+else
+  for t in 09.3 09.4 09.5 09.7; do skip "$t" "seed não concluído"; done
+fi
+
 # ===========================================================================
 
 echo "----"

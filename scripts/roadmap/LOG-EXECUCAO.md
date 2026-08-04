@@ -43,6 +43,11 @@ Quebrou: `failed_count` do CAgg 2 é estruturalmente 0 — o `WHERE settled_at I
 Decidido: compressão deu **5,0× no total** mas **23,5× só na tabela** — os 4 índices da etapa 07 pesam 1.484 MB contra 1.188 MB de dado, e é isso que puxa a taxa para baixo dos 10–20× que S03 esperava. O número virou seção do REPORT em vez de nota de rodapé: as duas otimizações do desafio se pagam uma contra a outra.
 Decidido: Q1 12.115ms → 23ms (**521×**, buffers 95.670 → 500); Q3 via CAgg 1.285ms → 3,4ms (383×). Equivalência do CAgg com o raw verificada linha a linha — 0 divergências, mas só com o corte alinhado a `date_trunc('hour')`; no meio do bucket o mês da borda diverge em ~193 linhas.
 
+## 09 · 2026-08-04
+Decidido: `pgcrypto` não vinha instalado (só `digest()` do procedimento de S09 precisa dele) — `CREATE EXTENSION IF NOT EXISTS pgcrypto` resolvido no próprio `05_lgpd_erasure.sql`, sem o tipo de conflito do toolkit da etapa 08 (extensão disponível na imagem, só não habilitada).
+Decidido: teste do procedimento `anonimizar_conta` rodado sobre conta **sintética** (`desafio-1/scripts/lgpd-erasure-demo.sh`), não sobre uma das 500k contas reais — mesmo padrão do `retention-demo.sh` da etapa 08. Confirmado com o usuário antes de escrever, dado que o UPDATE de anonimização é irreversível sobre dado real.
+Decidido: Passo 2 (propagação ao ClickHouse) documentado como procedimento futuro, não executável — ClickHouse (etapa 11) e CDC (etapa 13) ainda não existem neste ambiente. Checklist de S09 mantém os 5 itens, mas o doc marca quais são verificáveis hoje.
+
 ## audit.sh · 2026-08-04
 Quebrou: `audit.sh` só buscava etapas em `scripts/roadmap/*.md` — depois que uma etapa fecha e move para `concluidas/`, o script deixa de achá-la e reporta FAIL falso (arquivo ausente, esteira com número errado de etapas BLOQUEADA, decisões/PDF não rastreados). Regressão silenciosa a cada fechamento de etapa desde a 02.
 Decidido: `step_file NN` resolve o caminho da etapa em `$ROADMAP` ou `$ROADMAP/concluidas`; `has_impeditivo_ficha` checa só dentro da seção `## IMPEDITIVOS` (não em prosa livre de STATUS) para não pegar falso-positivo. A6.2 (código de aplicação "antes da hora") virou condicional a `-d trio-data-challenge` — só faz sentido antes da etapa 01. `audit.sh` volta a 0 FAIL de forma estável, não é mais preciso ignorar FAILs "conhecidos" a cada fechamento.

@@ -80,7 +80,7 @@ Critérios atendidos → testes no `run_all.sh` → `run_all.sh` sem FAIL → `E
 - [x] 06 queries-antes-indices · B
 - [x] 07 indices-e-otimizacao · B
 - [x] 08 caggs-compressao-retencao · B
-- [ ] 09 lgpd-sanitizacao · local
+- [x] 09 lgpd-sanitizacao · local
 - [ ] 10 legado-e-migracao-aurora · compose
 - [ ] 11 schema-clickhouse · compose
 - [ ] 12 backfill-e-query-subsegundo · B

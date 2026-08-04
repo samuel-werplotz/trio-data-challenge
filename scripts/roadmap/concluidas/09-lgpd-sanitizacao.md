@@ -33,13 +33,13 @@ Não faz: não altera o schema de `accounts`, `transactions` ou dos CAggs; não 
 7. Rodar o checklist de S09 § Checklist de verificação e acrescentar o bloco `# --- 09 lgpd-sanitizacao ---` em `scripts/tests/run_all.sh`.
 
 ## CRITÉRIOS DE ACEITE
-- [ ] `desafio-1/lgpd-sanitization.md` existe e cobre as 3 camadas do problema
-- [ ] As 3 estratégias estão comparadas, com a escolha da C justificada — não só afirmada
-- [ ] `lgpd_erasure_log` criada com os campos de S09
-- [ ] Procedimento de anonimização escrito com comando exato para cada um dos 3 passos
-- [ ] Documento afirma e demonstra que PII vive só em `accounts`
-- [ ] Prazo legal registrado
-- [ ] Checklist de verificação de S09 passa item a item
+- [x] `desafio-1/lgpd-sanitization.md` existe e cobre as 3 camadas do problema
+- [x] As 3 estratégias estão comparadas, com a escolha da C justificada — não só afirmada
+- [x] `lgpd_erasure_log` criada com os campos de S09
+- [x] Procedimento de anonimização escrito com comando exato para cada um dos 3 passos
+- [x] Documento afirma e demonstra que PII vive só em `accounts` (queries reais no doc)
+- [x] Prazo legal registrado
+- [x] Checklist de verificação de S09 passa item a item (itens 1/2/5 executados no demo; 3/4 documentados como futuros — CH/CDC ainda não existem)
 
 ## TESTES
 | id | trilha | comando | esperado |
@@ -59,16 +59,20 @@ git checkout -- desafio-1/lgpd-sanitization.md
 ```
 
 ## STATUS
-Estado: PENDENTE
-Premissas assumidas: —
-Desvios do plano: —
+Estado: CONCLUÍDA
+Premissas assumidas:
+- Teste do procedimento rodado sobre conta sintética descartável, não conta real — confirmado com o usuário (mesmo padrão do `retention-demo.sh`).
+- Passo 2 (ClickHouse) documentado como procedimento futuro, não executado: etapas 11 e 13 ainda não existem neste ambiente.
+- `pgcrypto` habilitado via `CREATE EXTENSION` no `05_lgpd_erasure.sql` — disponível na imagem, só não instalado por padrão.
+
+Desvios do plano: nenhum. Nenhuma atualização em `99-validacao-final.md` para esta etapa.
 
 ## FECHAMENTO
-- [ ] Critérios atendidos
-- [ ] Testes no run_all.sh
-- [ ] run_all.sh sem FAIL
-- [ ] ESTADO HERDADO da próxima preenchido
-- [ ] Bloco no LOG-EXECUCAO.md
-- [ ] Desvio? → atualizar 99-validacao-final.md
+- [x] Critérios atendidos
+- [x] Testes no run_all.sh (09.1–09.7)
+- [x] run_all.sh sem FAIL — 60 pass / 0 fail / 4 skip
+- [x] ESTADO HERDADO da próxima preenchido
+- [x] Bloco no LOG-EXECUCAO.md
+- [x] Desvio? → nenhum, 99-validacao-final.md não alterado
 - [ ] Commit checkpoint
 - [ ] Mover pra concluidas/. Marcar [x] no CLAUDE.md
