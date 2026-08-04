@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- Habilita o BACKUP nativo do ClickHouse (E1 § P5).
+     clickhouse-backup (a ferramenta externa) não existe na imagem; o motor
+     nativo existe e só precisava do disco de destino declarado. Evita instalar
+     binário de terceiro para um recurso que o servidor já tem. -->
+<clickhouse>
+    <storage_configuration>
+        <disks>
+            <backups>
+                <type>local</type>
+                <path>/var/lib/clickhouse/backups/</path>
+            </backups>
+        </disks>
+    </storage_configuration>
+    <backups>
+        <allowed_disk>backups</allowed_disk>
+        <allowed_path>/var/lib/clickhouse/backups/</allowed_path>
+    </backups>
+</clickhouse>

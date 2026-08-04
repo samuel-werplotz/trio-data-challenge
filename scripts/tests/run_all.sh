@@ -78,11 +78,19 @@ check 01.7 "sem material de estudo no repo" bash -c 'test ! -e vault-estudo -a -
 check 02.1 "docker compose config válido (core)" docker compose --profile core config -q
 check 02.1b "docker compose config válido (full)" docker compose --profile full config -q
 check 02.1c "docker compose config válido (cdc-experimento)" docker compose --profile cdc-experimento config -q
-N_IMG=$(grep -c '^\s*image:' docker-compose.yml)
-N_BUILD=$(grep -c '^\s*build:' docker-compose.yml)
-[ "$N_IMG" -eq 10 ] && [ "$N_BUILD" -eq 6 ] \
-  && ok 02.2 "10 serviços com image: + 6 build local = 16 (sync-worker entrou no E2)" \
-  || fail 02.2 "esperava 10 image: e 6 build:, achei $N_IMG e $N_BUILD"
+# Desde o E4, timescaledb e postgres-legado declaram build: E image: — são
+# imagens derivadas (banco + pgBackRest instalado), não imagens prontas. Contar
+# linhas soltas deixou de descrever a composição do arquivo; o que interessa
+# asserir é o número de SERVIÇOS que cada profile resolve.
+# core (8): os 3 bancos + grafana + seed + sync-worker + minio e minio-init
+#           (destino do backup e do archive_command — por isso estão em core).
+# full (11): core + prometheus e os 2 postgres-exporter.
+# cdc-experimento (7): artefato da decisão de descartar o CDC, fora dos dois.
+N_CORE=$(docker compose --profile core config --services 2>/dev/null | wc -l | tr -d ' ')
+N_FULL=$(docker compose --profile full config --services 2>/dev/null | wc -l | tr -d ' ')
+[ "${N_CORE:-0}" -eq 8 ] && [ "${N_FULL:-0}" -eq 11 ] \
+  && ok 02.2 "profiles resolvem: core=$N_CORE, full=$N_FULL" \
+  || fail 02.2 "esperava core=8 e full=11, achei core=${N_CORE:-0} e full=${N_FULL:-0}"
 # O critério nº 1 do PDF § 6.1 é o perfil core subir sem erro: o grafana chegou a
 # declarar depends_on do prometheus, que só existe em full, e isso abortava o up.
 check 02.7 "grafana não depende de serviço fora do profile core" \
@@ -519,8 +527,15 @@ fi
 # problema que ja aconteceu neste projeto — nao sao testes hipoteticos.
 check E0.1 "nenhum replication slot orfao (retinha 17,7 GB de WAL)" \
   bash -c '[ "$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "select count(*) from pg_replication_slots" 2>/dev/null)" = "0" ]'
-check E0.2 "archive_mode off ate o pgBackRest existir (evita WAL infinito)" \
-  bash -c '[ "$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "show archive_mode" 2>/dev/null)" = "off" ]'
+# Reescrito no E4. Ate entao o correto era archive_mode=off, porque o binario
+# nao existia na imagem. Agora existe, e ON e o correto (ver E4.2). O que nao
+# muda — e e a licao dos 17,7 GB de WAL retido — e a INVARIANTE: arquivamento
+# ligado exige archive_command executavel. Ligado apontando para binario
+# ausente, cada segmento falha com exit 127, o Postgres nao recicla WAL
+# nao-arquivado e o disco enche. Este teste trava exatamente esse estado.
+check E0.2 "se archive_mode=on, entao pgbackrest existe na imagem" \
+  bash -c 'AM=$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "show archive_mode" 2>/dev/null);
+           [ "$AM" != "on" ] || docker exec trio-timescaledb which pgbackrest >/dev/null 2>&1'
 check E0.3 "pg_wal sob controle (< 200 segmentos)" \
   bash -c '[ "$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "select count(*) from pg_ls_waldir()" 2>/dev/null)" -lt 200 ]'
 check E0.4 "transactions com exatamente 10M (sem linha de teste sobrando)" \
@@ -605,6 +620,63 @@ check E2.10 "sync-worker sobe junto do profile core" \
   bash -c 'docker compose --profile core config --services 2>/dev/null | grep -qx sync-worker'
 check E2.11 "idx_tx_updated_at versionado no init" \
   grep -q "idx_tx_updated_at" init/timescaledb/03_indexes.sql
+
+# --- E4 backup-e-recovery ---
+# PDF 5.2 A.1 cobra estrategia para os TRES bancos; A.2 cobra o exercicio de
+# recuperacao com as 3 contagens. Detalhes em desafio-3/backup/README.md.
+pgbr() { docker exec -u postgres "$1" pgbackrest --stanza="$2" "${@:3}"; }
+
+if container_up timescaledb; then
+  check E4.1 "pgbackrest check passa na stanza timescale" \
+    bash -c 'docker exec -u postgres trio-timescaledb pgbackrest --stanza=timescale check'
+  # archive_mode ON so e correto porque agora o binario existe na imagem. Ligado
+  # sem pgbackrest, o Postgres retem todo o WAL nao-arquivado (17,7 GB medidos).
+  AM=$(psql_ts "SHOW archive_mode")
+  [ "$AM" = "on" ] && ok E4.2 "archive_mode=on (PITR ativo)" || fail E4.2 "archive_mode=$AM"
+  N_ARCH=$(psql_ts "SELECT archived_count FROM pg_stat_archiver")
+  N_FAIL=$(psql_ts "SELECT failed_count FROM pg_stat_archiver")
+  [ "${N_ARCH:-0}" -gt 0 ] 2>/dev/null && ok E4.3 "WAL sendo arquivado ($N_ARCH segmentos, $N_FAIL falhas)" \
+    || fail E4.3 "archived_count=$N_ARCH — arquivamento nao esta funcionando"
+  check E4.4 "existe backup full do timescale no repositorio" \
+    bash -c 'docker exec -u postgres trio-timescaledb pgbackrest --stanza=timescale info 2>/dev/null | grep -q "full backup:"'
+else
+  for t in E4.1 E4.2 E4.3 E4.4; do skip "$t" "timescaledb fora do ar"; done
+fi
+
+if container_up postgres-legado; then
+  check E4.5 "pgbackrest check passa na stanza legado (3o banco)" \
+    bash -c 'docker exec -u postgres trio-postgres-legado pgbackrest --stanza=legado check'
+  check E4.6 "existe backup full do legado no repositorio" \
+    bash -c 'docker exec -u postgres trio-postgres-legado pgbackrest --stanza=legado info 2>/dev/null | grep -q "full backup:"'
+else
+  skip E4.5 "postgres-legado fora do ar"; skip E4.6 "postgres-legado fora do ar"
+fi
+
+if container_up clickhouse; then
+  # clickhouse-backup nao existe na imagem (E1 P4); o BACKUP nativo existe e so
+  # precisava do disco declarado em init/clickhouse-config/backup.xml.
+  check E4.7 "disco 'backups' declarado no ClickHouse" \
+    bash -c '[ "$(docker exec trio-clickhouse clickhouse-client -u trio --password trio2024 -q "select count() from system.disks where name='"'"'backups'"'"'" 2>/dev/null)" = "1" ]'
+  N_CH=$(docker exec trio-clickhouse sh -c 'ls -1 /var/lib/clickhouse/backups/*.zip 2>/dev/null | wc -l' 2>/dev/null | tr -d '\r ')
+  [ "${N_CH:-0}" -ge 1 ] 2>/dev/null && ok E4.8 "ClickHouse com $N_CH backup(s)" \
+    || fail E4.8 "nenhum backup do ClickHouse"
+else
+  skip E4.7 "clickhouse fora do ar"; skip E4.8 "clickhouse fora do ar"
+fi
+
+check E4.9  "backup-all.sh com sintaxe valida"   bash -n desafio-3/backup/backup-all.sh
+check E4.10 "restore-drill.sh com sintaxe valida" bash -n desafio-3/backup/restore-drill.sh
+check E4.11 "README de backup documenta os 3 bancos" \
+  bash -c 'grep -qi "timescaledb" desafio-3/backup/README.md && grep -qi "postgresql legado" desafio-3/backup/README.md && grep -qi "clickhouse" desafio-3/backup/README.md'
+# O PDF pede onde o backup ficaria em producao na AWS, com lifecycle.
+check E4.12 "README cobre destino AWS (S3, lifecycle, cross-region)" \
+  bash -c 'grep -qi "s3://" desafio-3/backup/README.md && grep -qi "lifecycle\|Glacier\|Standard-IA" desafio-3/backup/README.md && grep -qi "cross-region" desafio-3/backup/README.md'
+check E4.13 "RTO e RPO documentados com numero medido" \
+  bash -c 'grep -qi "RTO MEDIDO" desafio-3/backup/README.md && grep -qi "RPO" desafio-3/backup/README.md'
+# Guarda de regressao do drill: restaurar sobre o banco principal em vez de uma
+# instancia paralela transformaria o teste de backup no proprio incidente.
+check E4.14 "drill restaura em instancia paralela, nao sobre o principal" \
+  bash -c 'grep -q "DRILL_PORT=5499" desafio-3/backup/restore-drill.sh && grep -q "pg1-path=\$DRILL_DIR" desafio-3/backup/restore-drill.sh'
 
 echo "----"
 echo "$PASS_N pass, $FAIL_N fail, $SKIP_N skip"
