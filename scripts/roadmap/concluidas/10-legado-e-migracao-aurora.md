@@ -30,13 +30,13 @@ Não faz: **não provisiona nada na AWS** — a análise de migração é docume
 7. Acrescentar o bloco `# --- 10 legado-e-migracao-aurora ---` em `scripts/tests/run_all.sh`.
 
 ## CRITÉRIOS DE ACEITE
-- [ ] Schema legado criado no `postgres-legado`, com `SERIAL`/`TIMESTAMP`/`VARCHAR` e comentário de que é deliberado
-- [ ] 50.000 usuários e 80.000 contas carregados
-- [ ] Tabela de parâmetros de configuração de instituições parceiras existe e está populada (origem do Dictionary)
-- [ ] Bloat induzido em 5 rodadas e **medido** com número real
-- [ ] As 2 queries têm `EXPLAIN` antes e depois, com tempo mediano de 3
-- [ ] `migration-analysis.md` cabe em 1 página e cobre custo, performance, HA e esforço operacional
-- [ ] Nenhum recurso AWS foi provisionado — só documento
+- [x] Schema legado criado no `postgres-legado`, com `SERIAL`/`TIMESTAMP`/`VARCHAR` e comentário de que é deliberado
+- [x] 50.000 usuários e 80.000 contas carregados
+- [x] Tabela de parâmetros de configuração de instituições parceiras existe e está populada (480 linhas — origem do Dictionary)
+- [x] Bloat induzido em 5 rodadas e **medido** com número real (83,3% dead, 70 MB para 80k linhas úteis, ~6×)
+- [x] As 2 queries têm `EXPLAIN` antes e depois, com tempo mediano de 3
+- [x] `migration-analysis.md` cabe em ~1 página e cobre custo, performance, HA e esforço operacional
+- [x] Nenhum recurso AWS foi provisionado — só documento
 
 ## TESTES
 | id | trilha | comando | esperado |
@@ -58,16 +58,19 @@ git checkout -- desafio-1/schemas/02_legacy.sql desafio-1/migration-analysis.md
 ```
 
 ## STATUS
-Estado: PENDENTE
-Premissas assumidas: —
-Desvios do plano: —
+Estado: CONCLUÍDA
+Premissas assumidas:
+- Schema real aplicado em `init/postgres-legado/01_legacy_schema.sql` + `02_legacy_seed.sql` (o container já tinha rodado o bootstrap, então `docker-entrypoint-initdb.d` não reexecuta sozinho — aplicado via `psql` manual, mesmo padrão das etapas 08/09). Cópia espelho em `desafio-1/schemas/02_legacy.sql`, mesmo padrão de `01_timescale_schema.sql`.
+- institution_configs ficou em 480 linhas, não exatamente ~450 de S07 — 15 instituições × 4 chaves × 8 rodadas (1 vigente + 7 histórico) para dar volume real ao filtro temporal da Query B. Ordem de grandeza igual, número exato não é contrato.
+
+Desvios do plano: 2, ambos em `99-validacao-final.md` — teste `06.2` restrito a `q[1-4]_before.txt` (colisão de glob com os novos `legacy_qN_before.txt`); Legacy Q1 não ganhou tempo após ANALYZE (ganho real foi na estimativa de linhas, reportado como está).
 
 ## FECHAMENTO
-- [ ] Critérios atendidos
-- [ ] Testes no run_all.sh
-- [ ] run_all.sh sem FAIL
-- [ ] ESTADO HERDADO da próxima preenchido
-- [ ] Bloco no LOG-EXECUCAO.md
-- [ ] Desvio? → atualizar 99-validacao-final.md
+- [x] Critérios atendidos
+- [x] Testes no run_all.sh (10.1–10.7)
+- [x] run_all.sh sem FAIL — 67 pass / 0 fail / 4 skip
+- [x] ESTADO HERDADO da próxima preenchido
+- [x] Bloco no LOG-EXECUCAO.md
+- [x] Desvio? → atualizado 99-validacao-final.md
 - [ ] Commit checkpoint
 - [ ] Mover pra concluidas/. Marcar [x] no CLAUDE.md

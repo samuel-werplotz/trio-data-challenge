@@ -45,6 +45,11 @@ seed_done()     {
   [ "$(docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc \
        "SELECT finished_at IS NOT NULL FROM seed_control" 2>/dev/null | head -1)" = "t" ]
 }
+legado_seed_done() {
+  container_up postgres-legado || return 1
+  [ "$(docker compose exec -T postgres-legado psql -q -U trio -d trio_legado -tAc \
+       "SELECT count(*) FROM partner_institutions" 2>/dev/null | head -1)" = "15" ]
+}
 
 echo "== run_all.sh =="
 
@@ -113,6 +118,7 @@ fi
 
 # --- 04 schema-timescaledb ---
 psql_ts() { docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc "$1" 2>/dev/null | head -1; }
+psql_legado() { docker compose exec -T postgres-legado psql -q -U trio -d trio_legado -tAc "$1" 2>/dev/null | head -1; }
 if container_up timescaledb; then
   N_HT=$(psql_ts "SELECT count(*) FROM timescaledb_information.hypertables")
   [ "$N_HT" = "2" ] && ok 04.1 "2 hypertables (transactions, reconciliation_events)" \
@@ -203,7 +209,7 @@ fi
 check 06.1 "q1..q4_before.txt existem" bash -c \
   'test -f desafio-1/queries/explains/q1_before.txt -a -f desafio-1/queries/explains/q2_before.txt -a -f desafio-1/queries/explains/q3_before.txt -a -f desafio-1/queries/explains/q4_before.txt'
 
-N_BUF=$(grep -l 'Buffers:' desafio-1/queries/explains/*_before.txt 2>/dev/null | wc -l)
+N_BUF=$(grep -l 'Buffers:' desafio-1/queries/explains/q[1-4]_before.txt 2>/dev/null | wc -l)
 [ "$N_BUF" = "4" ] && ok 06.2 "4 arquivos com Buffers:" || fail 06.2 "esperava 4, achei $N_BUF"
 
 if seed_done; then
@@ -354,6 +360,34 @@ if seed_done; then
     || fail 09.7 "esperava accounts fora de hypertables, achei ${N_ACC_HT:-erro}"
 else
   for t in 09.3 09.4 09.5 09.7; do skip "$t" "seed não concluído"; done
+fi
+
+# --- 10 legado-e-migracao-aurora ---
+check 10.5 "migration-analysis.md existe" test -f desafio-1/migration-analysis.md
+check 10.6 "nada de AWS executado no doc" bash -c \
+  '! grep -rqi "aws configure\|terraform apply\|boto3" desafio-1/migration-analysis.md'
+check 10.4 "legacy_qN before/after existem" bash -c \
+  'test -f desafio-1/queries/explains/legacy_q1_before.txt -a -f desafio-1/queries/explains/legacy_q1_after.txt \
+   -a -f desafio-1/queries/explains/legacy_q2_before.txt -a -f desafio-1/queries/explains/legacy_q2_after.txt'
+
+if legado_seed_done; then
+  N_USERS=$(psql_legado "SELECT count(*) FROM legacy_users")
+  [ "$N_USERS" = "50000" ] && ok 10.1 "50.000 legacy_users" \
+    || fail 10.1 "esperava 50000, achei ${N_USERS:-erro}"
+
+  N_ACC=$(psql_legado "SELECT count(*) FROM legacy_accounts")
+  [ "$N_ACC" = "80000" ] && ok 10.2 "80.000 legacy_accounts" \
+    || fail 10.2 "esperava 80000, achei ${N_ACC:-erro}"
+
+  N_DEAD=$(psql_legado "SELECT n_dead_tup FROM pg_stat_user_tables WHERE relname='legacy_accounts'")
+  [ -n "$N_DEAD" ] && [ "$N_DEAD" -gt 0 ] 2>/dev/null && ok 10.3 "bloat presente em legacy_accounts (n_dead_tup=$N_DEAD)" \
+    || fail 10.3 "esperava n_dead_tup>0, achei ${N_DEAD:-erro}"
+
+  N_CFG=$(psql_legado "SELECT count(*) FROM institution_configs")
+  [ -n "$N_CFG" ] && [ "$N_CFG" -gt 0 ] 2>/dev/null && ok 10.7 "institution_configs populada ($N_CFG linhas — origem do Dictionary)" \
+    || fail 10.7 "esperava >0, achei ${N_CFG:-erro}"
+else
+  for t in 10.1 10.2 10.3 10.7; do skip "$t" "seed do legado não concluído"; done
 fi
 
 # ===========================================================================

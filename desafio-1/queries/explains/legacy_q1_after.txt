@@ -1,0 +1,59 @@
+-- Query: legacy_q1
+-- Arquivo fonte: legacy_q1_contas_por_instituicao.sql
+-- Protocolo: 4 execuções, 1ª descartada, mediana das 3 seguintes = 183.322ms
+-- Tempos (ms): 189.768 166.374 183.322 
+-- Estado: pós-ANALYZE, mesmo bloat físico (83.3% dead, sem VACUUM)
+--
+                                                                                                                                                                 QUERY PLAN                                                                                                                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=16983.62..16983.66 rows=14 width=117) (actual time=182.885..182.894 rows=14 loops=1)
+   Output: pi.code, pi.name, (count(la.id) FILTER (WHERE ((la.status)::text = 'active'::text))), (count(la.id) FILTER (WHERE ((la.status)::text = 'blocked'::text))), (sum(la.balance) FILTER (WHERE ((la.status)::text = 'active'::text))), (avg(la.balance) FILTER (WHERE ((la.status)::text = 'active'::text))), (count(DISTINCT lu.id))
+   Sort Key: (sum(la.balance) FILTER (WHERE ((la.status)::text = 'active'::text))) DESC NULLS LAST
+   Sort Method: quicksort  Memory: 26kB
+   Buffers: shared hit=6579
+   ->  GroupAggregate  (cost=15116.47..16983.35 rows=14 width=117) (actual time=162.924..182.833 rows=14 loops=1)
+         Output: pi.code, pi.name, count(la.id) FILTER (WHERE ((la.status)::text = 'active'::text)), count(la.id) FILTER (WHERE ((la.status)::text = 'blocked'::text)), sum(la.balance) FILTER (WHERE ((la.status)::text = 'active'::text)), avg(la.balance) FILTER (WHERE ((la.status)::text = 'active'::text)), count(DISTINCT lu.id)
+         Group Key: pi.code, pi.name
+         Buffers: shared hit=6576
+         ->  Sort  (cost=15116.47..15303.14 rows=74667 width=52) (actual time=161.395..166.034 rows=74667 loops=1)
+               Output: pi.code, pi.name, la.id, la.status, la.balance, lu.id
+               Sort Key: pi.code, pi.name, lu.id
+               Sort Method: quicksort  Memory: 7734kB
+               Buffers: shared hit=6576
+               ->  Hash Left Join  (cost=1953.51..9072.85 rows=74667 width=52) (actual time=11.903..41.785 rows=74667 loops=1)
+                     Output: pi.code, pi.name, la.id, la.status, la.balance, lu.id
+                     Inner Unique: true
+                     Hash Cond: (la.user_id = lu.id)
+                     Buffers: shared hit=6570
+                     ->  Hash Right Join  (cost=1.32..6924.65 rows=74667 width=52) (actual time=2.905..19.711 rows=74667 loops=1)
+                           Output: pi.code, pi.name, la.id, la.status, la.balance, la.user_id
+                           Inner Unique: true
+                           Hash Cond: (la.institution_id = pi.id)
+                           Buffers: shared hit=5855
+                           ->  Seq Scan on public.legacy_accounts la  (cost=0.00..6654.00 rows=80000 width=27) (actual time=2.883..8.950 rows=80000 loops=1)
+                                 Output: la.id, la.user_id, la.institution_id, la.account_number, la.branch, la.account_type, la.status, la.balance, la.created_at, la.updated_at
+                                 Buffers: shared hit=5854
+                           ->  Hash  (cost=1.15..1.15 rows=14 width=33) (actual time=0.010..0.012 rows=14 loops=1)
+                                 Output: pi.code, pi.name, pi.id
+                                 Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                 Buffers: shared hit=1
+                                 ->  Seq Scan on public.partner_institutions pi  (cost=0.00..1.15 rows=14 width=33) (actual time=0.005..0.006 rows=14 loops=1)
+                                       Output: pi.code, pi.name, pi.id
+                                       Filter: pi.is_active
+                                       Rows Removed by Filter: 1
+                                       Buffers: shared hit=1
+                     ->  Hash  (cost=1340.00..1340.00 rows=48975 width=4) (actual time=8.790..8.790 rows=49000 loops=1)
+                           Output: lu.id
+                           Buckets: 65536  Batches: 1  Memory Usage: 2235kB
+                           Buffers: shared hit=715
+                           ->  Seq Scan on public.legacy_users lu  (cost=0.00..1340.00 rows=48975 width=4) (actual time=0.006..4.498 rows=49000 loops=1)
+                                 Output: lu.id
+                                 Filter: ((lu.status)::text = 'active'::text)
+                                 Rows Removed by Filter: 1000
+                                 Buffers: shared hit=715
+ Query Identifier: -7686505322063400071
+ Planning:
+   Buffers: shared hit=274
+ Planning Time: 0.658 ms
+ Execution Time: 183.322 ms
+(50 rows)

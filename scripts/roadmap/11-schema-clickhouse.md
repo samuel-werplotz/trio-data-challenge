@@ -7,7 +7,13 @@
 (vazio = liberado)
 
 ## ESTADO HERDADO
-<preenchido pela etapa 10 ao fechar>
+Verificado ao fechar a etapa 10:
+- `postgres-legado`: schema aplicado (`init/postgres-legado/01_legacy_schema.sql` + `02_legacy_seed.sql`), 15 `partner_institutions`, 480 `institution_configs` (60 vigentes: 15 inst × 4 chaves com `effective_until IS NULL`), 50.000 `legacy_users`, 80.000 `legacy_accounts`. **Esta é a origem real do `dict_institutions` desta etapa** — `partner_institutions.code`/`name`/`is_active` mapeiam 1:1 para as 15 `source_institution` de `transactions` no TimescaleDB.
+- `legacy_accounts` tem bloat induzido de propósito (83,3% dead, ~6× o espaço útil) — irrelevante para o Dictionary (que lê de `partner_institutions`/`institution_configs`, não de `legacy_accounts`), mas não foi limpo (`VACUUM` não rodou) e persiste como estava ao fechar a 10.
+- 2 queries complexas do legado medidas (`legacy_q1`/`legacy_q2`, antes/depois de `ANALYZE`); `desafio-1/migration-analysis.md` escrito, nenhum recurso AWS provisionado.
+- **`postgres-legado` está healthy, mas `clickhouse` ainda não subiu nesta sessão** — o perfil ativo até agora foi `core` sem incluir o serviço `clickhouse`. Esta etapa precisa subi-lo (`docker compose up -d clickhouse` ou perfil que o inclua) antes de aplicar `01_schema.sql`.
+- `timescaledb`: estado inalterado desde a etapa 09 — 10.000.000 `transactions`, 2 CAggs, compressão e retenção ativas. Nenhuma etapa entre 09 e 10 tocou o TimescaleDB.
+- `run_all.sh`: blocos 01–10, **67 pass / 0 fail / 4 skip**. `audit.sh`: 83 pass / 0 fail / 1 warn / 1 skip. Dois desvios registrados em `99-validacao-final.md`: teste `06.2` restrito a `q[1-4]_before.txt` (colisão de glob com `legacy_qN_before.txt`); Legacy Q1 sem ganho de tempo pós-`ANALYZE` (ganho foi na estimativa de linhas, 509.298→80.000).
 
 ## ESCOPO
 Faz: `init/clickhouse/01_schema.sql` — `transactions_raw` (`ReplacingMergeTree(_version)`), 2 tabelas `AggregatingMergeTree` + 2 MVs separadas, e o `dict_institutions`.

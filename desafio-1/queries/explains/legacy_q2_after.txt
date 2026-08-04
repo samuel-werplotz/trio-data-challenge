@@ -1,0 +1,38 @@
+-- Query: legacy_q2
+-- Arquivo fonte: legacy_q2_config_vigente.sql
+-- Protocolo: 4 execuções, 1ª descartada, mediana das 3 seguintes = 0.173ms
+-- Tempos (ms): 0.173 0.366 0.148 
+-- Estado: pós-ANALYZE, mesmo bloat físico (83.3% dead, sem VACUUM)
+--
+                                                                                                         QUERY PLAN                                                                                                          
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=21.15..21.29 rows=56 width=55) (actual time=0.117..0.120 rows=56 loops=1)
+   Output: pi.code, pi.name, ic.config_key, ic.config_value, ic.value_type
+   Sort Key: pi.code, ic.config_key
+   Sort Method: quicksort  Memory: 29kB
+   Buffers: shared hit=10
+   ->  Hash Join  (cost=1.32..19.53 rows=56 width=55) (actual time=0.020..0.074 rows=56 loops=1)
+         Output: pi.code, pi.name, ic.config_key, ic.config_value, ic.value_type
+         Inner Unique: true
+         Hash Cond: (ic.institution_id = pi.id)
+         Buffers: shared hit=7
+         ->  Seq Scan on public.institution_configs ic  (cost=0.00..18.00 rows=60 width=30) (actual time=0.005..0.053 rows=60 loops=1)
+               Output: ic.id, ic.institution_id, ic.config_key, ic.config_value, ic.value_type, ic.effective_from, ic.effective_until, ic.updated_at
+               Filter: ((ic.effective_from <= now()) AND ((ic.effective_until IS NULL) OR (ic.effective_until > now())) AND ((ic.config_key)::text = ANY ('{daily_limit,pix_fee,settlement_window,max_tx_amount}'::text[])))
+               Rows Removed by Filter: 420
+               Buffers: shared hit=6
+         ->  Hash  (cost=1.15..1.15 rows=14 width=33) (actual time=0.006..0.006 rows=14 loops=1)
+               Output: pi.code, pi.name, pi.id
+               Buckets: 1024  Batches: 1  Memory Usage: 9kB
+               Buffers: shared hit=1
+               ->  Seq Scan on public.partner_institutions pi  (cost=0.00..1.15 rows=14 width=33) (actual time=0.001..0.002 rows=14 loops=1)
+                     Output: pi.code, pi.name, pi.id
+                     Filter: pi.is_active
+                     Rows Removed by Filter: 1
+                     Buffers: shared hit=1
+ Query Identifier: -7434883330919779102
+ Planning:
+   Buffers: shared hit=349
+ Planning Time: 0.574 ms
+ Execution Time: 0.148 ms
+(29 rows)

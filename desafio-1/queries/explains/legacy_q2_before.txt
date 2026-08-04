@@ -1,0 +1,40 @@
+-- Query: legacy_q2
+-- Arquivo fonte: legacy_q2_config_vigente.sql
+-- Protocolo: 4 execuções, 1ª descartada, mediana das 3 seguintes = 0.201ms
+-- Tempos (ms): 0.281 0.201 0.199 
+-- Estado: bloat 83.3% dead, SEM ANALYZE desde a criação (S07 § gargalo típico)
+--
+                                                                                                         QUERY PLAN                                                                                                          
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=46.88..47.03 rows=58 width=483) (actual time=0.161..0.163 rows=56 loops=1)
+   Output: pi.code, pi.name, ic.config_key, ic.config_value, ic.value_type
+   Sort Key: pi.code, ic.config_key
+   Sort Method: quicksort  Memory: 29kB
+   Buffers: shared hit=39
+   ->  Nested Loop  (cost=0.15..45.18 rows=58 width=483) (actual time=0.040..0.117 rows=56 loops=1)
+         Output: pi.code, pi.name, ic.config_key, ic.config_value, ic.value_type
+         Inner Unique: true
+         Buffers: shared hit=36
+         ->  Seq Scan on public.institution_configs ic  (cost=0.00..33.25 rows=116 width=31) (actual time=0.031..0.084 rows=60 loops=1)
+               Output: ic.id, ic.institution_id, ic.config_key, ic.config_value, ic.value_type, ic.effective_from, ic.effective_until, ic.updated_at
+               Filter: ((ic.effective_from <= now()) AND ((ic.effective_until IS NULL) OR (ic.effective_until > now())) AND ((ic.config_key)::text = ANY ('{daily_limit,pix_fee,settlement_window,max_tx_amount}'::text[])))
+               Rows Removed by Filter: 420
+               Buffers: shared hit=6
+         ->  Memoize  (cost=0.15..0.58 rows=1 width=460) (actual time=0.000..0.000 rows=1 loops=60)
+               Output: pi.code, pi.name, pi.id
+               Cache Key: ic.institution_id
+               Cache Mode: logical
+               Hits: 45  Misses: 15  Evictions: 0  Overflows: 0  Memory Usage: 2kB
+               Buffers: shared hit=30
+               ->  Index Scan using partner_institutions_pkey on public.partner_institutions pi  (cost=0.14..0.57 rows=1 width=460) (actual time=0.001..0.001 rows=1 loops=15)
+                     Output: pi.code, pi.name, pi.id
+                     Index Cond: (pi.id = ic.institution_id)
+                     Filter: pi.is_active
+                     Rows Removed by Filter: 0
+                     Buffers: shared hit=30
+ Query Identifier: -7434883330919779102
+ Planning:
+   Buffers: shared hit=345
+ Planning Time: 0.570 ms
+ Execution Time: 0.199 ms
+(31 rows)
