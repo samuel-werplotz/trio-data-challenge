@@ -182,6 +182,10 @@ services:
       # Declara o disco 'backups': sem isso o comando BACKUP nativo recusa com
       # "backups.allowed_disk is not set" (verificado no E1 § P5).
       - ./init/clickhouse-config/backup.xml:/etc/clickhouse-server/config.d/backup.xml:ro
+      # Publica as metricas nativas em :9363/metrics. O ClickHouse ja as coleta
+      # em system.metrics; sem esta config nao as expoe em formato Prometheus,
+      # e o dashboard de ClickHouse (etapa 15) ficaria sem fonte.
+      - ./init/clickhouse-config/prometheus.xml:/etc/clickhouse-server/config.d/prometheus.xml:ro
     ulimits:
       nofile:
         soft: 262144
@@ -214,6 +218,10 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./init/grafana/provisioning:/etc/grafana/provisioning:ro
+      # Os .json dos dashboards ficam FORA de provisioning/: se morarem no mesmo
+      # diretorio do dashboards.yml, o Grafana tenta ler o proprio .yml como
+      # dashboard e nao carrega nenhum — falha silenciosa, sem erro no log.
+      - ./init/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       timescaledb:
         condition: service_healthy

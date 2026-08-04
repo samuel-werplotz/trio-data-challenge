@@ -1,0 +1,199 @@
+{
+  "uid": "trio-clickhouse-dash",
+  "title": "Trio · ClickHouse",
+  "tags": ["trio", "clickhouse"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "description": "Camada analitica: queries ativas, memoria, merges, partes por particao e latencia da API. Metricas nativas do ClickHouse em :9363 (sem exporter externo) + consultas ao system para o que precisa de detalhe por tabela.",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Queries ativas",
+      "gridPos": { "h": 5, "w": 5, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "trio-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ClickHouseMetrics_Query",
+          "legendFormat": "ativas"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 0 },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Memória em uso",
+      "gridPos": { "h": 5, "w": 5, "x": 5, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "trio-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ClickHouseMetrics_MemoryTracking",
+          "legendFormat": "memória"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes", "decimals": 1 },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Merges em andamento",
+      "description": "Merge e como o ReplacingMergeTree consolida versoes. Merge que nao acompanha a insercao vira 'partes demais' — alerta SEV-2.",
+      "gridPos": { "h": 5, "w": 5, "x": 10, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "trio-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "ClickHouseMetrics_Merge", "legendFormat": "merges" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Linhas em transactions_raw",
+      "description": "10M do backfill. count() e count() FINAL identicos = sem duplicata pendente de merge.",
+      "gridPos": { "h": 5, "w": 9, "x": 15, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "trio-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT count() AS linhas FROM trio_analytics.transactions_raw",
+          "format": 1
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 0 },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Inserções por segundo",
+      "description": "rate() sobre o contador de linhas inseridas. E o sync-worker escrevendo.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "trio-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(ClickHouseProfileEvents_InsertedRows[5m])",
+          "legendFormat": "linhas/s"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(ClickHouseProfileEvents_InsertQuery[5m])",
+          "legendFormat": "INSERTs/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Queries por segundo e falhas",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "trio-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(ClickHouseProfileEvents_Query[5m])",
+          "legendFormat": "queries/s"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(ClickHouseProfileEvents_FailedQuery[5m])",
+          "legendFormat": "falhas/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Partes por partição — a série que antecede 'too many parts'",
+      "description": "Muitas partes por particao significa que o merge nao acompanha a insercao. E o motivo de o sync-worker preferir poucos INSERTs grandes a muitos pequenos.",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 13 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "trio-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT table AS tabela, partition AS particao, count() AS partes, formatReadableSize(sum(bytes_on_disk)) AS tamanho, sum(rows) AS linhas FROM system.parts WHERE database = 'trio_analytics' AND active GROUP BY table, partition ORDER BY partes DESC, tabela LIMIT 20",
+          "format": 1
+        }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Tamanho por tabela",
+      "description": "raw x agregadas: as MVs custam uma fracao do raw e respondem o painel em 7-8ms.",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 13 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "trio-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT table AS tabela, formatReadableSize(sum(bytes_on_disk)) AS em_disco, sum(rows) AS linhas, count() AS partes FROM system.parts WHERE database = 'trio_analytics' AND active GROUP BY table ORDER BY sum(bytes_on_disk) DESC",
+          "format": 1
+        }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "API sobre ClickHouse — P95 e P99 por endpoint",
+      "description": "O requisito do PDF e o ClickHouse servindo APLICACAO. Esta e a latencia que o cliente da API mede, ponta a ponta.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "trio-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(api_request_duration_seconds_bucket[5m])) by (le, endpoint))",
+          "legendFormat": "P95 — {{endpoint}}"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.99, sum(rate(api_request_duration_seconds_bucket[5m])) by (le, endpoint))",
+          "legendFormat": "P99 — {{endpoint}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 0 } },
+        "overrides": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,274 @@
+{
+  "uid": "trio-pipeline",
+  "title": "Trio · Pipeline",
+  "tags": ["trio", "pipeline"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "description": "Saude do sync-worker (TimescaleDB -> ClickHouse) e do ref-sync. O painel 'Tempo desde a ultima gravacao' e a serie que detecta o SEV-1: pipeline parado com a origem saudavel.",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Tempo desde a última gravação bem-sucedida",
+      "description": "A métrica mais importante do projeto. Um contador que para de crescer é indistinguível de 'não houve movimento'; um timestamp que envelhece é afirmativo. Vermelho acima de 300s = condição do alerta PipelineParado (SEV-1).",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "trio-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - sync_last_success_timestamp",
+          "legendFormat": "sync-worker"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 60 },
+              { "color": "red", "value": 300 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Lag atual",
+      "description": "now() - maior updated_at ja sincronizado. Alvo de freshness < 30s.",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "trio-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sync_lag_seconds", "legendFormat": "lag" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 30 },
+              { "color": "red", "value": 60 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Frescor do Dictionary (ref-sync)",
+      "description": "Idade do dado de referencia. O LIFETIME do Dictionary recarrega sozinho, mas nao expoe frescor — esta serie e a resposta para 'o cadastro que a API esta lendo esta velho?'.",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "trio-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "refsync_dictionary_age_seconds",
+          "legendFormat": "idade"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 600 },
+              { "color": "red", "value": 900 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Erros e DLQ",
+      "description": "sync_errors_total por categoria e linhas descartadas para a dead-letter queue.",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "trio-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(sync_errors_total)",
+          "legendFormat": "erros"
+        },
+        { "refId": "B", "expr": "sync_dlq_total", "legendFormat": "DLQ" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Throughput — linhas lidas e gravadas por segundo",
+      "description": "rate() sobre os contadores. Divergencia sustentada entre lidas e gravadas indica linha sendo descartada no caminho.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "trio-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(sync_rows_read_total[5m])",
+          "legendFormat": "lidas/s"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(sync_rows_written_total[5m])",
+          "legendFormat": "gravadas/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "rps", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Lag ao longo do tempo",
+      "description": "Lag subindo de forma monotonica e o sinal que antecede o pipeline parado.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "trio-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sync_lag_seconds", "legendFormat": "lag" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "fillOpacity": 10 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 60 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Duração do ciclo — P50 e P95",
+      "description": "Leitura na origem + escrita no destino. Serie real: sync_cycle_duration_seconds (o roadmap chamava de sync_batch_duration_seconds, que nao existe).",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "trio-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum(rate(sync_cycle_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum(rate(sync_cycle_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 0 } },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Ciclos por tipo e watermark",
+      "description": "Ciclo incremental x varredura completa (a diaria e naturalmente mais lenta). O watermark avancando confirma progresso real.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "trio-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(sync_cycles_total[5m]) * 60",
+          "legendFormat": "ciclos/min — {{kind}}"
+        },
+        {
+          "refId": "B",
+          "expr": "time() - sync_watermark_timestamp",
+          "legendFormat": "idade do watermark (s)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "fillOpacity": 0 } },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "API — latência P95 por endpoint e taxa de acerto do cache",
+      "description": "Fecha o circuito: o pipeline alimenta o ClickHouse, a API serve. Cache com boa taxa de acerto e o que segura a latencia sob rajada.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "trio-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(api_request_duration_seconds_bucket[5m])) by (le, endpoint))",
+          "legendFormat": "P95 — {{endpoint}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(api_cache_hits_total[5m])) / clamp_min(sum(rate(api_cache_hits_total[5m])) + sum(rate(api_cache_misses_total[5m])), 0.001)",
+          "legendFormat": "taxa de acerto do cache"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 0 } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "taxa de acerto do cache" },
+            "properties": [{ "id": "unit", "value": "percentunit" }]
+          }
+        ]
+      }
+    }
+  ]
+}

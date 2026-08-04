@@ -38,16 +38,16 @@ Não faz: **não refaz backup nem recovery** — entregues na 13.5 (`desafio-3/b
 8. Acrescentar o bloco `# --- 15 observabilidade-runbook-e-incidente ---` em `scripts/tests/run_all.sh`.
 
 ## CRITÉRIOS DE ACEITE
-- [ ] Os 4 dashboards aparecem provisionados no Grafana e carregam **dado real** (não painel vazio)
-- [ ] `prometheus` sobe e fica estável, com os alvos ativos
-- [ ] O dashboard de Pipeline mostra as métricas do sync-worker com os nomes reais de `metrics.py`
-- [ ] Os 6 alertas existem, cada um com métrica, threshold, severidade, ação esperada e integração CloudWatch/SNS
-- [ ] Ao menos 1 alerta cobre `sync_last_success_timestamp` (detecção do SEV-1)
-- [ ] `runbook.md` cobre os 5 itens do PDF § 5.2 A.3, com comandos SQL reais
-- [ ] `incident-response.md` cobre os 5 blocos do PDF § 5.2 C
-- [ ] A árvore tem ≥5 hipóteses ordenadas por probabilidade e considera **as duas** pistas (manutenção no Timescale e security group)
-- [ ] Ações pós-incidente incluem medidas **preventivas**, não só detectivas
-- [ ] Dataset principal intacto: `count(*)` de `transactions` inalterado
+- [x] Os 4 dashboards aparecem provisionados no Grafana e carregam **dado real** (não painel vazio) — testes `15.1`/`15.19`; validado via `/api/ds/query` nas 3 datasources (338 chunks, 10M linhas, 83,3% de bloat)
+- [x] `prometheus` sobe e fica estável, com os alvos ativos — **7/7 up**, testes `15.2`/`15.20`
+- [x] O dashboard de Pipeline mostra as métricas do sync-worker com os nomes reais de `metrics.py` — conferidos no `/metrics` antes de escrever; o roadmap citava `sync_batch_duration_seconds`, que não existe (é `sync_cycle_duration_seconds`)
+- [x] Os 6 alertas existem, cada um com métrica, threshold, severidade, ação esperada e integração CloudWatch/SNS — testes `15.4`/`15.17`
+- [x] Ao menos 1 alerta cobre `sync_last_success_timestamp` (detecção do SEV-1) — teste `15.5`; condição **dupla** (`15.18`)
+- [x] `runbook.md` cobre os 5 itens do PDF § 5.2 A.3, com comandos SQL reais — teste `15.10`; SQL verificado contra o banco (156 chunks, 1.111 MB)
+- [x] `incident-response.md` cobre os 5 blocos do PDF § 5.2 C — teste `15.6`
+- [x] A árvore tem ≥5 hipóteses ordenadas por probabilidade e considera **as duas** pistas — **7 hipóteses**, testes `15.7`/`15.8`
+- [x] Ações pós-incidente incluem medidas **preventivas**, não só detectivas — teste `15.11`; 5 das 8 ações são preventivas
+- [x] Dataset principal intacto: `count(*)` de `transactions` inalterado — teste `15.9` (10.000.000)
 
 ## TESTES
 | id | trilha | comando | esperado |
@@ -70,16 +70,28 @@ git checkout -- desafio-3/ init/grafana/ init/prometheus/
 > Etapa documental e de provisionamento; não toca dado.
 
 ## STATUS
-Estado: PENDENTE
-Premissas assumidas: —
-Desvios do plano: —
+Estado: CONCLUÍDA
+
+Premissas assumidas:
+- **Alerta de pipeline parado usa condição dupla** (idade do último sucesso **e** lag > 60s), não só a idade. A versão de E11 daria falso positivo sistemático em ambiente ocioso, porque o worker só registra sucesso quando há linha nova — e alerta que dispara à toa acaba silenciado, deixando de detectar o incidente para o qual existe.
+- **Dois dos 6 alertas de E11 foram substituídos**, não removidos: DLQ → `sync_errors_total` (a DLQ era do consumidor CDC, fora do caminho principal) e slot de replicação → `up == 0` (sem CDC não há slot; o risco equivalente é o alvo de métricas cair e cegar os demais alertas).
+- **`StorageAlto` fica sem série neste ambiente**: não há `node_exporter`, então `node_filesystem_*` não é coletada. Mantida a expressão que valeria em produção em vez de trocá-la por um proxy local que não se pareceria com o alvo real. Regra carregada e válida, nunca dispara aqui — documentado em `alertas.md`.
+- **Painel de precisão do planner mostra estimativas exatas**, não o erro de 509.298→80.000 da etapa 10: aquele erro era pré-`ANALYZE`. O painel mostra o estado corrente, que é o honesto para um dashboard operacional.
+- Runbook nomeado `runbook.md` (não `runbook-storage-92.md` como em E12): é o nome literal que o PDF § 6 usa na árvore de arquivos.
+
+Desvios do plano:
+1. **`init/prometheus/prometheus.yml` e `alert_rules.yml` criados do zero.** O `PASSO 3` previa "subir o Prometheus com o arquivo", mas o diretório estava **vazio** — o serviço existia no compose desde a etapa 02 apontando o volume para um caminho sem config, e reiniciava em loop. Não era configuração a ajustar, era a ausência dela.
+2. **ClickHouse ganhou endpoint Prometheus** (`init/clickhouse-config/prometheus.xml` + volume no compose). Sem isso o dashboard de ClickHouse não teria fonte de métrica de merges/partes/memória. Mesmo padrão de `config.d/` já usado pelo `backup.xml`, sem trocar imagem nem schema. Container recriado com **conferência de dado antes e depois: 10.000.000 linhas**.
+3. **Dashboards movidos para `init/grafana/dashboards/`**, fora de `provisioning/`. Com os `.json` no mesmo diretório do `dashboards.yml`, o Grafana lê o próprio `.yml` como dashboard e **não carrega nenhum, sem erro no log** — provisionamento "termina com sucesso" e a UI fica vazia. Descoberto na prática; teste `15.15` guarda a regressão.
+4. **Datasources ganharam UID fixo.** Os dashboards referenciam datasource por UID; sem UID declarado o Grafana gera um aleatório e os painéis quebrariam a cada recriação do container.
+5. **Teste `E2.4` (etapa 13.5) corrigido.** Falhava de forma sistemática com banco ocioso, pelo mesmo motivo que tornou a condição do alerta dupla — medido: 1516s de idade com lag de 0,98s e o worker rodando ciclos normalmente. Passou a exigir idade **e** lag, alinhado ao alerta. Não era regressão desta etapa nem defeito do worker; era o teste asserindo a condição errada desde a 13.5.
 
 ## FECHAMENTO
-- [ ] Critérios atendidos
-- [ ] Testes no run_all.sh
-- [ ] run_all.sh sem FAIL
-- [ ] ESTADO HERDADO da próxima preenchido
-- [ ] Bloco no LOG-EXECUCAO.md
-- [ ] Desvio? → atualizar 99-validacao-final.md
-- [ ] Commit checkpoint
-- [ ] Mover pra concluidas/. Marcar [x] no CLAUDE.md
+- [x] Critérios atendidos
+- [x] Testes no run_all.sh (bloco `# --- 15 observabilidade-runbook-e-incidente ---`, 20 testes)
+- [x] run_all.sh sem FAIL — 159 pass, 0 fail, 3 skip
+- [x] ESTADO HERDADO da próxima preenchido
+- [x] Bloco no LOG-EXECUCAO.md
+- [x] Desvio? → registrado em `99-validacao-final.md`
+- [x] Commit checkpoint
+- [x] Mover pra concluidas/. Marcar [x] no CLAUDE.md

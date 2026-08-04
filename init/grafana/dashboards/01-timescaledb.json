@@ -1,0 +1,166 @@
+{
+  "uid": "trio-timescaledb",
+  "title": "Trio · TimescaleDB",
+  "tags": ["trio", "timescaledb"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "description": "Banco transacional principal: chunks, compressao, jobs de politica e atraso dos continuous aggregates. Consulta o TimescaleDB direto (catalogo) para o que so existe la, e o Prometheus para conexoes.",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Chunks da hypertable",
+      "description": "338 chunks de 1 dia. Numero relevante para o CDC: e por chunk que a decodificacao logica falhava (ver ADR).",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "trio-timescaledb" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*)::bigint AS \"chunks\" FROM timescaledb_information.chunks WHERE hypertable_name = 'transactions';"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 0 },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Taxa de compressão (total)",
+      "description": "5,0x no total mas 23,5x so na tabela: os 4 indices da etapa 07 pesam mais que o dado comprimido. As duas otimizacoes do desafio se pagam uma contra a outra.",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "trio-timescaledb" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT round((before_compression_total_bytes::numeric / NULLIF(after_compression_total_bytes, 0)), 1) AS \"razao\" FROM hypertable_compression_stats('transactions');"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "none", "decimals": 1 },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Tamanho da hypertable",
+      "description": "Dado + indices, depois da compressao.",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "trio-timescaledb" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT hypertable_size('transactions')::bigint AS \"bytes\";"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes", "decimals": 1 },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Conexões ativas",
+      "description": "Do postgres-exporter. Saturacao de conexao e um dos sintomas que sustentam o argumento de migracao.",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "trio-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(pg_stat_database_numbackends{job=\"postgres-timescaledb\"})",
+          "legendFormat": "conexões"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 0 },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Jobs de política — compressão, retenção e refresh dos CAggs",
+      "description": "A retencao do raw esta DESABILITADA de proposito (scheduled=false): 90 dias contra um dataset de 12 meses apagaria dado que o desafio precisa. As dos CAggs seguem ligadas.",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 5 },
+      "datasource": { "type": "postgres", "uid": "trio-timescaledb" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT j.job_id, j.proc_name AS politica, j.hypertable_name AS alvo, j.scheduled AS ligado, j.schedule_interval::text AS intervalo, s.last_run_status AS ultimo_status, s.total_failures AS falhas FROM timescaledb_information.jobs j LEFT JOIN timescaledb_information.job_stats s USING (job_id) WHERE j.job_id >= 1000 ORDER BY j.job_id;"
+        }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Atraso dos continuous aggregates",
+      "description": "Distancia entre o watermark do CAgg e agora. Materializacao atrasada e o que torna PERIGOSO apagar chunk bruto — ver desafio-3/runbook.md.",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 5 },
+      "datasource": { "type": "postgres", "uid": "trio-timescaledb" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT ca.view_name AS cagg, _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(c.mat_hypertable_id)) AS materializado_ate, round(EXTRACT(EPOCH FROM (now() - _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(c.mat_hypertable_id))))/3600, 1) AS atraso_horas FROM timescaledb_information.continuous_aggregates ca JOIN _timescaledb_catalog.continuous_agg c ON c.user_view_name = ca.view_name ORDER BY 1;"
+        }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Chunks maiores — candidatos do runbook de storage",
+      "description": "Ordenados por tamanho e idade. E esta lista que o runbook de storage em 92% percorre, um chunk por vez.",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 14 },
+      "datasource": { "type": "postgres", "uid": "trio-timescaledb" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT chunk_name, range_start::date AS inicio, is_compressed AS comprimido, pg_size_pretty(total_bytes) AS tamanho FROM timescaledb_information.chunks c JOIN LATERAL (SELECT total_bytes FROM chunks_detailed_size('transactions') d WHERE d.chunk_name = c.chunk_name) s ON true WHERE c.hypertable_name = 'transactions' ORDER BY s.total_bytes DESC LIMIT 15;"
+        }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Transações por hora (últimas 24h de dado)",
+      "description": "Le do CAgg horario, nao da hypertable: e a diferenca entre 3,4ms e 1.285ms (383x, medido na etapa 08).",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 14 },
+      "datasource": { "type": "postgres", "uid": "trio-timescaledb" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT bucket AS time, type::text AS metric, sum(tx_count) AS value FROM cagg_volume_hourly WHERE bucket >= (SELECT max(bucket) - INTERVAL '24 hours' FROM cagg_volume_hourly) GROUP BY 1, 2 ORDER BY 1;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      }
+    }
+  ]
+}

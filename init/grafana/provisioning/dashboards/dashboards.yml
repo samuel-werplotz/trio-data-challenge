@@ -1,0 +1,26 @@
+# dashboards.yml — provider de dashboards provisionados por arquivo.
+#
+# Por arquivo, não pela UI: dashboard criado na interface vive só no volume do
+# Grafana e some no primeiro `down -v` — não é versionável nem revisável em code
+# review. Os 4 .json ao lado deste arquivo são o entregável.
+
+apiVersion: 1
+
+providers:
+  - name: trio
+    orgId: 1
+    folder: Trio
+    type: file
+    # Impede que uma edição acidental na UI seja gravada por cima do arquivo:
+    # a fonte da verdade é o repositório.
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      # Os .json ficam FORA de provisioning/, em /var/lib/grafana/dashboards.
+      # Apontar o path para o próprio diretório deste arquivo faz o Grafana
+      # tentar ler o dashboards.yml como se fosse um dashboard, e nenhum .json
+      # é carregado — provisionamento "termina" sem erro e sem inserir nada.
+      path: /var/lib/grafana/dashboards
+      # Cada .json declara seu próprio título; sem isto, subpastas seriam
+      # ignoradas na organização do folder.
+      foldersFromFilesStructure: false

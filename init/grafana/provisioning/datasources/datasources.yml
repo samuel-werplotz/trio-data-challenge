@@ -8,6 +8,7 @@ apiVersion: 1
 datasources:
   # TimescaleDB — Banco transacional principal
   - name: TimescaleDB
+    uid: trio-timescaledb
     type: postgres
     access: proxy
     url: timescaledb:5432
@@ -27,6 +28,7 @@ datasources:
 
   # PostgreSQL Legado
   - name: PostgreSQL Legado
+    uid: trio-legado
     type: postgres
     access: proxy
     url: postgres-legado:5432
@@ -42,8 +44,23 @@ datasources:
       postgresVersion: 1600
     editable: true
 
+  # Prometheus — métricas de aplicação (os 3 workers Python) e dos exporters.
+  # É a fonte dos dashboards de Pipeline e das séries de infra; os painéis que
+  # consultam dado de negócio seguem indo direto nos bancos abaixo.
+  # UID fixo: os dashboards provisionados referenciam a datasource por UID, e
+  # um UID gerado aleatoriamente quebraria os painéis a cada recriação.
+  - name: Prometheus
+    uid: trio-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    jsonData:
+      timeInterval: 15s
+    editable: true
+
   # ClickHouse — Aplicações e consultas
   - name: ClickHouse
+    uid: trio-clickhouse
     type: grafana-clickhouse-datasource
     access: proxy
     jsonData:

@@ -13,7 +13,17 @@
 (vazio = liberado)
 
 ## ESTADO HERDADO
-<preenchido pela etapa 15 ao fechar>
+Verificado ao fechar a etapa 15:
+- **Observabilidade completa e de pé**: Prometheus em `:9090` com **7/7 alvos up** (3 workers Python + 2 pg-exporter + ClickHouse + self), 6 regras de alerta carregadas e `health=ok`. 4 dashboards provisionados no Grafana (`Trio · TimescaleDB`, `· ClickHouse`, `· Pipeline`, `· PostgreSQL Legado`), todos consultando dado real através das 3 datasources.
+- **`init/prometheus/` deixou de estar vazio** — era por isso que o Prometheus reiniciava em loop desde a etapa 02. Agora tem `prometheus.yml` + `alert_rules.yml`.
+- **ClickHouse ganhou `:9363/metrics`** via `init/clickhouse-config/prometheus.xml` (mesmo padrão de `config.d/` do `backup.xml`). Container recriado; **dado conferido antes e depois: 10.000.000 linhas intactas**.
+- **Dashboards ficam em `init/grafana/dashboards/`, NÃO em `provisioning/dashboards/`** (que guarda só o `dashboards.yml`). Se os `.json` morarem junto do `.yml`, o Grafana tenta ler o próprio `.yml` como dashboard e não carrega nenhum — falha silenciosa, sem erro no log. Teste `15.15` guarda essa regressão.
+- **Datasources agora têm UID fixo** (`trio-timescaledb`, `trio-legado`, `trio-clickhouse`, `trio-prometheus`): os dashboards referenciam por UID, e UID gerado aleatoriamente quebraria os painéis a cada recriação.
+- **`desafio-3/runbook.md` e `desafio-3/incident-response.md` escritos**, com os comandos SQL verificados contra o banco real (156 chunks de 6+ meses, 1.111 MB, `cagg_watermark` funcionando como guarda). `desafio-3/grafana/alertas.md` documenta os 6 alertas com os 5 campos.
+- **`E2.4` corrigido** — a condição virou dupla (idade **e** lag), igual ao alerta `PipelineParado`. A versão anterior falhava de forma sistemática com banco ocioso (medido: 1516s de idade com lag de 0,98s e worker íntegro). Não era defeito do worker.
+- `run_all.sh`: blocos 01–15, **159 pass / 0 fail / 3 skip**. `audit.sh`: 83 pass / 0 fail / 2 warn / 1 skip.
+- **Dataset intacto**: `transactions` com 10.000.000 linhas (teste `15.9`), `transactions_raw` com 10.000.000.
+- **Insumo pronto para esta etapa**: o passo 4 (limitação do funil de status) já tem lugar reservado — o `ADR.md` da etapa 14 declara a limitação do `DELETE`, e o mesmo padrão de "declarar antes que perguntem" se aplica ao funil.
 
 ## ESCOPO
 Faz: fecha os 5 requisitos que existem mas não atendem o texto integral do PDF — P95/P99 de latência (A4b), retenção declarada (A5), análise Aurora expandida (B3), limitação do funil de status (C2b) e o texto "Dictionary vs JOIN" (C3). Fecha também o passo do ClickHouse no procedimento LGPD, que ficou documentado como futuro na etapa 09 e hoje é executável.

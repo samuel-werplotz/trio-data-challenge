@@ -575,11 +575,21 @@ if docker ps --filter "name=trio-sync-worker" --format '{{.Status}}' 2>/dev/null
   # sync_last_success_timestamp envelhecendo e o sinal que detecta o SEV-1 do
   # Desafio 3 (pipeline parado com o resto de pe). Um contador nao serve: ele
   # so para de crescer, e isso e indistinguivel de "nao houve movimento".
+  #
+  # CONDICAO DUPLA (ajustada na etapa 15). A versao anterior olhava so a idade
+  # do ultimo sucesso e falhava de forma sistematica com o banco ocioso: o
+  # worker so registra ciclo de SUCESSO quando ha linha nova, entao sem escrita
+  # na origem o intervalo passa de 300s sozinho, com o worker integro (medido:
+  # 1516s de idade com lag de 0,98s e ciclos rodando normalmente).
+  # Exigir tambem lag acumulado e o que separa "parado" de "sem trabalho" — e
+  # e exatamente a expressao do alerta PipelineParado em alert_rules.yml.
   LS=$(sw_metric sync_last_success_timestamp)
+  LAG=$(sw_metric sync_lag_seconds)
   if [ -n "$LS" ]; then
     IDADE=$(awk -v t="$LS" 'BEGIN{printf "%d", systime()-t}')
-    [ "$IDADE" -lt 300 ] && ok E2.4 "ultimo ciclo ha ${IDADE}s (<300s)" \
-      || fail E2.4 "ultimo ciclo ha ${IDADE}s — pipeline parado?"
+    PARADO=$(awk -v i="$IDADE" -v l="${LAG:-0}" 'BEGIN{print (i>300 && l>60) ? 1 : 0}')
+    [ "$PARADO" = "0" ] && ok E2.4 "pipeline saudavel (ultimo ciclo ha ${IDADE}s, lag ${LAG:-n/d}s)" \
+      || fail E2.4 "ultimo ciclo ha ${IDADE}s COM lag de ${LAG}s — pipeline parado"
   else
     fail E2.4 "sync_last_success_timestamp ausente"
   fi
@@ -798,6 +808,103 @@ if container_up ref-sync && container_up clickhouse; then
   fi
 else
   for t in 14.4 14.20 14.21; do skip "$t" "ref-sync ou clickhouse fora do ar"; done
+fi
+
+# --- 15 observabilidade-runbook-e-incidente ---
+# Documentos (trilha local).
+check 15.6 "runbook.md e incident-response.md existem" \
+  bash -c 'test -f desafio-3/runbook.md -a -f desafio-3/incident-response.md'
+check 15.4 "cada alerta documenta integracao CloudWatch/SNS" \
+  bash -c '[ "$(grep -ci "cloudwatch\|sns" desafio-3/grafana/alertas.md)" -ge 6 ]'
+check 15.5 "alerta cobre sync_last_success_timestamp (deteccao do SEV-1)" \
+  bash -c 'grep -q "sync_last_success_timestamp" desafio-3/grafana/alertas.md'
+# O PDF pede >=5 hipoteses; a 2a pista (security group) e a que costuma ficar
+# de fora quando se olha so para a manutencao do banco.
+check 15.7 "arvore com >= 5 hipoteses ordenadas" \
+  bash -c '[ "$(grep -c "^### Hipótese" desafio-3/incident-response.md)" -ge 5 ]'
+check 15.8 "incidente considera a 2a pista (security group)" \
+  bash -c 'grep -qi "security group" desafio-3/incident-response.md'
+check 15.10 "runbook cobre os 5 itens do PDF 5.2 A.3" \
+  bash -c 'grep -qi "^## 1. Pré-requisitos" desafio-3/runbook.md \
+        && grep -qi "^## 3. Execução" desafio-3/runbook.md \
+        && grep -qi "^## 4. Checkpoints" desafio-3/runbook.md \
+        && grep -qi "^## 5. Rollback" desafio-3/runbook.md \
+        && grep -qi "^## 6. Comunicação" desafio-3/runbook.md'
+# "Preventivo, nao apenas detectivo" e cobranca literal do PDF.
+check 15.11 "pos-incidente inclui acao preventiva, nao so detectiva" \
+  bash -c 'grep -qi "preventivo" desafio-3/incident-response.md'
+# A ordem CAgg-antes-de-DROP e o ponto irreversivel do procedimento.
+check 15.12 "runbook valida cobertura do CAgg antes de remover chunk" \
+  bash -c 'grep -q "cagg_watermark" desafio-3/runbook.md && grep -qi "cagg_cobre" desafio-3/runbook.md'
+check 15.13 "4 dashboards versionados como arquivo" \
+  bash -c '[ "$(ls -1 init/grafana/dashboards/*.json 2>/dev/null | wc -l)" -eq 4 ]'
+check 15.14 "dashboards com JSON valido" \
+  bash -c 'for f in init/grafana/dashboards/*.json; do python -c "import json,sys;json.load(open(sys.argv[1],encoding=\"utf-8\"))" "$f" || exit 1; done'
+# Guarda da armadilha real desta etapa: .json no mesmo diretorio do
+# dashboards.yml faz o Grafana nao carregar nenhum, sem erro no log.
+check 15.15 "dashboards fora de provisioning/ (senao nao carregam)" \
+  bash -c '! ls init/grafana/provisioning/dashboards/*.json >/dev/null 2>&1'
+check 15.16 "prometheus.yml existe com os alvos dos 3 workers" \
+  bash -c 'grep -q "sync-worker:8001" init/prometheus/prometheus.yml \
+        && grep -q "ref-sync:8002" init/prometheus/prometheus.yml \
+        && grep -q "api:8000" init/prometheus/prometheus.yml'
+check 15.17 "6 alertas definidos em alert_rules.yml" \
+  bash -c '[ "$(grep -c "^      - alert:" init/prometheus/alert_rules.yml)" -eq 6 ]'
+# O alerta cru sobre last_success da falso positivo com banco ocioso: o worker
+# so registra sucesso quando ha linha nova. A condicao dupla e o que evita
+# acordar o plantao toda madrugada — e alerta silenciado nao detecta nada.
+check 15.18 "alerta de pipeline parado exige lag, nao so last_success" \
+  bash -c 'grep -A 6 "alert: PipelineParado" init/prometheus/alert_rules.yml | grep -q "sync_lag_seconds"'
+
+# Serviços de pé (trilha compose).
+if container_up grafana; then
+  check 15.1 "4 dashboards provisionados no Grafana" \
+    bash -c '[ "$(curl -s -u admin:admin "localhost:3000/api/search?type=dash-db" | grep -o "\"uid\"" | wc -l)" -eq 4 ]'
+  # Painel vazio "passaria" num teste que so conta dashboards. Este consulta as
+  # 3 datasources ATRAVES do Grafana (nao direto no banco) e exige o numero de
+  # volta: e o que separa "dashboard existe" de "dashboard carrega dado real".
+  # O corpo JSON vai por arquivo para nao virar um inferno de aspas aninhadas.
+  check 15.19 "dashboards carregam dado real (as 3 datasources respondem)" \
+    bash -c 'gq() {
+        printf "{\"queries\":[{\"refId\":\"A\",\"datasource\":{\"type\":\"%s\",\"uid\":\"%s\"},%s}],\"from\":\"now-5m\",\"to\":\"now\"}" "$1" "$2" "$3" > /tmp/gq.json
+        curl -s -u admin:admin -X POST localhost:3000/api/ds/query \
+             -H "Content-Type: application/json" -d @/tmp/gq.json
+      }
+      TS=$(gq postgres trio-timescaledb "\"format\":\"table\",\"rawQuery\":true,\"rawSql\":\"SELECT count(*)::bigint AS n FROM timescaledb_information.chunks\"")
+      CH=$(gq grafana-clickhouse-datasource trio-clickhouse "\"rawSql\":\"SELECT count() AS n FROM trio_analytics.transactions_raw\",\"format\":1")
+      LG=$(gq postgres trio-legado "\"format\":\"table\",\"rawQuery\":true,\"rawSql\":\"SELECT count(*)::bigint AS n FROM pg_stat_user_tables\"")
+      for R in "$TS" "$CH" "$LG"; do
+        echo "$R" | grep -q "\"status\":200" || exit 1
+        echo "$R" | grep -q "\"error\"" && exit 1
+      done
+      exit 0'
+else
+  skip 15.1 "grafana fora do ar"; skip 15.19 "grafana fora do ar"
+fi
+
+if container_up prometheus; then
+  check 15.2 "prometheus com alvos ativos" \
+    bash -c '[ "$(curl -s localhost:9090/api/v1/targets | grep -o "\"health\":\"up\"" | wc -l)" -ge 1 ]'
+  check 15.3 "6 regras de alerta carregadas e saudaveis" \
+    bash -c 'R=$(curl -s localhost:9090/api/v1/rules);
+             [ "$(echo "$R" | grep -o "\"type\":\"alerting\"" | wc -l)" -eq 6 ] \
+             && ! echo "$R" | grep -q "\"health\":\"err\""'
+  # Prometheus sem prometheus.yml sobe e reinicia em loop — era o estado antes
+  # desta etapa. Um restart count alto denuncia a regressao.
+  check 15.20 "prometheus estavel (responde /-/healthy)" \
+    bash -c 'curl -sf localhost:9090/-/healthy >/dev/null'
+else
+  for t in 15.2 15.3 15.20; do skip "$t" "prometheus fora do ar"; done
+fi
+
+# Etapa documental e de provisionamento: nao pode ter tocado o dataset.
+if seed_done; then
+  N_TX=$(docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc \
+    "SELECT count(*) FROM transactions" 2>/dev/null | tr -d '\r ')
+  [ "$N_TX" = "10000000" ] && ok 15.9 "dataset intacto ($N_TX transactions)" \
+    || fail 15.9 "esperava 10000000 transactions, achei $N_TX"
+else
+  skip 15.9 "seed nao concluido"
 fi
 
 echo "----"

@@ -1,0 +1,115 @@
+# alert_rules.yml — os 6 alertas do PDF § 5.2 B.2 (mínimo 5).
+# Cada regra é documentada com os 5 campos exigidos em desafio-3/grafana/alertas.md;
+# aqui fica a expressão executável. Severidade viaja no label `severity`, que é
+# o que o Alertmanager (e o SNS, em produção) usa para decidir se acorda alguém.
+
+groups:
+  - name: pipeline
+    rules:
+      # --- 1. Pipeline parado — o alerta mais importante do conjunto ---
+      # Detecta o SEV-1 do PDF § 5.2 C (volume zero no dashboard, transações
+      # normais na origem) em 5 min em vez de 2 h.
+      #
+      # A condição é DUPLA de propósito. A versão ingênua
+      #     time() - sync_last_success_timestamp > 300
+      # dá falso positivo com banco ocioso: o worker só registra ciclo de
+      # sucesso quando há linha nova, então em ambiente parado o intervalo
+      # passa de 300s sozinho, sem defeito nenhum. O segundo termo exige que
+      # exista trabalho represado (lag crescendo) para o alerta valer —
+      # "não grava há 5 min E há dado esperando" só tem uma leitura possível.
+      - alert: PipelineParado
+        expr: |
+          (time() - sync_last_success_timestamp > 300)
+          and
+          (sync_lag_seconds > 60)
+        for: 1m
+        labels:
+          severity: SEV-1
+          componente: pipeline
+        annotations:
+          resumo: "Pipeline sem gravar há mais de 5 min com lag acumulado"
+          descricao: >-
+            sync_last_success_timestamp não avança há {{ $value }}s e há dado
+            represado na origem. Origem pode estar saudável — o sintoma é
+            invisível pelo lado da aplicação.
+          acao: "Acordar o plantão. Ver desafio-3/incident-response.md"
+
+      # --- 2. Lag crescente ---
+      # Ainda grava, mas está ficando para trás. É o aviso que antecede o nº 1.
+      - alert: LagCrescente
+        expr: sync_lag_seconds > 60
+        for: 5m
+        labels:
+          severity: SEV-2
+          componente: pipeline
+        annotations:
+          resumo: "Lag do sync-worker acima de 60s por 5 min"
+          descricao: "Lag atual: {{ $value }}s. Alvo de freshness é < 30s."
+          acao: "Investigar duração do ciclo e volume por lote no dashboard Pipeline"
+
+      # --- 3. Erros no pipeline ---
+      # Substitui o alerta de DLQ previsto em E11: a DLQ era do consumidor CDC,
+      # que saiu do caminho principal. O sync-worker expõe sync_errors_total
+      # por categoria, que cobre o mesmo papel — algo está falhando de forma
+      # recorrente e alguém precisa olhar, sem urgência de madrugada.
+      - alert: ErrosNoPipeline
+        expr: increase(sync_errors_total[15m]) > 0
+        for: 1m
+        labels:
+          severity: SEV-3
+          componente: pipeline
+        annotations:
+          resumo: "sync-worker registrando erros ({{ $labels.type }})"
+          descricao: "{{ $value }} erro(s) nos últimos 15 min."
+          acao: "Investigar em horário comercial; o retry pode estar absorvendo"
+
+      # --- 4. Dado de referência velho ---
+      # O Dictionary serve decisão de roteamento na API. Velho demais significa
+      # decidir com cadastro desatualizado.
+      # 900s = 3 ciclos de 5 min perdidos: 1 ciclo falho é ruído, 3 é padrão.
+      - alert: DicionarioDesatualizado
+        expr: refsync_dictionary_age_seconds > 900
+        for: 5m
+        labels:
+          severity: SEV-3
+          componente: pipeline-referencia
+        annotations:
+          resumo: "dict_institutions sem refletir o legado há mais de 15 min"
+          descricao: "Idade do dado de referência: {{ $value }}s."
+          acao: "Verificar ref-sync e conectividade com o legado"
+
+  - name: infraestrutura
+    rules:
+      # --- 5. Storage alto ---
+      # Dispara o runbook de sanitização (desafio-3/runbook.md). 85% é o gatilho
+      # porque a 92% do cenário do PDF já falta espaço para DESCOMPRIMIR chunk,
+      # que é justamente o que o procedimento precisa fazer. Alertar só a 92%
+      # seria alertar quando a saída mais barata já fechou.
+      - alert: StorageAlto
+        expr: |
+          (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100 > 85
+        for: 10m
+        labels:
+          severity: SEV-2
+          componente: infra
+        annotations:
+          resumo: "Storage acima de 85%"
+          descricao: "Uso atual: {{ $value }}%."
+          acao: "Executar desafio-3/runbook.md (sanitização de chunks antigos)"
+
+      # --- 6. Alvo de coleta fora ---
+      # Substitui o alerta de slot de replicação de E11, que só fazia sentido
+      # com o CDC no caminho (sem slot, não há WAL represado por consumidor
+      # ausente). O risco equivalente aqui é mais simples e mais comum: o
+      # exportador de métricas cair e cegar todos os outros alertas — inclusive
+      # o nº 1. Alerta que protege o próprio sistema de alerta.
+      - alert: AlvoDeColetaFora
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: SEV-2
+          componente: observabilidade
+        annotations:
+          resumo: "Prometheus não coleta {{ $labels.job }} há 5 min"
+          descricao: "Sem esta série, os alertas que dependem dela ficam cegos."
+          acao: "Verificar o container do alvo e a rede entre ele e o Prometheus"

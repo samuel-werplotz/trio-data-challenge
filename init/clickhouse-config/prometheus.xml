@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!--
+  prometheus.xml — expõe as métricas nativas do ClickHouse em :9363/metrics.
+
+  O ClickHouse já coleta tudo que o dashboard precisa (merges, partes por
+  partição, memória, queries ativas) em system.metrics/system.events; só não
+  publica em formato Prometheus sem esta declaração. Por isso não há exporter
+  externo para o ClickHouse no compose, ao contrário dos dois PostgreSQL.
+
+  Mesmo padrão de config.d/ já usado por backup.xml: arquivo montado ao lado
+  da config principal, sem tocar na imagem fixada.
+-->
+<clickhouse>
+    <prometheus>
+        <endpoint>/metrics</endpoint>
+        <port>9363</port>
+
+        <!-- Valores instantâneos (conexões, memória, merges em curso). -->
+        <metrics>true</metrics>
+        <!-- Contadores acumulados (queries executadas, bytes lidos). -->
+        <events>true</events>
+        <!-- Métricas assíncronas: tamanho de partição, partes por tabela e uso
+             de disco — é o que alimenta o painel de partes e o alerta de
+             storage. Sem isto o dashboard de ClickHouse fica pela metade. -->
+        <asynchronous_metrics>true</asynchronous_metrics>
+        <!-- status_info expõe o estado dos Dictionaries: é a confirmação, do
+             lado do ClickHouse, do que o ref-sync reporta do lado dele. -->
+        <status_info>true</status_info>
+    </prometheus>
+</clickhouse>

@@ -1,0 +1,74 @@
+# prometheus.yml — coleta das métricas de aplicação e de banco.
+#
+# Este arquivo faltava: o serviço `prometheus` existe no compose desde a etapa
+# 02 apontando o volume para cá, mas sem `prometheus.yml` o container sobe,
+# não acha config e reinicia em loop. É o que a etapa 15 corrige.
+#
+# Divisão que o ADR assume e que aqui se materializa: métrica de APLICAÇÃO vem
+# do Prometheus (os 3 workers Python expõem /metrics); métrica de INFRA viria do
+# CloudWatch em produção. Os dois convergem no SNS — ver desafio-3/grafana/alertas.md.
+
+global:
+  # 15s casa com o ciclo de 10s do sync-worker: intervalo maior que o ciclo
+  # perderia amostras; muito menor só gastaria disco sem informação nova.
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    ambiente: docker-local
+    projeto: trio-data-challenge
+
+# Regras de alerta. Os 6 alertas do PDF § 5.2 B.2 estão em alert_rules.yml;
+# a documentação dos 5 campos de cada um fica em desafio-3/grafana/alertas.md.
+rule_files:
+  - /etc/prometheus/alert_rules.yml
+
+scrape_configs:
+  # --- Aplicação: os 3 workers Python ---
+  # São eles que respondem "o pipeline está vivo?". As séries mais importantes
+  # do projeto (sync_last_success_timestamp, refsync_dictionary_age_seconds)
+  # saem daqui, não dos exporters de banco.
+  - job_name: sync-worker
+    static_configs:
+      - targets: ["sync-worker:8001"]
+        labels:
+          componente: pipeline-principal
+
+  - job_name: ref-sync
+    static_configs:
+      - targets: ["ref-sync:8002"]
+        labels:
+          componente: pipeline-referencia
+
+  - job_name: api
+    static_configs:
+      - targets: ["api:8000"]
+        labels:
+          componente: aplicacao
+
+  # --- Infra: exporters de banco ---
+  # Em produção estes dois seriam substituídos pelas métricas nativas do
+  # CloudWatch (RDS/Aurora) — a query do painel muda, o painel não.
+  - job_name: postgres-timescaledb
+    static_configs:
+      - targets: ["pg-exporter-ts:9187"]
+        labels:
+          componente: banco-transacional
+
+  - job_name: postgres-legado
+    static_configs:
+      - targets: ["pg-exporter-legado:9187"]
+        labels:
+          componente: banco-legado
+
+  # ClickHouse expõe métricas Prometheus nativamente na 9363 (sem exporter
+  # externo), desde que <prometheus> esteja declarado na config do servidor.
+  - job_name: clickhouse
+    static_configs:
+      - targets: ["clickhouse:9363"]
+        labels:
+          componente: banco-analitico
+
+  # O próprio Prometheus: `up` deste job é a sonda de que a coleta está viva.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
