@@ -7,7 +7,16 @@
 - [ ] ficha `scripts/ambiente/DOCKER-LOCAL.md` tem campo `<PREENCHER>` → preencher e confirmar seed concluído
 
 ## ESTADO HERDADO
-<preenchido pela etapa 04 ao fechar>
+Verificado ao fechar a etapa 04:
+- `init/timescaledb/01_schema.sql` com os 5 ENUMs, `accounts`, `transactions` (hypertable 1 dia) + trigger `set_updated_at`, `reconciliation_events` (hypertable 7 dias) com `difference` gerada. Cópia idêntica em `desafio-1/schemas/01_timescale_schema.sql` (destino canônico de S01).
+- `init/timescaledb/02_seed_marker.sql` com `seed_control (id, started_at, finished_at, total_rows)`, `CHECK single_row (id=1)` — literal de S02 § Idempotência do seed. (Nota: a primeira versão desta etapa usou colunas inventadas `completed_at`/`row_count`; corrigido antes do checkpoint, pois S02 é a origem canônica desta tabela.)
+- Nenhum índice além dos implícitos de PK (`transactions`: `transactions_pkey` + `transactions_created_at_idx` da hypertable; `accounts`: pkey + unique; `reconciliation_events`: só pkey). Nenhuma política, nenhum CAgg.
+- Validado com container real: 2 hypertables, chunk 1d/7d confirmados via `timescaledb_information.dimensions`, trigger `updated_at` dispara em UPDATE (não em INSERT/COPY), `difference` retorna `-0.05` no caso de teste de S01, `seed_control` rejeita segunda linha.
+- Volume `trio-data-challenge_timescaledb_data` existe com o schema aplicado, mas **vazio** (dados de teste da validação foram truncados) — não usar como se já tivesse dado; a etapa 05 começa de tabelas vazias.
+- Parâmetros do TimescaleDB (S01 § Parâmetros ajustados) já batem no `docker-compose.yml` desde a etapa 02: `shared_buffers=1GB`, `effective_cache_size=3GB`, `maintenance_work_mem=1GB`, `max_wal_size=4GB`, `work_mem=16MB` mantido.
+- `archive_command=pgbackrest --stanza=timescale archive-push %p` gera `FATAL: archive command failed with exit code 127` nos logs continuamente — `pgbackrest` não está instalado na imagem `timescale/timescaledb`. Não impede escrita/leitura (WAL archiving é assíncrono), mas polui `docker compose logs`. Configuração de S08, resolvida de fato só na etapa 15 (backup); registrar se afetar o gerador de dados.
+- `run_all.sh`: blocos 01-04, 22 pass / 0 fail / 4 skip. `audit.sh` segue com FAIL conhecido (A2.1/A2.01/A2.02/A2.03 — não conta `concluidas/`), documentado desde a etapa 02, não bloqueia.
+- `make` ainda ausente no PATH deste Windows; usar o workaround de container Docker auxiliar (etapa 03 STATUS) se `make seed` precisar rodar via `make` real, ou instalar antes.
 
 ## ESCOPO
 Faz: `desafio-1/seed/generate_transactions.py` — gerador paralelo de 6 workers por faixa de tempo, `COPY BINARY` em lotes de 50k, idempotente via `seed_control`, com `ANALYZE` ao final. Carrega 500k contas, 10M transações e ~1,5M eventos de reconciliação.

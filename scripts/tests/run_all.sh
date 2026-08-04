@@ -107,6 +107,43 @@ else
   skip 03.5 "make ausente no PATH deste ambiente"
 fi
 
+# --- 04 schema-timescaledb ---
+psql_ts() { docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc "$1" 2>/dev/null | head -1; }
+if container_up timescaledb; then
+  N_HT=$(psql_ts "SELECT count(*) FROM timescaledb_information.hypertables")
+  [ "$N_HT" = "2" ] && ok 04.1 "2 hypertables (transactions, reconciliation_events)" \
+    || fail 04.1 "esperava 2 hypertables, achei ${N_HT:-erro}"
+
+  N_ENUM=$(psql_ts "SELECT count(*) FROM pg_type WHERE typtype='e'")
+  [ "$N_ENUM" = "5" ] && ok 04.2 "5 ENUMs criados" || fail 04.2 "esperava 5 ENUMs, achei ${N_ENUM:-erro}"
+
+  DIFF=$(psql_ts "INSERT INTO reconciliation_events (transaction_id, transaction_created_at, external_reference, event_type, amount_expected, amount_received) VALUES (999999, now(), 'RUN_ALL_TEST', 'settlement', 100.00, 99.95) RETURNING difference")
+  [ "$DIFF" = "-0.05" ] && ok 04.3 "coluna gerada difference = -0.05" || fail 04.3 "difference retornou '${DIFF:-erro}'"
+  psql_ts "DELETE FROM reconciliation_events WHERE external_reference='RUN_ALL_TEST'" >/dev/null
+
+  ID=$(psql_ts "INSERT INTO transactions (external_id, amount, type, source_institution, destination_institution) VALUES (gen_random_uuid(), 1.00, 'pix', 'A', 'B') RETURNING id")
+  U1=$(psql_ts "SELECT updated_at FROM transactions WHERE id=$ID")
+  psql_ts "UPDATE transactions SET status='failed' WHERE id=$ID" >/dev/null
+  U2=$(psql_ts "SELECT updated_at FROM transactions WHERE id=$ID")
+  [ "$U1" != "$U2" ] && ok 04.4 "trigger updated_at dispara em UPDATE" || fail 04.4 "updated_at não mudou ($U1 == $U2)"
+  psql_ts "DELETE FROM transactions WHERE id=$ID" >/dev/null
+
+  ERR=$(docker compose exec -T timescaledb psql -U trio -d trio_transactions -c "INSERT INTO seed_control(id) VALUES (2)" 2>&1)
+  echo "$ERR" | grep -q 'violates check constraint' && ok 04.5 "seed_control rejeita segunda linha" \
+    || fail 04.5 "seed_control não rejeitou id=2"
+
+  N_IDX=$(psql_ts "SELECT count(*) FROM pg_indexes WHERE tablename='transactions'")
+  [ "$N_IDX" = "2" ] && ok 04.6 "só os 2 índices implícitos em transactions (pkey + created_at da hypertable)" \
+    || fail 04.6 "esperava 2 índices, achei ${N_IDX:-erro}"
+else
+  skip 04.1 "timescaledb não está de pé"
+  skip 04.2 "timescaledb não está de pé"
+  skip 04.3 "timescaledb não está de pé"
+  skip 04.4 "timescaledb não está de pé"
+  skip 04.5 "timescaledb não está de pé"
+  skip 04.6 "timescaledb não está de pé"
+fi
+
 # ===========================================================================
 
 echo "----"

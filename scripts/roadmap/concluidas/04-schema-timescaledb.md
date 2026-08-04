@@ -32,14 +32,14 @@ Não faz: **nenhum índice** e **nenhuma política** — `03_indexes.sql` é a e
 8. Rodar o checklist de S01 § Checklist de validação e acrescentar o bloco `# --- 04 schema-timescaledb ---` em `scripts/tests/run_all.sh`.
 
 ## CRITÉRIOS DE ACEITE
-- [ ] `timescaledb_information.hypertables` lista `transactions` e `reconciliation_events`
-- [ ] Chunk interval: 1 dia em `transactions`, 7 dias em `reconciliation_events`
-- [ ] Os ENUMs de S01 existem (`SELECT typname FROM pg_type WHERE typtype='e'`)
-- [ ] `accounts` **não** é hypertable e concentra toda a PII
-- [ ] A coluna gerada `difference` devolve `-0.05` no teste de S01 (esperado 100.00 − 99.95)
-- [ ] Trigger de `updated_at` dispara em `UPDATE`
-- [ ] `seed_control` existe e rejeita uma segunda linha
-- [ ] Nenhum índice além dos implícitos de PK/unique; nenhuma política criada
+- [x] `timescaledb_information.hypertables` lista `transactions` e `reconciliation_events`
+- [x] Chunk interval: 1 dia em `transactions`, 7 dias em `reconciliation_events`
+- [x] Os ENUMs de S01 existem (`SELECT typname FROM pg_type WHERE typtype='e'`)
+- [x] `accounts` **não** é hypertable e concentra toda a PII
+- [x] A coluna gerada `difference` devolve `-0.05` no teste de S01 (esperado 100.00 − 99.95)
+- [x] Trigger de `updated_at` dispara em `UPDATE`
+- [x] `seed_control` existe e rejeita uma segunda linha
+- [x] Nenhum índice além dos implícitos de PK/unique; nenhuma política criada
 
 ## TESTES
 | id | trilha | comando | esperado |
@@ -63,16 +63,18 @@ git checkout -- init/timescaledb/ desafio-1/schemas/
 ```
 
 ## STATUS
-Estado: PENDENTE
-Premissas assumidas: —
-Desvios do plano: —
+Estado: CONCLUÍDA
+Premissas assumidas:
+- Volume `timescaledb_data` precisou ser recriado (removido e recriado 2x) porque `init/` só roda na criação do container — necessário para aplicar o schema novo e depois corrigir `seed_control`. Sem dado real perdido (nenhum seed rodou antes desta etapa).
+- `archive_command=pgbackrest ...` (S08) gera erro no log a cada tentativa de archive porque `pgbackrest` não está instalado na imagem `timescale/timescaledb`. Não afeta escrita/leitura; resolve-se de fato na etapa 15 (backup). Registrado em ESTADO HERDADO da 05 para não ser confundido com bug do schema.
+Desvios do plano: `02_seed_marker.sql` teve uma primeira versão com colunas inventadas (`completed_at`/`row_count`) em vez das literais de S02 (`started_at`/`finished_at`/`total_rows`, constraint `single_row`). Detectado ao ler a ORIGEM da etapa 05 antes de fechar esta — corrigido para bater com S02 § Idempotência do seed antes do checkpoint. Nenhum artefato committed com a versão errada.
 
 ## FECHAMENTO
-- [ ] Critérios atendidos
-- [ ] Testes no run_all.sh
-- [ ] run_all.sh sem FAIL
-- [ ] ESTADO HERDADO da próxima preenchido
-- [ ] Bloco no LOG-EXECUCAO.md
-- [ ] Desvio? → atualizar 99-validacao-final.md
-- [ ] Commit checkpoint
-- [ ] Mover pra concluidas/. Marcar [x] no CLAUDE.md
+- [x] Critérios atendidos
+- [x] Testes no run_all.sh
+- [x] run_all.sh sem FAIL
+- [x] ESTADO HERDADO da próxima preenchido
+- [x] Bloco no LOG-EXECUCAO.md
+- [x] Desvio? → atualizar 99-validacao-final.md (n/a — corrigido antes do commit, sem impacto em arquitetura/PDF entregue)
+- [x] Commit checkpoint
+- [x] Mover pra concluidas/. Marcar [x] no CLAUDE.md
