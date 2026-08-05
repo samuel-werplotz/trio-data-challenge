@@ -184,6 +184,10 @@ services:
       # Declara o disco 'backups': sem isso o comando BACKUP nativo recusa com
       # "backups.allowed_disk is not set" (verificado no E1 § P5).
       - ./init/clickhouse-config/backup.xml:/etc/clickhouse-server/config.d/backup.xml:ro
+      # Credencial do legado usada pelo dict_institutions. Fica aqui, e nao no
+      # DDL versionado (init/clickhouse/01_schema.sql), para que o segredo nao
+      # viaje no clone nem no historico do git — etapa 19.
+      - ./init/clickhouse-config/named_collections.xml:/etc/clickhouse-server/config.d/named_collections.xml:ro
       # Publica as metricas nativas em :9363/metrics. O ClickHouse ja as coleta
       # em system.metrics; sem esta config nao as expoe em formato Prometheus,
       # e o dashboard de ClickHouse (etapa 15) ficaria sem fonte.

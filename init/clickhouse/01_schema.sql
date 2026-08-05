@@ -166,10 +166,13 @@ CREATE DICTIONARY IF NOT EXISTS trio_analytics.dict_institutions
     is_active  UInt8
 )
 PRIMARY KEY code
+-- Credencial vem da named collection `legado_pg`, declarada em
+-- `init/clickhouse-config/named_collections.xml` e montada em `config.d/`.
+-- Antes ficava aqui, literal, dentro de um arquivo commitado — segredo em DDL
+-- versionado vaza no clone e no histórico, e não gira sem alterar schema
+-- (etapa 19). Em produção o XML é gerado do Secrets Manager na subida.
 SOURCE(POSTGRESQL(
-    host 'postgres-legado' port 5432
-    user 'trio' password 'trio2024'
-    db 'trio_legado' table 'partner_institutions'
+    NAME legado_pg
     -- só recarrega se o resultado desta query mudar — evita recarga
     -- desnecessária a cada ciclo de LIFETIME quando nada mudou no legado.
     invalidate_query 'SELECT max(updated_at) FROM partner_institutions'

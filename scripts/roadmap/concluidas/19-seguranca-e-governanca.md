@@ -51,14 +51,14 @@ Não faz: não provisiona KMS, Secrets Manager ou IAM real (Seção 2 — AWS é
 8. Acrescentar o bloco `# --- 19 seguranca-e-governanca ---` em `scripts/tests/run_all.sh`.
 
 ## CRITÉRIOS DE ACEITE
-- [ ] `docs/SEGURANCA-E-GOVERNANCA.md` com matriz perfil × objeto completa, incluindo `accounts` e as MVs
-- [ ] Perfil `analytics_ro` **existe no ClickHouse**, com quota e limites aplicados — validado por conexão real, não só documentado
-- [ ] `analytics_ro` **não** consegue ler o que a matriz nega — testado, não afirmado
-- [ ] Senha fora do DDL versionado do `dict_institutions`, **com o Dictionary respondendo** depois da mudança
-- [ ] Criptografia em trânsito e em repouso descritas nas duas pontas, com o que está desligado no local declarado
-- [ ] Auditoria de **leitura** de `accounts` implementada e demonstrada com consulta de teste
-- [ ] Mapeamento a BCB 4.658, LGPD e PCI-DSS, cada linha apontando artefato existente
-- [ ] Usuário `trio` intacto — pipeline, API e `run_all.sh` seguem passando
+- [x] `docs/SEGURANCA-E-GOVERNANCA.md` com matriz perfil × objeto completa (6 perfis × 7 objetos), justificando cada acesso a `accounts` — testes `19.1`/`19.14`
+- [x] Perfil `analytics_ro` **existe no ClickHouse**, com role, quota e limites amarrados — testes `19.7`/`19.8`/`19.10`
+- [x] `analytics_ro` **não** consegue o que a matriz nega: `DROP` e `INSERT` dão `ACCESS_DENIED`, e elevar o próprio limite dá `READONLY` — testes `19.9`/`19.9b`/`19.9c`
+- [x] Senha fora do DDL versionado (named collection `legado_pg`), **com o Dictionary resolvendo 100% dos 10M** depois da troca — testes `19.6`/`19.6b`/`19.11`
+- [x] Criptografia em trânsito e em repouso nas duas pontas, com **o que está desligado no local declarado e o motivo** — testes `19.4`/`19.5`
+- [x] Auditoria de **leitura** de `accounts` implementada e demonstrada: grava com contagem de linhas, exige finalidade, e é append-only — testes `19.12`/`19.12a`/`19.12b`/`19.12c`
+- [x] Mapeamento a BCB 4.658 (8 artigos), LGPD (5 requisitos) e PCI-DSS (fora de escopo, declarado) — testes `19.2`/`19.3`
+- [x] Usuário `trio` intacto; dado intacto após a recriação do container — teste `19.13`, **227 pass / 0 fail**
 
 ## TESTES
 | id | trilha | comando | esperado |
@@ -90,16 +90,27 @@ rm -f docs/SEGURANCA-E-GOVERNANCA.md
 > `prometheus.xml` foi montado em `config.d/` (teste 19.13).
 
 ## STATUS
-Estado: BLOQUEADA
-Premissas assumidas: —
-Desvios do plano: —
+Estado: CONCLUÍDA
+
+Premissas assumidas:
+- **Teste de perfil exercita a negação, não a permissão.** `19.9`/`19.9b`/`19.9c` verificam que `DROP`, `INSERT` e a elevação do próprio limite falham com o código certo. Permissão passa por acidente — um perfil mal configurado que dá acesso a tudo passaria num teste de leitura.
+- **`readonly = 1` faz parte do limite, não é extra.** Sem ele o cliente passa `--max_rows_to_read=999999999999` na linha de comando e afrouxa o teto sozinho. Limite que o usuário ajusta é sugestão.
+- **O que não dá para implementar honestamente em Docker local vira requisito de produção escrito.** TLS entre containers, KMS no dado vivo e rotação automática estão no § 5 e § 8 com o motivo de não terem sido feitos — mesma decisão do alerta `StorageAlto` na etapa 15, que manteve a expressão de produção em vez de um proxy local que não se pareceria com o real.
+- **A matriz é o contrato; `analytics_ro` é a prova.** `pii_reader`, `ops` e `auditor` exigiriam separar credencial de serviço em todos os componentes — mudança de compose e `.env` de 6 serviços, fora do que a etapa pede. Implementar um perfil de verdade demonstra que o modelo aplica.
+
+Desvios do plano:
+1. **RBAC via SQL em vez de `users.d/`, e isso eliminou o risco previsto no ROLLBACK.** O compose já traz `CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1` e `/var/lib/clickhouse/access/` persiste no volume — usuário criado por SQL sobrevive à recriação do container (confirmado na prática: `analytics_ro` seguiu de pé após o `up -d` da named collection). O passo 2 previa arquivo em `users.d/`, que exigiria recriar o container só para criar usuário.
+2. **`CREATE QUOTA ... TO <settings profile>` não existe.** Dá `UNKNOWN_ROLE` — quota se prende a role ou usuário. Corrigido para `TO analytics_reader`.
+3. **A sintaxe da named collection foi validada num dicionário descartável antes de tocar no de produção.** Publicar `SOURCE(POSTGRESQL(NAME legado_pg ...))` no DDL versionado sem testar seria repetir o erro da query ilustrativa de S04 (etapa 12), que só quebrou quando alguém rodou. O teste confirmou a resolução (`Bradesco`) e só então o Dictionary real foi trocado.
+4. **O Dictionary vivo não acompanhou o arquivo.** Recriar o container **não** reaplica `init/` — ele só roda em volume novo. O `SHOW CREATE DICTIONARY` continuava mostrando a credencial inline enquanto o `.sql` do repositório já estava corrigido. Precisou de `DROP`/`CREATE` explícito para o schema versionado e o estado real coincidirem; sem isso o teste `19.6` passaria (o arquivo está limpo) com o servidor ainda usando o segredo antigo.
+5. **`pgaudit` indisponível mudou o desenho da trilha, e o limite ficou declarado.** A extensão não consta de `pg_available_extensions` e trocar a imagem viola a Seção 2. A trilha foi feita com função `SECURITY DEFINER` + gatilho append-only, o que cobre o **caminho auditado** — quem tiver `SELECT` direto em `accounts` (hoje o superusuário `trio`) ainda lê sem rastro. Está no § 4 e no § 8, com as duas pontas que fecham em produção.
 
 ## FECHAMENTO
-- [ ] Critérios atendidos
-- [ ] Testes no run_all.sh (bloco `# --- 19 seguranca-e-governanca ---`)
-- [ ] run_all.sh sem FAIL
-- [ ] ESTADO HERDADO da próxima preenchido
-- [ ] Bloco no LOG-EXECUCAO.md
-- [ ] Desvio? → atualizar 99-validacao-final.md
+- [x] Critérios atendidos
+- [x] Testes no run_all.sh (bloco `# --- 19 seguranca-e-governanca ---`, 20 testes)
+- [x] run_all.sh sem FAIL — **227 pass, 0 fail, 3 skip**
+- [x] ESTADO HERDADO da próxima (20) preenchido
+- [x] Bloco no LOG-EXECUCAO.md
+- [x] Desvio? → registrados em `99-validacao-final.md`
 - [ ] Commit checkpoint
 - [ ] Mover pra concluidas/. Marcar [x] no CLAUDE.md

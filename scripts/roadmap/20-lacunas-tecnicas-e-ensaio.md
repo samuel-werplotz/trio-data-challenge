@@ -15,7 +15,17 @@ Revisão de entrega § 4.5 (5 lacunas técnicas) e § 5 (prontidão para apresen
 - [ ] ambiente completo de pé com os 10M carregados — o teste de saturação e o ensaio de `EXCHANGE TABLES` precisam do dataflow real
 
 ## ESTADO HERDADO
-Verificado ao fechar a etapa 16 (atualizar ao fechar a 19, se a 19 rodar antes):
+Verificado ao fechar a **etapa 19**:
+- **Baseline da suíte: 227 pass / 0 fail / 3 skip** (os 3 SKIP são `make`). Cresceu de 207 com o bloco 19 (20 testes).
+- **O ClickHouse foi recriado nesta etapa** (`docker compose up -d clickhouse`, para montar `named_collections.xml`) e o dado sobreviveu: **10.000.000 nas 3 pontas**, conferido antes e depois. Precedente útil para o passo 2 da 20: recriar container com volume existente é seguro; o que **não** sobrevive é `init/` — ele só roda em volume novo.
+- **RBAC persiste no volume** (`/var/lib/clickhouse/access/`): `analytics_ro` sobreviveu à recriação sem ser recriado. Relevante para o plano de HA (passo 4) — ao migrar para `Replicated*`, o acesso é estado a considerar, não só o dado.
+- **`analytics_ro` existe e nega o que deve negar**, com `readonly=1` impedindo o próprio usuário de elevar limite. O **teste de saturação (passo 3) deve rodar com o usuário `trio`**, não com `analytics_ro` — o teto de 60 s e 50M linhas abortaria a carga antes de saturar.
+- **Trilha de leitura de PII implementada** (`pii_access_log` + `read_accounts_audited`), append-only por gatilho. Se o passo 5 (cenário de Q4) tocar em `accounts`, o acesso fica registrado — o que é o comportamento correto, mas vai gerar linha no log a cada execução do cenário.
+- **Cuidado herdado, agora com dois precedentes**: teste que assere valor literal quebra ou reverte quando o dado legítimo muda (`14.4` revertia o Dictionary na 17.5; `16.9` prendia-se a "0,018"). O cenário de Q4 planta dado sintético — **os testes dele devem asserir propriedade** (a detecção dispara, o dado é limpo), não valores fixos.
+- **A pergunta 3 do PDF ("migrar engine sem downtime") tem um insumo novo**: `EXCHANGE TABLES` é atômico e está disponível nesta versão (24.8); a resposta de 1 linha em `99-validacao-final.md` ainda cita `RENAME`, que é o caminho em dois tempos.
+- Ambiente: 11 containers de pé, legado com 480/80.000/50.000/15, Dictionary resolvendo 100%.
+
+Verificado ao fechar a etapa 16 (segue válido):
 - **ClickHouse é nó único com `MergeTree`/`ReplacingMergeTree`, sem `Replicated*`.** Migrar engine para `ReplicatedReplacingMergeTree` em produção **é exatamente a pergunta 3 do PDF** — e o repositório não tem o procedimento escrito. A resposta atual em `99-validacao-final.md` tem 1 linha e cita `RENAME`; o caminho correto e atômico é `EXCHANGE TABLES`.
 - **Freshness de ~10 s foi medida em regime ocioso.** O ADR projeta 10× no papel. **Não existe nenhum experimento de saturação** — a pergunta "e a 5.800 escritas/s?" hoje não tem número, só projeção.
 - **Duas cicatrizes reais de MV já registradas** e que são o material da pergunta 2 (novo consumer): etapa 12 duplicou 10M porque a MV-gatilho já estava ativa quando o `INSERT SELECT` rodou; etapa 16 deixou raw e MV divergentes ao deletar só na raw. **Usar a cicatriz é mais forte do que teorizar** — o procedimento de "MV nova sobre tabela quente" nasce dela.

@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!--
+  named_collections.xml — credencial do legado fora do DDL versionado.
+
+  O `SOURCE(POSTGRESQL(...))` do dict_institutions carregava usuário e senha
+  literais dentro de `init/clickhouse/01_schema.sql`, que é um arquivo
+  commitado. Segredo em DDL versionado é o caso mais indefensável de todos:
+  vaza no clone, no diff e no histórico, e não gira sem alterar schema.
+
+  Aqui o DDL passa a referenciar a coleção pelo nome (`legado_pg`) e o valor
+  vive na config do servidor. Em produção este arquivo é gerado a partir do
+  Secrets Manager na subida do container — a rotação troca o segredo e
+  recarrega o Dictionary, sem tocar em schema.
+
+  Este arquivo ainda contém o valor em claro porque o ambiente é Docker local
+  e o compose já expõe a mesma senha; o ganho aqui é ARQUITETURAL (o DDL deixa
+  de ser o portador do segredo). Ver docs/SEGURANCA-E-GOVERNANCA.md § 3.
+-->
+<clickhouse>
+    <named_collections>
+        <legado_pg>
+            <host>postgres-legado</host>
+            <port>5432</port>
+            <user>trio</user>
+            <password>trio2024</password>
+            <database>trio_legado</database>
+            <table>partner_institutions</table>
+        </legado_pg>
+    </named_collections>
+</clickhouse>

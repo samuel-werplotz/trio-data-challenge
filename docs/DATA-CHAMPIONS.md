@@ -31,6 +31,17 @@ o padrão é leitura do analítico, e o resto se pede com justificativa.
 | Host / porta nativa | `clickhouse` : `9000` |
 | Porta HTTP | `8123` |
 | Banco | `trio_analytics` |
+| Usuário | `analytics_ro` |
+
+> No ambiente local o usuário `analytics_ro` já existe, com a senha
+> `trocar-em-producao` — o nome é o aviso. Em produção a credencial vem do
+> Secrets Manager e é pessoal, não compartilhada.
+
+```bash
+docker exec trio-clickhouse clickhouse-client \
+  -u analytics_ro --password trocar-em-producao \
+  -q "SELECT count() FROM trio_analytics.daily_by_institution"
+```
 
 ---
 

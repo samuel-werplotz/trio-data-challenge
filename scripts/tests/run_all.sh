@@ -1122,6 +1122,100 @@ else
   for t in 18.10a 18.10b 18.10c 18.11 18.11b; do skip "$t" "clickhouse fora do ar"; done
 fi
 
+# --- 19 seguranca-e-governanca ---
+# IP autorizada pelo BC: perfil que nao nega, cifra que nao existe e trilha que
+# se apaga sao os 3 jeitos de a governanca ser so texto. Os testes de carga-real
+# exercitam a NEGACAO, nao a permissao — permissao passa por acidente.
+
+check 19.1 "documento de seguranca e governanca existe" test -f docs/SEGURANCA-E-GOVERNANCA.md
+check 19.2 "mapeia Resolucao BCB 4.658" \
+  bash -c 'grep -qi "4.658" docs/SEGURANCA-E-GOVERNANCA.md'
+# PCI fora de escopo e resposta valida — omitir nao e.
+check 19.3 "trata PCI-DSS explicitamente" \
+  bash -c 'grep -qi "pci" docs/SEGURANCA-E-GOVERNANCA.md'
+check 19.4 "cifra em repouso descrita" \
+  bash -c 'grep -qi "em repouso" docs/SEGURANCA-E-GOVERNANCA.md'
+check 19.5 "cifra em transito descrita" \
+  bash -c 'grep -qi "em trânsito" docs/SEGURANCA-E-GOVERNANCA.md'
+# O caso mais indefensavel era senha literal em arquivo commitado.
+check 19.6 "segredo fora do DDL versionado do Dictionary" \
+  bash -c '! grep -q "trio2024" init/clickhouse/01_schema.sql'
+check 19.6b "DDL usa named collection" \
+  bash -c 'grep -q "NAME legado_pg" init/clickhouse/01_schema.sql'
+check 19.14 "matriz de perfis cobre accounts (a tabela com PII)" \
+  bash -c 'grep -qi "pii_reader" docs/SEGURANCA-E-GOVERNANCA.md \
+        && grep -q "analytics_ro" docs/SEGURANCA-E-GOVERNANCA.md'
+
+if container_up clickhouse; then
+  N_USER=$(ch_query "SELECT count() FROM system.users WHERE name='analytics_ro'")
+  [ "$N_USER" = "1" ] && ok 19.7 "usuario analytics_ro existe" \
+    || fail 19.7 "esperava 1 usuario analytics_ro, achei $N_USER"
+
+  check 19.8 "analytics_ro le as tabelas analiticas" \
+    bash -c 'docker compose exec -T clickhouse clickhouse-client --user analytics_ro \
+      --password trocar-em-producao -q "SELECT count() FROM trio_analytics.transactions_raw FORMAT Null"'
+
+  # A negacao e o teste que importa: perfil que so permite nao e perfil.
+  check 19.9 "analytics_ro NAO consegue DROP (ACCESS_DENIED)" \
+    bash -c 'OUT=$(docker compose exec -T clickhouse clickhouse-client --user analytics_ro \
+      --password trocar-em-producao -q "DROP TABLE trio_analytics.transactions_raw" 2>&1); \
+      echo "$OUT" | grep -q "ACCESS_DENIED"'
+  check 19.9b "analytics_ro NAO consegue INSERT (ACCESS_DENIED)" \
+    bash -c 'OUT=$(docker compose exec -T clickhouse clickhouse-client --user analytics_ro \
+      --password trocar-em-producao -q "INSERT INTO trio_analytics.transactions_raw (tx_id) VALUES (1)" 2>&1); \
+      echo "$OUT" | grep -q "ACCESS_DENIED"'
+  # Limite que o proprio usuario afrouxa nao e limite.
+  check 19.9c "analytics_ro NAO consegue elevar o proprio limite (READONLY)" \
+    bash -c 'OUT=$(docker compose exec -T clickhouse clickhouse-client --user analytics_ro \
+      --password trocar-em-producao --max_rows_to_read=999999999999 \
+      -q "SELECT count() FROM trio_analytics.transactions_raw" 2>&1); \
+      echo "$OUT" | grep -q "READONLY"'
+
+  N_QUOTA=$(ch_query "SELECT count() FROM system.quotas WHERE name='q_analytics_ro'")
+  [ "$N_QUOTA" = "1" ] && ok 19.10 "quota q_analytics_ro existe" \
+    || fail 19.10 "esperava a quota q_analytics_ro, achei $N_QUOTA"
+
+  # A troca do segredo nao pode ter quebrado a resolucao (ver etapa 17.5).
+  N_DICT=$(ch_query "SELECT countIf(dictHas('trio_analytics.dict_institutions', tuple(source_institution))) FROM trio_analytics.transactions_raw")
+  [ "$N_DICT" = "10000000" ] && ok 19.11 "dictionary resolve 100% apos named collection ($N_DICT)" \
+    || fail 19.11 "esperava 10000000, achei $N_DICT"
+
+  # Guarda de dado: a etapa recriou o container do ClickHouse.
+  N_RAW19=$(ch_query "SELECT count() FROM trio_analytics.transactions_raw")
+  [ "$N_RAW19" = "10000000" ] && ok 19.13 "ClickHouse intacto apos recriacao ($N_RAW19)" \
+    || fail 19.13 "esperava 10000000, achei $N_RAW19"
+else
+  for t in 19.7 19.8 19.9 19.9b 19.9c 19.10 19.11 19.13; do skip "$t" "clickhouse fora do ar"; done
+fi
+
+if container_up timescaledb; then
+  check 19.12a "trilha de leitura de PII existe" \
+    bash -c 'docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc \
+      "SELECT 1 FROM pg_tables WHERE tablename = '"'"'pii_access_log'"'"'" 2>/dev/null | grep -q 1'
+  # Leitura auditada registra E conta as linhas: log que nao conta nao distingue
+  # 1 titular de 80.000.
+  check 19.12 "leitura auditada de accounts grava na trilha com contagem" \
+    bash -c 'ANTES=$(docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc \
+        "SELECT count(*) FROM pii_access_log" 2>/dev/null | tr -d "\r ");
+      docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc \
+        "SELECT count(*) FROM read_accounts_audited('"'"'teste de regressao run_all'"'"', NULL, 3)" >/dev/null 2>&1;
+      DEPOIS=$(docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc \
+        "SELECT count(*) FROM pii_access_log" 2>/dev/null | tr -d "\r ");
+      N=$(docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc \
+        "SELECT rows_returned FROM pii_access_log ORDER BY id DESC LIMIT 1" 2>/dev/null | tr -d "\r ");
+      [ "$DEPOIS" -gt "$ANTES" ] && [ "$N" = "3" ]'
+  check 19.12b "leitura sem finalidade declarada e recusada (LGPD art. 37)" \
+    bash -c 'OUT=$(docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc \
+      "SELECT count(*) FROM read_accounts_audited('"'"''"'"', NULL, 1)" 2>&1); \
+      echo "$OUT" | grep -qi "finalidade"'
+  # Trilha que o auditado reescreve nao e trilha.
+  check 19.12c "trilha e append-only (DELETE recusado)" \
+    bash -c 'OUT=$(docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc \
+      "DELETE FROM pii_access_log" 2>&1); echo "$OUT" | grep -qi "append-only"'
+else
+  for t in 19.12 19.12a 19.12b 19.12c; do skip "$t" "timescaledb fora do ar"; done
+fi
+
 echo "----"
 echo "$PASS_N pass, $FAIL_N fail, $SKIP_N skip"
 [ "$FAIL_N" -eq 0 ] || exit 1
