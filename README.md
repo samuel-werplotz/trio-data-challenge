@@ -9,7 +9,29 @@ dashboards e 6 alertas ativos.
 
 > **Tem 2 minutos?** → [`docs/SUMARIO-EXECUTIVO.md`](docs/SUMARIO-EXECUTIVO.md)
 > — o que foi construído, os 5 números medidos, os 3 riscos com dono e o
-> roadmap 30/60/90. Custo em produção: [`docs/CUSTO-AWS.md`](docs/CUSTO-AWS.md).
+> roadmap 30/60/90.
+
+---
+
+## Os 6 documentos que importam
+
+Na ordem de quem lê. Todo o resto do repositório é código, teste ou rastro de
+processo.
+
+| # | Documento | Responde |
+|---|---|---|
+| 1 | [SUMARIO-EXECUTIVO](docs/SUMARIO-EXECUTIVO.md) | O que foi construído, 5 números, 3 riscos, roadmap 30/60/90 |
+| 2 | [desafio-1/REPORT](desafio-1/REPORT.md) | As medições — incluindo **o índice que não melhorou** |
+| 3 | [desafio-2/ADR](desafio-2/ADR.md) | As decisões e suas **consequências negativas**; por que o CDC foi descartado |
+| 4 | [docs/DATA-CHAMPIONS](docs/DATA-CHAMPIONS.md) | Como um analista usa a plataforma sem ajuda |
+| 5 | [docs/SEGURANCA-E-GOVERNANCA](docs/SEGURANCA-E-GOVERNANCA.md) | Perfis, cifra, auditoria de PII, BCB 4.658 |
+| 6 | [desafio-3/incident-response](desafio-3/incident-response.md) | O que fazer às 3h da manhã |
+
+Complementos: [CUSTO-AWS](docs/CUSTO-AWS.md) (TCO em USD/mês) ·
+[HA-E-ROTEIRO-DEMO](docs/HA-E-ROTEIRO-DEMO.md) (plano de réplica + roteiro da
+apresentação) ·
+[PROCEDIMENTOS-PRODUCAO](desafio-2/PROCEDIMENTOS-PRODUCAO.md) (novo consumidor e
+troca de engine sem downtime).
 
 ---
 
@@ -156,14 +178,24 @@ Windows), **não** falha.
 
 ---
 
-## Documentos que valem a leitura
+## O rastro de processo
 
-| Documento | Por quê |
+Separado dos entregáveis de propósito — é andaime, não produto, mas fica no
+repositório porque mostra como a entrega foi construída.
+
+| Onde | O quê |
 |---|---|
-| `desafio-1/REPORT.md` | Medições reais, incluindo **o índice que não melhorou** e a compressão que compete com os índices |
-| `desafio-2/ADR.md` | Decisões e **consequências negativas**; por que o CDC foi descartado |
-| `desafio-3/incident-response.md` | Árvore de hipóteses e ações preventivas, não só detectivas |
-| `AUDITORIA-E-REPLANEJAMENTO.md` | Matriz de rastreabilidade requisito a requisito |
+| [`docs/METODO-DE-EXECUCAO.md`](docs/METODO-DE-EXECUCAO.md) | O contrato que travou escopo e arquitetura **antes** do código: o que não se reabre, o que exige parar e perguntar, como cada etapa fecha |
+| [`scripts/roadmap/`](scripts/roadmap/) | A esteira: 25 etapas, cada uma com escopo, critério de aceite, testes e rollback |
+| [`scripts/roadmap/LOG-EXECUCAO.md`](scripts/roadmap/LOG-EXECUCAO.md) | O que quebrou e o que foi decidido, etapa a etapa |
+| [`docs/processo/`](docs/processo/) | Auditoria com a matriz de rastreabilidade, memorial técnico e premissas verificadas |
+
+**Duas etapas nasceram de defeito encontrado ao medir**, não ao revisar: o
+Dictionary resolvia **33,55%** do volume (a API servia `"desconhecida"` para 66%
+das instituições) e o pipeline **perdia dados em silêncio** com lote acima de
+50.000 linhas. Ambos corrigidos, com teste de regressão. Uma etapa inteira foi
+descartada com causa-raiz provada (CDC sobre hypertable). O `git log` conta essa
+história melhor que qualquer documento.
 
 ---
 
@@ -176,6 +208,7 @@ trio-data-challenge/
 ├── desafio-1/               ← schemas, seed, queries, REPORT, migração, LGPD
 ├── desafio-2/               ← pipeline (sync-worker, ref-sync, api), diagramas, ADR
 ├── desafio-3/               ← backup, grafana (alertas), runbook, incidente
-├── scripts/                 ← testes, health-check, backfill, roadmap de execução
-└── docs/
+├── scripts/                 ← testes, health-check, backfill, saturação, roadmap
+└── docs/                    ← os 6 documentos + método de execução
+    └── processo/            ← auditoria, memorial, premissas (andaime)
 ```

@@ -64,7 +64,8 @@ check 01.2 "starter na raiz"             bash -c 'test -f docker-compose.yml -a 
 TOP="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 case "$TOP" in *trio-data-challenge) ok 01.3 "git root correto";; *) fail 01.3 "git root: ${TOP:-ausente}";; esac
 BR="$(git branch --show-current 2>/dev/null || true)"
-[ "$BR" = "wip/trio-challenge" ] && ok 01.4 "branch wip/trio-challenge" || fail 01.4 "branch atual: ${BR:-nenhuma}"
+# Era `wip/trio-challenge` da 01 ate a 21, quando a entrega foi para `main`.
+[ "$BR" = "main" ] && ok 01.4 "branch de entrega: main" || fail 01.4 "branch atual: ${BR:-nenhuma}"
 check 01.5 "árvore do PDF §6 criada"     bash -c 'test -d desafio-1/schemas -a -d desafio-2/pipeline -a -d desafio-3/backup -a -d docs'
 check 01.6 ".gitignore cobre .env"       grep -q '^\.env$' .gitignore
 check 01.7 "sem material de estudo no repo" bash -c 'test ! -e vault-estudo -a -z "$(ls *.pdf 2>/dev/null)"'
@@ -569,7 +570,9 @@ check E1.2 "indice idx_tx_updated_at existe (sem ele a janela e Seq Scan de 10M)
   bash -c 'docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "select 1 from pg_indexes where tablename='"'"'transactions'"'"' and indexname='"'"'idx_tx_updated_at'"'"'" 2>/dev/null | grep -q 1'
 check E1.3 "janela do watermark usa Index Scan, nao Seq Scan (predicado duplo)" \
   bash -c 'docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "explain select id from transactions where updated_at >= now() - interval '"'"'30 seconds'"'"' and created_at >= now() - interval '"'"'7 days'"'"' order by updated_at, id limit 50000" 2>/dev/null | grep -q "Index Scan"'
-check E1.4 "premissas verificadas documentadas" test -f PREMISSAS-VERIFICADAS.md
+# Caminho atualizado na etapa 21: o arquivo saiu da raiz para docs/processo/
+# junto com o resto do andaime. Foi movido com git mv, nao reescrito.
+check E1.4 "premissas verificadas documentadas" test -f docs/processo/PREMISSAS-VERIFICADAS.md
 
 # --- E2 sync-worker (pipeline TimescaleDB -> ClickHouse) ---
 # Substitui o pipeline CDC. Os testes 13.x do plano original nao se aplicam: nao
@@ -1302,6 +1305,41 @@ else
   skip 20.9 "timescaledb fora do ar"
   skip 20.6 "timescaledb fora do ar"
 fi
+
+# --- 21 higiene-de-entrega ---
+# A raiz e a primeira coisa que o avaliador ve. Misturar entregavel com andaime
+# de processo custa nota antes de qualquer codigo ser lido. Estes testes guardam
+# a separacao — e que nada foi APAGADO, so movido.
+
+check 21.1 "CLAUDE.md nao esta mais na raiz" bash -c '! test -f CLAUDE.md'
+check 21.2 "METODO-DE-EXECUCAO.md existe em docs/" test -f docs/METODO-DE-EXECUCAO.md
+check 21.2b "METODO-DE-EXECUCAO assume a metodologia em vez de esconde-la" \
+  bash -c 'grep -qi "revisão crítica" docs/METODO-DE-EXECUCAO.md'
+check 21.3 "docs/processo/ existe" test -d docs/processo
+# O rastro de processo e ativo de defesa: move, nunca apaga.
+check 21.3b "nenhum documento de processo foi apagado" \
+  bash -c 'test -f docs/processo/AUDITORIA-E-REPLANEJAMENTO.md \
+        && test -f docs/processo/MEMORIAL_TECNICO.md \
+        && test -f docs/processo/PREMISSAS-VERIFICADAS.md'
+check 21.4 "raiz tem so o README como .md" \
+  bash -c '[ "$(ls -1 *.md 2>/dev/null | wc -l)" -le 1 ]'
+check 21.6 "README aponta os 6 documentos que importam" \
+  bash -c '[ "$(grep -c "docs/\|desafio-[123]/" README.md)" -ge 6 ]'
+check 21.6b "README separa entregavel de andaime" \
+  bash -c 'grep -qi "rastro de processo" README.md'
+# git mv preserva historico; rm+add nao. 25+ commits sao a defesa contra
+# "isso e saida de LLM" — perde-los no rename anularia o argumento.
+check 21.7 "historico preservado (>= 25 commits)" \
+  bash -c '[ "$(git log --oneline 2>/dev/null | wc -l)" -ge 25 ]'
+check 21.9 ".env segue fora do versionamento" \
+  bash -c '! git ls-files 2>/dev/null | grep -q "^\.env$"'
+# Link quebrado num README que acabou de virar porta de entrada e o pior
+# lugar possivel para um caminho errado.
+check 21.10 "links do README apontam para arquivos que existem" \
+  bash -c 'ERR=0;
+    for L in $(grep -oE "\]\((docs|desafio-[123]|scripts)/[^)#]*\)" README.md | tr -d "()" | sed "s/^\]//"); do
+      [ -e "$L" ] || { echo "quebrado: $L"; ERR=1; };
+    done; exit $ERR'
 
 echo "----"
 echo "$PASS_N pass, $FAIL_N fail, $SKIP_N skip"

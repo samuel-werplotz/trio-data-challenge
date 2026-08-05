@@ -134,6 +134,25 @@ produção. Trocá-la por variável não aumentaria segurança nenhuma aqui e
 quebraria o critério de aceite nº 1 (`docker compose up -d` sem configuração
 prévia). **Declarado em vez de escondido.**
 
+### Uma chave privada no histórico do git — declarada
+
+A varredura da etapa 21 encontrou `desafio-3/backup/minio-certs/private.key` no
+histórico: foi commitada em `f8a0e2e` e retirada do versionamento em `17a90dc`.
+**Remover num commit posterior não apaga do histórico** — ela continua
+recuperável por `git log`.
+
+| | |
+|---|---|
+| O que é | Chave de um certificado **autoassinado**, gerado localmente para o MinIO do `docker compose` |
+| Onde vale | Só neste ambiente. Não protege nada fora dele e não tem par em produção |
+| Risco real | **Nenhum** — não dá acesso a sistema, dado ou conta |
+| Por que não reescrevi o histórico | `filter-branch`/`filter-repo` reescreveria os 30 commits e destruiria o rastro do processo, que é evidência de como a entrega foi construída. Trocar um ativo real por um risco nulo é mau negócio |
+
+**Se fosse uma credencial de verdade, a decisão seria a oposta**: rotacionar o
+segredo primeiro (o que invalida o que vazou), depois reescrever o histórico, e
+tratar como incidente. O critério é o que a chave **abre** — aqui, nada.
+`.env` nunca foi commitado, verificado na mesma varredura.
+
 ---
 
 ## 4. Auditoria de acesso a PII

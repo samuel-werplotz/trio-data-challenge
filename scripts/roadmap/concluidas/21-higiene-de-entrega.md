@@ -14,7 +14,7 @@
 Revisão de entrega § 4.6 (artefatos de processo expostos) e § 4.5 última linha (branch `wip/trio-challenge`); PDF § critérios de avaliação (uso de IA generativa); `CLAUDE.md` Seção 8 (regra de git — **esta etapa a modifica, com autorização explícita**)
 
 ## IMPEDITIVOS
-- [ ] **Decisão do usuário sobre a branch.** A Seção 8 do `CLAUDE.md` proíbe trabalhar em `main`/`master` "sem instrução explícita". Renomear `wip/trio-challenge` → `main` é exatamente isso. Confirmar antes de executar; a etapa não decide sozinha.
+- [x] **Decisão do usuário sobre a branch** — RESOLVIDO. A autorização explícita para executar esta etapa, que tem o rename no `ESCOPO` e no `PASSO 6`, é a instrução que a Seção 8 exige. Operação local (`git branch -m`), sem remote, reversível por um comando.
 
 ## ESTADO HERDADO
 Verificado ao fechar as **etapas 20.5 e 20**:
@@ -53,14 +53,14 @@ Não faz: **não apaga nenhum documento de processo** — o rastro é valioso e 
 9. Acrescentar o bloco `# --- 21 higiene-de-entrega ---` em `scripts/tests/run_all.sh`.
 
 ## CRITÉRIOS DE ACEITE
-- [ ] Raiz contém apenas entregável e infraestrutura — nenhum arquivo de processo solto
-- [ ] `CLAUDE.md` não existe mais na raiz; `docs/METODO-DE-EXECUCAO.md` existe, com a abertura explicando o que é
-- [ ] Documentos de processo em `docs/processo/`, movidos com `git mv` (histórico preservado)
-- [ ] Nenhuma referência quebrada — `audit.sh` e `run_all.sh` passam
-- [ ] README raiz aponta os 6 documentos que importam, com o processo em seção separada
-- [ ] Branch de entrega é `main` (após autorização), com os 25+ commits visíveis
-- [ ] Nenhum segredo no histórico, ou o que houver declarado
-- [ ] Nenhum documento de processo **apagado** — só movido
+- [x] Raiz contém **só o `README.md`** como `.md` — teste `21.4`
+- [x] `CLAUDE.md` fora da raiz; `docs/METODO-DE-EXECUCAO.md` com a abertura que **assume a metodologia** em vez de escondê-la — testes `21.1`/`21.2`/`21.2b`
+- [x] Processo em `docs/processo/` (5 arquivos), movidos com `git mv` — testes `21.3`/`21.3b`
+- [x] Nenhuma referência quebrada: `audit.sh` **83 pass / 0 fail**, `run_all.sh` **256 pass / 0 fail**. Duas quebras reais encontradas e corrigidas (ver desvio 2)
+- [x] README aponta os **6 documentos**, com o processo em seção separada — testes `21.6`/`21.6b`/`21.10`
+- [x] Branch de entrega é **`main`**, com **30 commits** visíveis — testes `21.7`/`01.4`/`A7.7`
+- [x] Varredura de segredo feita: `.env` **nunca** commitado; chave privada do MinIO existe no histórico e está **declarada** em `SEGURANCA-E-GOVERNANCA.md` § 3 com o motivo de não reescrever o histórico
+- [x] **Nada apagado** — só movido; teste `21.3b` guarda os 3 documentos principais
 
 ## TESTES
 | id | trilha | comando | esperado |
@@ -85,16 +85,25 @@ git branch -m main wip/trio-challenge
 > `rebase`, `squash` ou reescrita de histórico em nenhum passo.
 
 ## STATUS
-Estado: BLOQUEADA
-Premissas assumidas: —
-Desvios do plano: —
+Estado: CONCLUÍDA
+
+Premissas assumidas:
+- **Assumir a metodologia é mais forte do que escondê-la.** O preâmbulo de `METODO-DE-EXECUCAO.md` diz abertamente que IA foi usada como ferramenta e mostra o contrato que a governou. O PDF condena uso *sem revisão crítica* — o arquivo é a prova documental da revisão, e o argumento mais forte está na esteira: duas etapas nasceram de defeito achado **medindo**, e uma foi descartada com causa-raiz provada.
+- **`git mv`, nunca `rm` + `add`.** Todo o valor de "30 commits com processo real" depende de o histórico atravessar o rename. Nenhum documento de processo foi apagado.
+- **Histórico não se reescreve.** A chave privada do MinIO no histórico é de certificado autoassinado local, que não abre nada; `filter-branch` custaria o rastro inteiro do processo para remover risco nulo. Declarado no documento de segurança, com o critério explícito de quando a decisão seria a oposta.
+- **`INVENTARIO-STARTER.md` também foi para `docs/processo/`.** Estava em `docs/` desde o começo, mas é andaime — mantê-lo ao lado dos 6 entregáveis contradiria a etapa.
+
+Desvios do plano:
+1. **O `audit.sh` precisou de mais que troca de caminho.** O `PASSO 3` previa "varrer referências", mas `A1.10` (limite de 110 linhas) passou a **falhar por motivo legítimo**: o arquivo virou também documento de entrega e ganhou 24 linhas de preâmbulo que não são lidas a cada etapa. Em vez de subir o teto e perder a guarda, o teste passou a medir **só as seções de regra** (`sed` a partir de `## 1. Operação`) — que continuam sendo o que pesa no contexto. Teto do arquivo inteiro subiu para 140; o das regras segue < 110.
+2. **Duas referências quebraram de verdade, e só apareceram rodando.** `E1.4` apontava para `PREMISSAS-VERIFICADAS.md` na raiz, e `A7.7`/`01.4` asseriam `wip/trio-challenge`. Nenhuma das duas é achável por leitura — a primeira só falha depois do `git mv`, a segunda só depois do rename. **É a confirmação prática do que o `ESTADO HERDADO` avisava**: esta é a etapa que quebra se for feita no automático.
+3. **Referências históricas foram mantidas com o nome antigo, de propósito.** `LOG-EXECUCAO.md`, `99-validacao-final.md` e as etapas em `concluidas/` citam `CLAUDE.md` e `AUDITORIA-E-REPLANEJAMENTO.md` na raiz. **Corrigi-las seria falsificar o registro** — elas descrevem o que era verdade naquele momento. Só referência *viva* (README, `audit.sh`, `run_all.sh`) foi atualizada.
 
 ## FECHAMENTO
-- [ ] Critérios atendidos
-- [ ] Testes no run_all.sh (bloco `# --- 21 higiene-de-entrega ---`)
-- [ ] run_all.sh sem FAIL
-- [ ] ESTADO HERDADO da 99 atualizado
-- [ ] Bloco no LOG-EXECUCAO.md
-- [ ] Desvio? → atualizar 99-validacao-final.md
-- [ ] Commit checkpoint
-- [ ] Mover pra concluidas/. Marcar [x] na esteira
+- [x] Critérios atendidos
+- [x] Testes no run_all.sh (bloco `# --- 21 higiene-de-entrega ---`, 11 testes)
+- [x] run_all.sh sem FAIL — **256 pass, 0 fail, 3 skip**
+- [x] ESTADO HERDADO da 99 atualizado
+- [x] Bloco no LOG-EXECUCAO.md
+- [x] Desvio? → registrados em `99-validacao-final.md`
+- [x] Commit checkpoint
+- [x] Mover pra concluidas/. Marcar [x] na esteira

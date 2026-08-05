@@ -1,4 +1,29 @@
-# Trio Data Challenge — orquestrador
+# Método de execução — o contrato que guiou o projeto
+
+Este é o documento de trabalho que travou **escopo, arquitetura e critério de
+qualidade antes de a primeira linha de código ser escrita**, e que governou as
+25 etapas da esteira em `scripts/roadmap/`.
+
+**Por que ele está na entrega.** O PDF do desafio diz que "uso indiscriminado de
+IA generativa sem revisão crítica não é aceitável" — e concordo. Usei IA como
+ferramenta ao longo do projeto, e este arquivo é a forma dessa revisão crítica:
+o que **não** se pode reabrir (Seção 2), qual arquitetura é contrato e não
+sugestão (Seção 3), o que exige parar e perguntar em vez de decidir sozinho
+(Seção 5), e como cada etapa fecha (Seção 9). Ferramenta sem contrato produz
+volume; com contrato, produz entrega.
+
+**O que a esteira prova, e é o mais difícil de simular:** duas etapas nasceram
+de **defeito real encontrado ao medir**, não ao revisar — o Dictionary
+resolvendo 33,55% do volume (17.5) e o pipeline perdendo dados em silêncio acima
+de `BATCH_MAX_ROWS` (20.5). Uma etapa inteira foi **descartada** com causa-raiz
+provada (13, CDC sobre hypertable). Cada desvio está registrado em
+`scripts/roadmap/99-validacao-final.md` e no `LOG-EXECUCAO.md`, com o que
+quebrou e por quê.
+
+> Leitura recomendada nesta ordem: [`SUMARIO-EXECUTIVO.md`](SUMARIO-EXECUTIVO.md)
+> → o `README.md` da raiz → este arquivo, se houver interesse no processo.
+
+---
 
 ## 1. Operação
 - Próxima etapa = menor `NN` em `scripts/roadmap/` fora de `concluidas/` (ordem numérica: `13` < `13.5` < `14`). `CONCLUÍDA`/`DESCARTADA` no `## STATUS` já fechou: mover e seguir.
@@ -10,7 +35,7 @@
 | Fora do escopo | Motivo |
 |---|---|
 | Provisionar AWS real | Docker local é o único ambiente; AWS é documento escrito, nunca executado |
-| `git push`, remote, PR | Sem remote. Commits locais em `wip/trio-challenge` |
+| `git push`, remote, PR | Sem remote. Commits locais em `main` (era `wip/trio-challenge` até a 21) |
 | Copiar `../vault-estudo/` ou o PDF pra dentro do repo | Material de estudo, não entregável |
 | Airflow / Dagster / orquestrador pesado | Decidido contra em `05-Decisoes/D06-Por-que-nao-Airflow.md` |
 | CDC no PostgreSQL legado | Batch de 5 min é a decisão (`D05-Batch-vs-CDC-no-legado.md`) |
@@ -61,9 +86,9 @@ O repositório vai ser lido por uma banca. Comentário não é opcional nem deco
 - Teste automático não substitui revisão humana — é guarda de regressão.
 
 ## 8. Regra de git
-- Branch de trabalho: `wip/trio-challenge` (criada na etapa 01, junto do `git init`).
+- Branch de entrega: **`main`**. Foi `wip/trio-challenge` da etapa 01 até a 21, quando o rename aconteceu **com autorização explícita** do autor — a entrega precisa estar em `main`, que é o que o avaliador vê ao clonar. Operação local (`git branch -m`), sem remote, reversível.
 - Commit ao fechar cada etapa: `checkpoint: NN — <nome da etapa>`.
-- **Nunca** `push`, `merge`, criar remote, ou trabalhar em `main`/`master` sem instrução explícita.
+- **Nunca** `push`, `merge` ou criar remote sem instrução explícita. Histórico **nunca** se reescreve (`rebase`, `squash`, `filter-branch`): os 30 commits com desvio registrado são a evidência do processo.
 - Mudança destrutiva (migration, alteração de schema) só com o comando reverso escrito no `## ROLLBACK` da etapa.
 - Nunca commitar segredo. `.env` no `.gitignore`; `.env.example` versionado.
 - `.gitignore` cobre: `.env`, `__pycache__/`, `*.pyc`, `.venv/`, dumps de backup, `queries/explains/*.raw`.
@@ -96,7 +121,7 @@ Critérios atendidos → testes no `run_all.sh` → `run_all.sh` sem FAIL → `E
 - [x] 19 seguranca-e-governanca · B
 - [x] 20 lacunas-tecnicas-e-ensaio · B
 - [x] 20.5 watermark-composto · B — defeito achado na 20
-- [ ] 21 higiene-de-entrega · local — **por último**; renomeia este arquivo
+- [x] 21 higiene-de-entrega · local
 - [ ] 99 validacao-final · B
 
 ## 11. Ficha de ambiente
