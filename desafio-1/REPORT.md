@@ -324,30 +324,41 @@ copiando o SQL de S04 sem testar.
 (`'Instituição Parceira 1'`) sem trazer a tabela do legado para o caminho
 quente. A alternativa seria uma `JOIN` contra o PostgreSQL a cada consulta.
 
-**Medido nos dois caminhos**, mediana de 3 execuções, mesmo dado e mesma
-resposta:
+**Medido nos dois caminhos**, mediana de 3 execuções (1ª descartada), mesmo
+dado e mesma resposta:
 
 | Padrão de uso | `dictGet` | `JOIN postgresql()` | Diferença |
 |---|---|---|---|
-| **Lookup por linha** (90 dias) | **0,018 s** | 0,054 s | **2,9× mais rápido** |
-| `GROUP BY` sobre 10M linhas | 0,093 s | 0,077 s | equivalente |
-| `GROUP BY` com filtro de 30 dias | 0,028 s | 0,034 s | equivalente |
+| **Lookup por linha** (10.000 linhas, 90 dias) | **4 ms** | 15 ms | **3,75×** |
+| `GROUP BY` sobre 10M linhas | **11 ms** | 147 ms | **13,4×** |
+| `GROUP BY` com filtro de 90 dias | **18 ms** | 72 ms | **4,0×** |
 
 **O número que importa é o primeiro**, porque é o padrão da API: resolver o
-nome em cada linha do resultado. É onde o Dictionary ganha, e é onde ele foi
-posto para trabalhar (`/institutions/{code}/health`).
+nome em cada linha do resultado. É onde o Dictionary foi posto para trabalhar
+(`/institutions/{code}/health`).
 
-**Por que os outros dois empatam — e por que isso não enfraquece a escolha.**
-Num `GROUP BY`, a tabela de referência tem 15 linhas: o ClickHouse a carrega
-uma vez, faz broadcast e o custo se dilui na agregação. O empate é honesto e
-está aqui de propósito — **Dictionary não é mais rápido em tudo**, e vender
-isso como ganho universal seria falso.
+> **Estes números substituem uma medição anterior (2,9× / empate / empate) que
+> estava sistematicamente subestimada.** A medição da etapa 16 rodou contra um
+> Dictionary que resolvia apenas **33,55%** das linhas — os códigos do seed do
+> legado (`001`–`015`) não batiam com os das transações (`237`, `341`, `104`…),
+> e só o `001` coincidia. Um lookup que devolve o *default* sai pelo caminho
+> curto e **não paga o custo real da resolução**, então o `dictGet` parecia mais
+> lento do que é e a JOIN — que também não achava nada — parecia competitiva.
+> Corrigido o seed (etapa 17.5), a resolução foi a **100%** e os três padrões
+> passaram a favorecer o Dictionary. A lição vale além deste número: **medir
+> sobre dado que não casa mede o caminho de erro, não o caminho de uso.**
+
+**Por que o `GROUP BY` sobre 10M é o maior ganho (13,4×).** É onde a JOIN mais
+sofre: ela vai ao PostgreSQL e materializa o lado direito a cada execução,
+enquanto o Dictionary já está em memória (15 linhas, **42,91 KiB** em
+`system.dictionaries`). Com a resolução em 34%, esse custo ficava mascarado
+porque a maioria das linhas nem chegava a resolver.
 
 **Quando preferir Dictionary:**
 
 | Critério | Por quê |
 |---|---|
-| Lookup por linha em consulta quente | 2,9× medido; a diferença cresce com o número de linhas resolvidas |
+| Lookup por linha em consulta quente | 3,75× medido; a diferença cresce com o número de linhas resolvidas |
 | Dado de referência pequeno e estável | 15 linhas em **42,91 KiB** de RAM (`system.dictionaries`) — cabe em memória sem negociação |
 | Origem externa que não deve ser consultada a cada query | O `LIFETIME(240–360s)` amortiza; a JOIN vai ao PostgreSQL **toda vez** |
 | Resposta precisa sobreviver à origem fora do ar | O Dictionary serve da memória; a JOIN falha |
@@ -404,6 +415,28 @@ firme: uma tabela `transaction_status_events` (append-only) na origem, com
 cada estágio sai de `lead(mudou_em) - mudou_em`, e o funil vira jornada real.
 O pipeline atual capturaria essa tabela sem alteração de desenho — é a origem
 que precisa mudar, não o destino.
+
+## Limitação declarada: `accounts` não vai ao ClickHouse (e o que isso custa)
+
+A tabela `accounts` é a única com PII e **nunca é replicada para o ClickHouse**,
+por desenho de S01. `transactions_raw` referencia o titular apenas por
+`source_account_id` (inteiro). Verificado por varredura de `system.columns` na
+etapa 16: **zero colunas de dado pessoal** no motor analítico.
+
+O ganho é direto — LGPD, superfície de auditoria e o procedimento de eliminação
+ficam contidos num único banco. **O custo, que vale declarar antes que
+perguntem:** perguntas que cruzam transação com dado de conta — a classe da
+**Q2 (reconciliação)** — só são respondíveis no TimescaleDB. Um Data Champion
+que trabalhe apenas no ClickHouse **não consegue respondê-las ali**.
+
+| Caminho | Quando |
+|---|---|
+| API / MVs no ClickHouse | Todo o resto — volume, latência, funil, série histórica |
+| TimescaleDB com perfil restrito e acesso nominal | Só quando a pergunta exige dado de conta |
+
+É trade-off assumido, não omissão: trocamos uma classe de pergunta menos
+frequente por um motor analítico livre de dado pessoal. Documentado para o
+consumidor final em [`docs/DATA-CHAMPIONS.md`](../docs/DATA-CHAMPIONS.md) § 6.
 
 ## Ambiente
 

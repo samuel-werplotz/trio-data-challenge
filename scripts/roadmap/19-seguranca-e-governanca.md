@@ -15,7 +15,18 @@ Revisão de entrega § 4.4; `docker-compose.yml` (credenciais em claro); `init/c
 - [ ] ClickHouse e os 2 PostgreSQL de pé — a matriz de perfis precisa ser validada contra o servidor real (um `GRANT` que não aplica é matriz de ficção)
 
 ## ESTADO HERDADO
-Verificado ao fechar a etapa 16 (atualizar ao fechar a 18, se a 18 rodar antes):
+Verificado ao fechar as **etapas 17.5 e 18**:
+- **Baseline da suíte: 207 pass / 0 fail / 3 skip** (os 3 SKIP são `make`). Cresceu de 186 com os blocos 17.5 (5 testes) e 18 (16 testes).
+- **O perfil `analytics_ro` já está prometido em dois documentos publicados** — `docs/DATA-CHAMPIONS.md` § 1 diz como pedi-lo e aponta para `SEGURANCA-E-GOVERNANCA.md` para a matriz; o `SUMARIO-EXECUTIVO.md` promete a matriz de perfis em 30 dias. **Esta etapa é quem cria o perfil de verdade** — hoje o link aponta para um documento que não existe.
+- **Os limites que o perfil deve carregar já estão documentados e testados** em `DATA-CHAMPIONS.md` § 5, com as mensagens reais capturadas do cluster: `max_execution_time` (60 s), `max_rows_to_read` (50M), `max_memory_usage` (4 GiB). Os testes `18.11`/`18.11b` provam que armam. **Amarrá-los ao perfil é o passo 2 desta etapa** — hoje são sugestão em documento, aplicados por sessão.
+- **`dict_institutions` corrigido e resolvendo 100%** (era 33,55% — ver etapa 17.5). Consequência para o passo 3: ao parametrizar a senha do `SOURCE(POSTGRESQL(...))`, **conferir `dictHas` sobre os 10M de novo**, não só se o Dictionary carrega. Teste `17.5.1` guarda isso.
+- **A senha `trio2024` continua em claro** no `docker-compose.yml`, no DDL do Dictionary e nos comandos do `README.md`. Agora aparece também em `run_all.sh` (blocos novos usam `--password trio2024` como os antigos) — parametrizar exige varrer a suíte junto, não só o DDL.
+- **Nenhum perfil existe ainda**: usuário `trio` único, sem `users.d/`, sem `ROW POLICY`, sem `QUOTA`. Confirmado nesta etapa.
+- **PII segue contida em `accounts` no TimescaleDB**, e agora isso está **declarado** — seção nova no `REPORT.md` e § 6 do guia. A matriz de perfis pode referenciar essa declaração em vez de repeti-la.
+- **Cuidado herdado da 17.5**: teste que restaura valor literal reverte correção de dado silenciosamente (`14.4` desfazia o conserto do `001` a cada execução). Ao criar testes de perfil que mexam em usuário ou permissão, **ler o estado antes e restaurar o lido**, nunca um literal.
+- Ambiente: 11 containers de pé, 10.000.000 nas 3 pontas do ClickHouse, legado com 480/80.000/50.000/15.
+
+Verificado ao fechar a etapa 16 (segue válido):
 - **Senha `trio2024` aparece em pelo menos 3 lugares**: `docker-compose.yml`, o `SOURCE(POSTGRESQL(...))` do `dict_institutions` em `init/clickhouse/01_schema.sql`, e os comandos de verificação do `README.md`. O ADR **reconhece** a rotação como problema em aberto e não propõe caminho. **Trocar a senha não é o entregável** — o entregável é o modelo de gestão de segredo (Secrets Manager / SSM) escrito, mais a remoção do segredo do lugar mais indefensável: o DDL versionado.
 - **`.env` está no `.gitignore` e `.env.example` versionado** — a base para mover credencial existe e funciona. Chave privada do MinIO já saiu do versionamento no commit `17a90dc`, então há precedente do mesmo movimento nesta esteira.
 - **ClickHouse tem um único usuário (`trio`) com tudo liberado.** Não existe `users.d/`, não existe `ROW POLICY`, não existe `QUOTA`. As etapas anteriores nunca precisaram — a 18 (Data Champions) passa a precisar, e é ela quem consome esta matriz.

@@ -51,13 +51,13 @@ Não faz: não cria usuário nem perfil no ClickHouse (é a etapa 19); não cria
 9. Acrescentar o bloco `# --- 18 data-champions ---` em `scripts/tests/run_all.sh`.
 
 ## CRITÉRIOS DE ACEITE
-- [ ] `docs/DATA-CHAMPIONS.md` existe e cobre os 7 tópicos: acesso, catálogo, queries-modelo, MV vs raw, limites, Hex, escalonamento
-- [ ] Catálogo lista as 2 MVs + raw + Dictionary, cada um com **o que responde e o que não responde**
-- [ ] 3 queries-modelo comentadas, **com tempo real medido** ao lado — nenhuma copiada sem executar
-- [ ] Limites nomeados com valor sugerido e **a mensagem de erro real** que o usuário vê ao estourar
-- [ ] Hex tem seção própria, com o caminho de conexão e a declaração de que não foi executado
-- [ ] Trade-off do `accounts`/Q2 declarado no guia **e** no `REPORT.md`
-- [ ] Armadilha de MV-como-gatilho documentada — as duas direções (duplicar no backfill, divergir no delete)
+- [x] `docs/DATA-CHAMPIONS.md` existe e cobre os 7 tópicos — testes `18.1`–`18.9`
+- [x] Catálogo lista as 2 MVs + raw + Dictionary, cada um com **o que responde e o que não responde** — testes `18.6`/`18.7`
+- [x] 3 queries-modelo com tempo real medido (**5 ms**, **4 ms**, **6 ms**) e **executadas pelos testes** `18.10a/b/c`, não só citadas
+- [x] Limites nomeados com valor sugerido e a **mensagem literal** capturada do cluster (`TIMEOUT_EXCEEDED`, `TOO_MANY_ROWS`, `MEMORY_LIMIT_EXCEEDED`) — testes `18.11`/`18.11b` forçam a falha de verdade
+- [x] Hex com seção própria, caminho de conexão e declaração de que **não foi executado** — teste `18.2`
+- [x] Trade-off do `accounts`/Q2 declarado no guia **e** em seção nova do `REPORT.md` — teste `18.12`
+- [x] Armadilha de MV-como-gatilho documentada nas duas direções — teste `18.13`
 
 ## TESTES
 | id | trilha | comando | esperado |
@@ -83,16 +83,26 @@ git checkout -- desafio-1/REPORT.md
 > As queries-modelo são somente leitura; o teste de limite falha por design e não escreve nada.
 
 ## STATUS
-Estado: BLOQUEADA
-Premissas assumidas: —
-Desvios do plano: —
+Estado: CONCLUÍDA
+
+Premissas assumidas:
+- **Query de guia é código, não ilustração.** As 3 queries-modelo estão nos testes (`18.10a/b/c`) e rodam a cada suíte. Foi justamente executá-las que expôs o defeito do Dictionary (etapa 17.5) — a alternativa, copiar SQL plausível para o documento, teria publicado o guia com o defeito dentro.
+- **Limite documentado precisa armar.** Os valores sugeridos (`60 s`, `50M linhas`, `4 GiB`) são de produção, mas as mensagens de erro no guia foram capturadas forçando cada limite com valor baixo contra o cluster real. Usuário que não reconhece a mensagem não sabe que bateu no limite.
+- **Perfil `analytics_ro` é referenciado, não criado aqui.** Criá-lo é entrega da etapa 19; duplicar a matriz de acesso nos dois documentos garantiria divergência. O guia aponta para `SEGURANCA-E-GOVERNANCA.md`.
+- **Hex documentado sem execução.** Não há conta neste ambiente e provisionar PrivateLink está fora do escopo (Seção 2). Mesmo padrão do `StorageAlto` sem `node_exporter` na etapa 15: descrever o que valeria em produção e declarar que não foi validado.
+
+Desvios do plano:
+1. **O passo 3 encontrou um defeito de produto e parou a etapa.** Medir as queries-modelo revelou que o `dict_institutions` resolvia **33,55%** do volume, com a API servindo `"desconhecida"` para 66% das instituições. Virou a **etapa 17.5**, executada e fechada antes de continuar a 18 — defeito em funcionalidade entregue não cabe como nota de rodapé de etapa documental.
+2. **Três armadilhas novas descobertas escrevendo o guia**, todas por execução: `countMerge` sobre coluna `countIf` (`requires zero or one argument`), `dictGet` sem `tuple()` em chave `COMPLEX_KEY_HASHED`, e `sum(countMerge(...))` (`ILLEGAL_AGGREGATION`, mesma classe da etapa 14, reencontrada de forma independente). As três entraram na tabela de armadilhas com o erro literal — é o que se pesquisa por `Ctrl+F` quando a query quebra.
+3. **O contraexemplo de poda de partição foi medido, não afirmado.** `WHERE toString(created_at) LIKE '...'` lê **6.094.848 linhas em 216 ms** contra **8.192 linhas em 6 ms** da forma correta: 36× mais lento, 744× mais dado, resposta idêntica. Um número medido convence mais que "evite funções na coluna do filtro".
+4. **O trade-off de `accounts`/Q2 ganhou seção no `REPORT.md`**, além do guia. O plano previa declarar nos dois; ao escrever, ficou claro que o `REPORT.md` não tinha **nenhuma** menção à consequência (Q2 não é respondível no ClickHouse), só à decisão de schema. A limitação existia desde S01 e nunca havia sido declarada.
 
 ## FECHAMENTO
-- [ ] Critérios atendidos
-- [ ] Testes no run_all.sh (bloco `# --- 18 data-champions ---`)
-- [ ] run_all.sh sem FAIL
-- [ ] ESTADO HERDADO da próxima preenchido
-- [ ] Bloco no LOG-EXECUCAO.md
-- [ ] Desvio? → atualizar 99-validacao-final.md
+- [x] Critérios atendidos
+- [x] Testes no run_all.sh (bloco `# --- 18 data-champions ---`, 16 testes)
+- [x] run_all.sh sem FAIL — **207 pass, 0 fail, 3 skip**
+- [x] ESTADO HERDADO da próxima (19) preenchido
+- [x] Bloco no LOG-EXECUCAO.md
+- [x] Desvio? → registrados em `99-validacao-final.md`
 - [ ] Commit checkpoint
 - [ ] Mover pra concluidas/. Marcar [x] no CLAUDE.md

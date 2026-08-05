@@ -796,8 +796,13 @@ if container_up api; then
     bash -c 'curl -s localhost:8000/metrics | grep -q "api_requests_total"'
   # O nome vem do Dictionary (ref-sync), não de literal no código: prova o
   # caminho legado -> Dictionary -> API inteiro.
+  # Compara com o nome QUE ESTÁ no legado, em vez do literal "Institui" que
+  # valia enquanto o seed gerava 'Instituição Parceira N' (ver etapa 17.5).
   check 14.19 "resposta resolve nome via dict_institutions" \
-    bash -c 'curl -s "localhost:8000/institutions/001/health?hours=24" | grep -q "Institui"'
+    bash -c 'ESPERADO=$(docker exec trio-postgres-legado psql -qtAU trio -d trio_legado -c \
+        "SELECT name FROM partner_institutions WHERE code='"'"'001'"'"'" 2>/dev/null | tr -d "\r");
+      [ -n "$ESPERADO" ] || exit 1;
+      curl -s "localhost:8000/institutions/001/health?hours=24" | grep -qF "$ESPERADO"'
 else
   for t in 14.1 14.2 14.3 14.15 14.16 14.17 14.18 14.19; do skip "$t" "api fora do ar"; done
 fi
@@ -809,16 +814,24 @@ if container_up ref-sync && container_up clickhouse; then
     bash -c 'curl -s localhost:8002/metrics | grep -q "refsync_last_success_timestamp [0-9]"'
   # 14.4: mudança no legado chega ao Dictionary. Faz UPDATE, força o ciclo e
   # RESTAURA o valor original — teste não pode deixar resíduo no dado.
+  # O valor de restauração é LIDO do banco antes do UPDATE, não escrito no
+  # teste: até a etapa 17.5 ele era o literal 'Instituição Parceira 1', e
+  # quando o seed do legado passou a usar nomes reais ('Banco do Brasil'), o
+  # teste PASSAVA enquanto revertia silenciosamente a correção do dado. Teste
+  # que restaura um literal é teste que impõe o dado antigo.
   if legado_seed_done; then
     check 14.4 "UPDATE no legado aparece no Dictionary apos o ciclo" \
       bash -c 'M="TESTE-14-4-$$";
+        ORIG=$(docker exec trio-postgres-legado psql -qtAU trio -d trio_legado -c \
+          "SELECT name FROM partner_institutions WHERE code='"'"'001'"'"'" 2>/dev/null | tr -d "\r");
+        [ -n "$ORIG" ] || exit 1;
         docker exec trio-postgres-legado psql -qU trio -d trio_legado -c \
           "UPDATE partner_institutions SET name='"'"'$M'"'"', updated_at=now() WHERE code='"'"'001'"'"'" >/dev/null 2>&1 || exit 1;
         docker restart trio-ref-sync >/dev/null 2>&1; sleep 12;
         V=$(docker exec trio-clickhouse clickhouse-client -u trio --password trio2024 -q \
           "SELECT dictGetOrDefault('"'"'trio_analytics.dict_institutions'"'"','"'"'name'"'"',tuple('"'"'001'"'"'),'"'"'?'"'"')" 2>/dev/null | tr -d "\r");
         docker exec trio-postgres-legado psql -qU trio -d trio_legado -c \
-          "UPDATE partner_institutions SET name='"'"'Instituição Parceira 1'"'"', updated_at=now() WHERE code='"'"'001'"'"'" >/dev/null 2>&1;
+          "UPDATE partner_institutions SET name='"'"'$ORIG'"'"', updated_at=now() WHERE code='"'"'001'"'"'" >/dev/null 2>&1;
         docker restart trio-ref-sync >/dev/null 2>&1;
         [ "$V" = "$M" ]'
   else
@@ -943,9 +956,13 @@ check 16.5 "migration-analysis cobre os 4 sub-itens do PDF 3.2 B.3" \
 check 16.6 "texto Dictionary vs JOIN existe nos documentos" \
   bash -c 'grep -qi "dictionary" desafio-1/REPORT.md && grep -qi "dictionary" desafio-2/ADR.md'
 # C3 pede o texto COM numero: sem medicao dos dois caminhos, e opiniao.
+# Asseria o valor literal "0,018" ate a etapa 17.5, quando a correcao do seed do
+# legado (Dictionary resolvia 33,55%) obrigou a remedir os 3 padroes. Passou a
+# asserir a PROPRIEDADE — existe tabela com os dois caminhos e unidade de tempo —
+# em vez de um numero especifico, que muda a cada remedicao legitima.
 check 16.9 "Dictionary vs JOIN tem numero medido dos dois caminhos" \
   bash -c 'grep -qi "dictGet" desafio-1/REPORT.md && grep -qi "JOIN" desafio-1/REPORT.md \
-        && grep -q "0,018" desafio-1/REPORT.md'
+        && grep -qE "\| *[0-9]+([,.][0-9]+)? ms *\|" desafio-1/REPORT.md'
 check 16.7 "limitacao do funil de status declarada (REPORT e ADR)" \
   bash -c 'grep -qi "transição" desafio-1/REPORT.md \
         && grep -qi "funil de status" desafio-2/ADR.md'
@@ -1012,6 +1029,98 @@ check 17.11 "README aponta o sumario executivo" \
 # Ancora de comparacao: sem saber o que ja se paga hoje, o TCO flutua.
 check 17.12 "custo tem base de comparacao do gerenciado atual" \
   bash -c 'grep -qi "timescale cloud" docs/CUSTO-AWS.md'
+
+# --- 17.5 correcao-do-dictionary ---
+# O dict_institutions resolvia 33,55% do volume: o seed do legado gerava 001..015
+# e o de transacoes usa codigos reais (237, 341...). Cardinalidade batia (15=15),
+# valor nao. Estes testes guardam o VALOR, que e o que o lookup precisa.
+
+check 17.5.2 "seed do legado nao usa mais codigo sequencial" \
+  bash -c "! grep -q \"lpad(g::text, 3, '0')\" init/postgres-legado/02_legacy_seed.sql"
+check 17.5.3 "seed do legado tem os codigos reais de config.py" \
+  bash -c "grep -q \"'237'\" init/postgres-legado/02_legacy_seed.sql \
+        && grep -q \"'341'\" init/postgres-legado/02_legacy_seed.sql"
+
+if container_up clickhouse && container_up postgres-legado; then
+  # A propriedade que importa: TODA linha resolve. 33,55% passava em qualquer
+  # verificacao que so perguntasse "o dictGet devolve alguma coisa?".
+  N_RESOLVE=$(ch_query "SELECT countIf(dictHas('trio_analytics.dict_institutions', tuple(source_institution))) FROM trio_analytics.transactions_raw")
+  [ "$N_RESOLVE" = "10000000" ] && ok 17.5.1 "dictionary resolve 100% do volume ($N_RESOLVE)" \
+    || fail 17.5.1 "esperava 10000000 resolvendo, achei $N_RESOLVE"
+
+  NOME_237=$(ch_query "SELECT dictGetOrDefault('trio_analytics.dict_institutions','name',tuple('237'),'DEFAULT')")
+  [ "$NOME_237" = "Bradesco" ] && ok 17.5.4 "lookup de 237 devolve Bradesco" \
+    || fail 17.5.4 "esperava Bradesco para 237, achei '$NOME_237'"
+
+  # A correcao mexeu em partner_institutions; as FKs apontam para id, entao
+  # nada dependente pode ter se movido.
+  N_LEG=$(docker compose exec -T postgres-legado psql -q -U trio -d trio_legado -tAc \
+    "SELECT (SELECT count(*) FROM institution_configs) || '/' || (SELECT count(*) FROM legacy_accounts) || '/' || (SELECT count(*) FROM partner_institutions)" 2>/dev/null | tr -d '\r ')
+  [ "$N_LEG" = "480/80000/15" ] && ok 17.5.5 "integridade do legado intacta ($N_LEG)" \
+    || fail 17.5.5 "esperava 480/80000/15, achei $N_LEG"
+else
+  skip 17.5.1 "clickhouse ou postgres-legado fora do ar"
+  skip 17.5.4 "clickhouse ou postgres-legado fora do ar"
+  skip 17.5.5 "clickhouse ou postgres-legado fora do ar"
+fi
+
+# --- 18 data-champions ---
+# O PDF cita Data Champions em 4 secoes e Hex em 2. Guia que promete acesso e
+# limite sem que eles funcionem e pior que guia nenhum: os testes de carga-real
+# executam as queries do guia e forcam os limites de verdade.
+
+check 18.1 "guia do Data Champion existe" test -f docs/DATA-CHAMPIONS.md
+check 18.2 "guia trata Hex (citado 2x no PDF)" \
+  bash -c 'grep -qi "hex" docs/DATA-CHAMPIONS.md'
+check 18.3 "guia documenta max_execution_time" \
+  bash -c 'grep -q "max_execution_time" docs/DATA-CHAMPIONS.md'
+check 18.4 "guia documenta max_memory_usage" \
+  bash -c 'grep -q "max_memory_usage" docs/DATA-CHAMPIONS.md'
+# O erro nº1 de quem vem do Postgres: ler estado agregado sem -Merge.
+check 18.5 "guia ensina o sufixo -Merge" \
+  bash -c '[ "$(grep -c "countMerge\|sumMerge\|countIfMerge" docs/DATA-CHAMPIONS.md)" -ge 2 ]'
+check 18.6 "catalogo cobre daily_by_institution" \
+  bash -c 'grep -q "daily_by_institution" docs/DATA-CHAMPIONS.md'
+check 18.7 "catalogo cobre status_funnel" \
+  bash -c 'grep -q "status_funnel" docs/DATA-CHAMPIONS.md'
+check 18.8 "guia mostra dictGet com tuple()" \
+  bash -c 'grep -q "dictGetOrDefault" docs/DATA-CHAMPIONS.md && grep -q "tuple(" docs/DATA-CHAMPIONS.md'
+check 18.9 "guia tem caminho de escalonamento" \
+  bash -c 'grep -qi "escalonamento" docs/DATA-CHAMPIONS.md'
+# O trade-off de accounts/PII precisa estar declarado nos DOIS documentos.
+check 18.12 "trade-off de accounts declarado no guia e no REPORT" \
+  bash -c 'grep -qi "accounts" docs/DATA-CHAMPIONS.md && grep -qi "accounts" desafio-1/REPORT.md'
+# A armadilha que custou 2 incidentes nesta esteira (etapas 12 e 16).
+check 18.13 "guia adverte que MV e gatilho, nao view que recalcula" \
+  bash -c 'grep -qi "gatilho de inserção" docs/DATA-CHAMPIONS.md'
+
+if container_up clickhouse; then
+  # As 3 queries-modelo do guia rodam de verdade. Query em documento que nunca
+  # foi executada e a forma mais facil de publicar SQL quebrado.
+  check 18.10a "query-modelo 1 (MV diaria com -Merge) executa" \
+    bash -c 'docker compose exec -T clickhouse clickhouse-client --user trio --password trio2024 -q \
+      "SELECT day, source_institution, countMerge(tx_count), sumMerge(total_amount), countIfMerge(settled_count) FROM trio_analytics.daily_by_institution WHERE day >= today() - 30 AND type = '"'"'pix'"'"' GROUP BY day, source_institution LIMIT 5 FORMAT Null"'
+  check 18.10b "query-modelo 2 (dictGetOrDefault com tuple) executa e resolve" \
+    bash -c 'V=$(docker compose exec -T clickhouse clickhouse-client --user trio --password trio2024 -q \
+      "SELECT dictGetOrDefault('"'"'trio_analytics.dict_institutions'"'"','"'"'name'"'"',tuple('"'"'341'"'"'),'"'"'?'"'"')" 2>/dev/null | tr -d "\r");
+      [ "$V" = "Itaú Unibanco" ]'
+  check 18.10c "query-modelo 3 (raw com poda de particao) executa" \
+    bash -c 'docker compose exec -T clickhouse clickhouse-client --user trio --password trio2024 -q \
+      "SELECT toStartOfHour(created_at) AS hora, count() FROM trio_analytics.transactions_raw WHERE created_at >= toDateTime('"'"'2026-07-01 00:00:00'"'"') AND created_at < toDateTime('"'"'2026-07-02 00:00:00'"'"') AND type = '"'"'pix'"'"' AND source_institution = '"'"'237'"'"' GROUP BY hora FORMAT Null"'
+
+  # O limite precisa FALHAR de verdade — limite documentado que nao arma e
+  # so texto. Sai != 0 e a mensagem tem que ser a que o guia promete.
+  check 18.11 "max_execution_time realmente aborta a query" \
+    bash -c 'OUT=$(docker compose exec -T clickhouse clickhouse-client --user trio --password trio2024 \
+      --max_execution_time=1 -q "SELECT count() FROM trio_analytics.transactions_raw t1 CROSS JOIN (SELECT * FROM trio_analytics.transactions_raw LIMIT 100000) t2 FORMAT Null" 2>&1);
+      echo "$OUT" | grep -q "TIMEOUT_EXCEEDED"'
+  check 18.11b "max_rows_to_read realmente aborta a query" \
+    bash -c 'OUT=$(docker compose exec -T clickhouse clickhouse-client --user trio --password trio2024 \
+      --max_rows_to_read=1000000 -q "SELECT source_institution, count() FROM trio_analytics.transactions_raw GROUP BY source_institution FORMAT Null" 2>&1);
+      echo "$OUT" | grep -q "TOO_MANY_ROWS"'
+else
+  for t in 18.10a 18.10b 18.10c 18.11 18.11b; do skip "$t" "clickhouse fora do ar"; done
+fi
 
 echo "----"
 echo "$PASS_N pass, $FAIL_N fail, $SKIP_N skip"

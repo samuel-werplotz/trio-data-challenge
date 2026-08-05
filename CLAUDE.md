@@ -91,7 +91,8 @@ Critérios atendidos → testes no `run_all.sh` → `run_all.sh` sem FAIL → `E
 - [x] 15 observabilidade-runbook-e-incidente · compose
 - [x] 16 fechamento-de-lacunas-do-pdf · compose
 - [x] 17 camada-executiva-e-custo · local
-- [ ] 18 data-champions · B
+- [x] 17.5 correcao-do-dictionary · B — criada durante a 18; defeito real (Dictionary resolvia 33,55%)
+- [x] 18 data-champions · B
 - [ ] 19 seguranca-e-governanca · B
 - [ ] 20 lacunas-tecnicas-e-ensaio · B
 - [ ] 21 higiene-de-entrega · local — **executar por último**; renomeia este arquivo para `docs/METODO-DE-EXECUCAO.md`

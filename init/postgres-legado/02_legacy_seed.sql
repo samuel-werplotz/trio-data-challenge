@@ -9,16 +9,44 @@ BEGIN
         RETURN;
     END IF;
 
-    -- 15 instituições: mesma cardinalidade de source_institution em
-    -- transactions (TimescaleDB), para o Dictionary da etapa 11 casar 1:1.
+    -- 15 instituições com os MESMOS códigos de `desafio-1/seed/config.py`
+    -- (INSTITUTIONS), na mesma ordem de rank.
+    --
+    -- Os códigos precisam ser IGUAIS, não só na mesma quantidade: o
+    -- `dict_institutions` (etapa 11) faz lookup por `code`, e é daqui que sai
+    -- o nome exibido pela API e pelos painéis. A versão anterior gerava
+    -- `lpad(g,3,'0')` → 001..015 contra os códigos reais das transações
+    -- (237, 341, 104...), e só o `001` coincidia: o Dictionary resolvia
+    -- 33,55% do volume e devolvia o default nos outros 66%. Cardinalidade
+    -- igual (15 = 15) escondeu o defeito — o que precisa casar é o valor.
+    --
+    -- Ordem = rank do peso Zipf em `distributions.py`: a 1ª linha é a
+    -- instituição de maior volume. Manter a ordem mantém o `id` serial
+    -- alinhado ao rank, do qual dependem as 2 queries do legado.
     INSERT INTO partner_institutions (code, name, short_name, inst_type, is_active)
     SELECT
-        lpad(g::text, 3, '0'),
-        'Instituição Parceira ' || g,
-        'Parceira ' || g,
-        (ARRAY['bank','fintech','broker'])[1 + (g % 3)],
-        (g != 15)  -- 1 instituição inativa: exercita o WHERE is_active das 2 queries
-    FROM generate_series(1, 15) g;
+        i.code,
+        i.name,
+        i.short_name,
+        (ARRAY['bank','fintech','broker'])[1 + (i.rank % 3)],
+        (i.rank != 15)  -- 1 instituição inativa: exercita o WHERE is_active das 2 queries
+    FROM (VALUES
+        ( 1, '001', 'Banco do Brasil',  'BB'),
+        ( 2, '237', 'Bradesco',         'Bradesco'),
+        ( 3, '341', 'Itaú Unibanco',    'Itaú'),
+        ( 4, '104', 'Caixa Econômica',  'Caixa'),
+        ( 5, '033', 'Santander',        'Santander'),
+        ( 6, '260', 'Nu Pagamentos',    'Nubank'),
+        ( 7, '077', 'Banco Inter',      'Inter'),
+        ( 8, '336', 'Banco C6',         'C6'),
+        ( 9, '212', 'Banco Original',   'Original'),
+        (10, '380', 'PicPay',           'PicPay'),
+        (11, '323', 'Mercado Pago',     'MercadoPago'),
+        (12, '290', 'PagSeguro',        'PagSeguro'),
+        (13, '136', 'Unicred',          'Unicred'),
+        (14, '756', 'Sicoob',           'Sicoob'),
+        (15, '748', 'Sicredi',          'Sicredi')
+    ) AS i(rank, code, name, short_name);
 
     -- 30 configs por instituição = ~450 linhas no total (S07 § Volume). As 4
     -- chaves que a Query B filtra ficam vigentes (`effective_until IS NULL`);

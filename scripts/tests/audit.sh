@@ -106,15 +106,16 @@ sec "2. Esteira — 20 etapas + 99"
 # ============================================================================
 # Etapa fechada move de $ROADMAP para $ROADMAP/concluidas — procurar nos dois
 # é o que faz esta seção continuar válida depois que a esteira anda.
-# 23 = 15 originais + 99 + 13.5 (reconciliação) + 16 (lacunas do PDF)
+# 24 = 15 originais + 99 + 13.5 (reconciliação) + 16 (lacunas do PDF)
 #      + 17..21 (revisão de entrega: executivo/custo, Data Champions,
-#        segurança, lacunas técnicas, higiene). Ver CLAUDE.md § 10.
+#        segurança, lacunas técnicas, higiene) + 17.5 (correção do Dictionary,
+#        criada durante a 18 ao achar defeito real). Ver CLAUDE.md § 10.
 # Era 18 até a etapa 16; a esteira cresceu de novo na revisão de entrega.
 N_STEPS=$(ls "$ROADMAP"/[0-9]*.md "$ROADMAP/concluidas"/[0-9]*.md 2>/dev/null | wc -l)
-if [ "$N_STEPS" -eq 23 ]; then ok A2.1 "23 arquivos de etapa (15 + 99 + 13.5 + 16 + 17..21)"
-else bad A2.1 "esperava 23 arquivos de etapa, achei $N_STEPS"; fi
+if [ "$N_STEPS" -eq 24 ]; then ok A2.1 "24 arquivos de etapa (15 + 99 + 13.5 + 16 + 17..21 + 17.5)"
+else bad A2.1 "esperava 24 arquivos de etapa, achei $N_STEPS"; fi
 
-for n in 01 02 03 04 05 06 07 08 09 10 11 12 13 13.5 14 15 16 17 18 19 20 21 99; do
+for n in 01 02 03 04 05 06 07 08 09 10 11 12 13 13.5 14 15 16 17 17.5 18 19 20 21 99; do
   f=$(ls "$ROADMAP/$n"-*.md "$ROADMAP/concluidas/$n"-*.md 2>/dev/null | head -1)
   if [ -z "$f" ]; then bad "A2.$n" "etapa $n ausente"; continue; fi
 
