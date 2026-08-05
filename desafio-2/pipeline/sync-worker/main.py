@@ -45,14 +45,39 @@ def executar_ciclo(pg, ch) -> int:
     estado = source.read_state(pg)
     full = source.should_full_scan(estado)
 
-    # O overlap cobre a linha cujo COMMIT só ficou visível depois de a janela
-    # anterior ter sido lida: updated_at é gravado no UPDATE, mas a linha só
-    # aparece para outra sessão no COMMIT. Sem a sobreposição ela cairia no vão
-    # entre dois ciclos e nunca seria vista.
-    watermark = estado["last_updated_at"] - timedelta(seconds=Config.OVERLAP_SECONDS)
+    # Duas leituras por ciclo, e cada uma resolve um problema diferente.
+    #
+    # 1) RETOMADA EXATA, a partir do par (updated_at, id) já confirmado. É o que
+    #    permite continuar de dentro de um timestamp que tem mais linhas que o
+    #    lote — o caso do INSERT em massa, em que `now()` grava o mesmo instante
+    #    em todas as linhas.
+    #
+    # 2) OVERLAP, recuando o instante para pegar o COMMIT tardio: updated_at é
+    #    gravado no UPDATE, mas a linha só fica visível no COMMIT, e sem o
+    #    recuo ela cairia no vão entre dois ciclos.
+    #
+    # Por que NÃO dá para fazer as duas numa query só: o overlap recua o
+    # timestamp, e recuar exige começar do id 0 daquele instante. Aí o LIMIT
+    # se esgota nas linhas JÁ escritas e o ciclo nunca alcança as novas — o
+    # pipeline trava, escrevendo nada, sem erro no log. Foi assim que 10.000 de
+    # 60.000 linhas ficaram inalcançáveis (etapa 20). A retomada vem primeiro
+    # justamente porque é ela que garante progresso.
+    wm_ts = estado["last_updated_at"]
+    wm_id = estado.get("last_id") or 0
 
     t0 = time.monotonic()
-    linhas = source.fetch_window(pg, watermark, full=full)
+    linhas = source.fetch_window(pg, wm_ts, full=full, watermark_id=wm_id)
+
+    # Só varre o overlap quando a retomada não encheu o lote. Se encheu, há
+    # backlog: gastar leitura com o passado atrasaria ainda mais o presente.
+    if len(linhas) < Config.BATCH_MAX_ROWS:
+        atraso = wm_ts - timedelta(seconds=Config.OVERLAP_SECONDS)
+        vistos = {l["id"] for l in linhas}
+        for l in source.fetch_window(pg, atraso, full=full, watermark_id=0):
+            if l["id"] not in vistos:
+                linhas.append(l)
+        linhas.sort(key=lambda l: (l["updated_at"], l["id"]))
+
     read_seconds = time.monotonic() - t0
     metrics.record_read(len(linhas))
 
@@ -69,8 +94,13 @@ def executar_ciclo(pg, ch) -> int:
     # Filtra pelo watermark ANTERIOR: só entra o que é estritamente mais novo.
     # A releitura continua servindo ao seu propósito, que é pegar o commit
     # tardio — esse sim tem updated_at maior que o watermark.
-    limite = estado["last_updated_at"]
-    novas = [l for l in linhas if l["updated_at"] > limite]
+    # A comparação é por TUPLA, igual à do SELECT e à do ORDER BY. Com
+    # `updated_at > limite` puro, toda linha que empatasse no timestamp do
+    # watermark era descartada — inclusive as que nunca tinham sido escritas,
+    # quando o lote anterior cortou no meio daquele instante. Era assim que
+    # 10.000 de 60.000 linhas sumiam sem erro (etapa 20).
+    limite = (wm_ts, wm_id)
+    novas = [l for l in linhas if (l["updated_at"], l["id"]) > limite]
     relidas = len(linhas) - len(novas)
     if relidas:
         # Visível no log: confirma que o overlap está fazendo seu trabalho e
@@ -109,10 +139,21 @@ def executar_ciclo(pg, ch) -> int:
         metrics.record_error("write_exhausted")
         return 0
 
-    # Watermark = maior updated_at do lote, não now(): se o LIMIT cortou a
-    # janela no meio, usar now() pularia o que ficou de fora.
-    novo_watermark = max(l["updated_at"] for l in linhas)
-    source.commit_watermark(pg, novo_watermark, len(convertidas), full=full)
+    # Watermark = o PAR (updated_at, id) da última linha do lote, não now() e
+    # não só o maior updated_at.
+    #
+    # As linhas vêm ordenadas por (updated_at, id), então a última é exatamente
+    # a fronteira do que foi escrito. Guardar só o timestamp funcionava enquanto
+    # cada updated_at tinha poucas linhas; num INSERT em massa (`now()` é fixo
+    # por statement) todas compartilham o mesmo instante, o LIMIT corta no meio
+    # dele e o id é a única coisa que diz onde parar. Ver etapa 20.
+    # max() do PAR, não `linhas[-1]`: a varredura de overlap acrescenta linhas
+    # antigas ao lote, e mesmo com a reordenação é o maior par que representa a
+    # fronteira do que foi confirmado. Retroceder o watermark faria o ciclo
+    # seguinte reescrever o que já entrou.
+    novo_watermark, novo_id = max((l["updated_at"], l["id"]) for l in linhas)
+    source.commit_watermark(pg, novo_watermark, len(convertidas), full=full,
+                            new_id=novo_id)
 
     lag = max(0.0, time.time() - novo_watermark.timestamp())
     metrics.record_cycle(

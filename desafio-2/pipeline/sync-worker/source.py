@@ -36,13 +36,21 @@ COLUMNS = (
 #
 # O ORDER BY casa com idx_tx_updated_at (updated_at, id), então o Merge Append
 # devolve já ordenado e o Sort desaparece do plano.
+#
+# O predicado é a TUPLA (updated_at, id), não só updated_at. `now()` é fixo por
+# statement no PostgreSQL, então um INSERT de N linhas grava o mesmo
+# updated_at em todas; com N > BATCH_MAX_ROWS o LIMIT corta no meio de um
+# timestamp. Comparando só por updated_at, o excedente ficava inalcançável e
+# era descartado a cada ciclo, em silêncio (medido na etapa 20: 10.000 de
+# 60.000 linhas perdidas). A comparação por tupla usa o mesmo par do ORDER BY,
+# então a retomada é exata mesmo dentro de um único timestamp.
 _SELECT_INCREMENTAL = """
     SELECT id, external_id, amount, currency, status::text AS status,
            type::text AS type, source_institution, destination_institution,
            source_account_id, destination_account_id,
            created_at, settled_at, updated_at, metadata
       FROM transactions
-     WHERE updated_at >= %(watermark)s
+     WHERE (updated_at, id) >= (%(watermark)s, %(watermark_id)s)
        AND created_at >= %(created_floor)s
      ORDER BY updated_at, id
      LIMIT %(limit)s
@@ -58,7 +66,7 @@ _SELECT_FULL = """
            source_account_id, destination_account_id,
            created_at, settled_at, updated_at, metadata
       FROM transactions
-     WHERE updated_at >= %(watermark)s
+     WHERE (updated_at, id) >= (%(watermark)s, %(watermark_id)s)
      ORDER BY updated_at, id
      LIMIT %(limit)s
 """
@@ -75,7 +83,7 @@ def connect():
 def read_state(conn) -> dict:
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT last_updated_at, last_full_scan_at, rows_synced "
+            "SELECT last_updated_at, last_id, last_full_scan_at, rows_synced "
             "FROM sync_state WHERE source = %s", (Config.SYNC_SOURCE,))
         row = cur.fetchone()
     if row is None:
@@ -93,11 +101,15 @@ def should_full_scan(state: dict) -> bool:
     return idade >= timedelta(hours=Config.FULL_SCAN_INTERVAL_HOURS)
 
 
-def fetch_window(conn, watermark: datetime, full: bool) -> list[dict]:
+def fetch_window(conn, watermark: datetime, full: bool,
+                 watermark_id: int = 0) -> list[dict]:
     """Lê a janela a partir do watermark (já com o overlap aplicado pelo
     chamador). Devolve as linhas na ordem (updated_at, id) — determinística,
-    o que permite retomar exatamente de onde parou."""
-    params = {"watermark": watermark, "limit": Config.BATCH_MAX_ROWS}
+    o que permite retomar exatamente de onde parou, inclusive no meio de um
+    timestamp com mais linhas que o lote (ver comentário de _SELECT_INCREMENTAL).
+    """
+    params = {"watermark": watermark, "watermark_id": watermark_id,
+              "limit": Config.BATCH_MAX_ROWS}
     if full:
         sql = _SELECT_FULL
     else:
@@ -148,22 +160,27 @@ def to_clickhouse_row(row: dict) -> dict:
     }
 
 
-def commit_watermark(conn, new_watermark: datetime, n_rows: int, full: bool):
+def commit_watermark(conn, new_watermark: datetime, n_rows: int, full: bool,
+                     new_id: int = 0):
     """Avança o watermark. Chamado SÓ depois de o ClickHouse confirmar a escrita.
 
     Essa ordem é o que garante a corretude do pipeline: se o processo morrer
     entre a escrita e este UPDATE, o watermark antigo faz o próximo ciclo reler
     a janela — e a releitura é absorvida pelo ReplacingMergeTree. O inverso
     (avançar antes de escrever) perderia linhas silenciosamente.
+
+    O par (updated_at, id) avança junto: gravar só o timestamp deixaria o ciclo
+    seguinte sem como saber em qual linha parou dentro dele.
     """
-    sets = ["last_updated_at = %(wm)s", "last_run_at = now()",
-            "rows_synced = rows_synced + %(n)s"]
+    sets = ["last_updated_at = %(wm)s", "last_id = %(wid)s",
+            "last_run_at = now()", "rows_synced = rows_synced + %(n)s"]
     if full:
         sets.append("last_full_scan_at = now()")
     with conn.cursor() as cur:
         cur.execute(
             f"UPDATE sync_state SET {', '.join(sets)} WHERE source = %(src)s",
-            {"wm": new_watermark, "n": n_rows, "src": Config.SYNC_SOURCE})
+            {"wm": new_watermark, "wid": new_id, "n": n_rows,
+             "src": Config.SYNC_SOURCE})
 
 
 def touch_full_scan(conn):

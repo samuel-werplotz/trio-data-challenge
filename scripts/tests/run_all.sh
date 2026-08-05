@@ -1216,6 +1216,93 @@ else
   for t in 19.12 19.12a 19.12b 19.12c; do skip "$t" "timescaledb fora do ar"; done
 fi
 
+# --- 20.5 watermark-composto ---
+# O worker perdia dados em silencio quando um unico statement inseria mais que
+# BATCH_MAX_ROWS: `now()` e fixo por statement, o LIMIT cortava no meio de um
+# updated_at e o excedente ficava inalcancavel. Estes testes guardam a tupla.
+
+check 20.5.2 "sync_state tem a coluna de desempate last_id" \
+  bash -c 'grep -q "last_id" init/timescaledb/06_sync_state.sql'
+check 20.5.3 "leitura compara a tupla (updated_at, id)" \
+  bash -c '[ "$(grep -c "(updated_at, id) >=" desafio-2/pipeline/sync-worker/source.py)" -ge 2 ]'
+check 20.5.4 "deduplicacao compara a tupla, nao so o timestamp" \
+  bash -c 'grep -q "l\[.id.\]) > limite" desafio-2/pipeline/sync-worker/main.py'
+
+if container_up timescaledb && container_up clickhouse && container_up sync-worker; then
+  # Regressao de verdade: insere acima do lote num unico statement e exige que
+  # TUDO chegue. Com o bug, parava em BATCH_MAX_ROWS e nunca mais avancava.
+  check 20.5.1 "rajada acima de BATCH_MAX_ROWS chega inteira ao destino" \
+    bash -c 'docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc \
+        "INSERT INTO transactions (external_id, created_at, updated_at, type, status, amount, currency, source_institution, destination_institution, source_account_id, destination_account_id, metadata) SELECT gen_random_uuid(), now(), now(), '"'"'pix'"'"', '"'"'pending'"'"', 10.00, '"'"'BRL'"'"', '"'"'997'"'"', '"'"'997'"'"', 1, 2, '"'"'{}'"'"'::jsonb FROM generate_series(1, 60000)" >/dev/null 2>&1;
+      OK=1;
+      for i in $(seq 1 12); do
+        sleep 10;
+        N=$(docker compose exec -T clickhouse clickhouse-client --user trio --password trio2024 -q \
+          "SELECT count() FROM trio_analytics.transactions_raw WHERE source_institution='"'"'997'"'"'" 2>/dev/null | tr -d "\r ");
+        [ "$N" = "60000" ] && { OK=0; break; };
+      done;
+      docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc \
+        "DELETE FROM transactions WHERE source_institution='"'"'997'"'"'" >/dev/null 2>&1;
+      for T in transactions_raw daily_by_institution status_funnel; do
+        docker compose exec -T clickhouse clickhouse-client --user trio --password trio2024 -q \
+          "ALTER TABLE trio_analytics.$T DELETE WHERE source_institution='"'"'997'"'"' SETTINGS mutations_sync=2" >/dev/null 2>&1;
+      done;
+      exit $OK'
+
+  N_WM=$(docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc \
+    "SELECT last_id FROM sync_state WHERE source='transactions'" 2>/dev/null | tr -d '\r ')
+  [ -n "$N_WM" ] && [ "$N_WM" -gt 0 ] 2>/dev/null && ok 20.5.5 "last_id avancou no banco ($N_WM)" \
+    || fail 20.5.5 "esperava last_id > 0, achei '$N_WM'"
+else
+  skip 20.5.1 "ambiente incompleto"
+  skip 20.5.5 "ambiente incompleto"
+fi
+
+# --- 20 lacunas-tecnicas-e-ensaio ---
+# As 2 perguntas do PDF que nao tinham resposta escrita, o teste de carga que
+# nunca existiu, o plano de HA e o cenario que prova a Q4 detectando.
+
+check 20.1 "procedimento usa EXCHANGE TABLES (atomico), nao RENAME em 2 tempos" \
+  bash -c 'grep -q "EXCHANGE TABLES" desafio-2/PROCEDIMENTOS-PRODUCAO.md'
+check 20.2 "procedimento cobre ReplicatedReplacingMergeTree" \
+  bash -c 'grep -q "ReplicatedReplacingMergeTree" desafio-2/PROCEDIMENTOS-PRODUCAO.md'
+check 20.3 "procedimento de novo consumer existe" \
+  bash -c 'grep -qi "novo consumidor" desafio-2/PROCEDIMENTOS-PRODUCAO.md'
+# Resultado de teste de carga precisa ter patamar, nao adjetivo.
+check 20.4 "resultado da saturacao tem >= 3 patamares medidos" \
+  bash -c 'test -f desafio-2/saturacao-resultado.md \
+        && [ "$(grep -c "^| [0-9]*/s |" desafio-2/saturacao-resultado.md)" -ge 3 ]'
+check 20.4b "saturacao exercita patamar acima de BATCH_MAX_ROWS" \
+  bash -c 'grep -q "^| 60000/s |" desafio-2/saturacao-resultado.md'
+check 20.7 "REPORT nota que em producao o toolkit materializa o percentil" \
+  bash -c 'grep -q "percentile_agg" desafio-1/REPORT.md \
+        && grep -qi "Timescale Cloud" desafio-1/REPORT.md'
+check 20.8 "roteiro tem a resposta de 20s para o P95 artefato do gerador" \
+  bash -c 'grep -qi "artefato do gerador" docs/HA-E-ROTEIRO-DEMO.md'
+check 20.8b "roteiro cobre os 4 blocos exigidos pelo PDF, incluindo incidente" \
+  bash -c 'grep -qi "incidente" docs/HA-E-ROTEIRO-DEMO.md \
+        && grep -qi "roteiro de demonstra" docs/HA-E-ROTEIRO-DEMO.md'
+check 20.10 "as 5 perguntas do PDF tem resposta desenvolvida" \
+  bash -c '[ "$(grep -c "^[0-9]\. \*\*\"" scripts/roadmap/99-validacao-final.md)" -ge 5 ]'
+check 20.11 "plano de HA do ClickHouse escrito" \
+  bash -c 'grep -qi "keeper" docs/HA-E-ROTEIRO-DEMO.md'
+check 20.12 "script do cenario de Q4 existe" test -f desafio-1/scripts/q4-cenario-demo.sh
+
+if container_up timescaledb; then
+  # O cenario planta, prova a deteccao e limpa. Se ele nao detectar, a Q4 esta
+  # quebrada — que e exatamente a duvida que o "0 linhas" levanta na banca.
+  check 20.9 "cenario de Q4 detecta a duplicata plantada e limpa" \
+    bash -c 'bash desafio-1/scripts/q4-cenario-demo.sh >/dev/null 2>&1'
+  # Guarda de dado: o cenario escreve na origem.
+  N_PG20=$(docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc \
+    "SELECT count(*) FROM transactions" 2>/dev/null | tr -d '\r ')
+  [ "$N_PG20" = "10000000" ] && ok 20.6 "origem intacta apos o cenario de Q4 ($N_PG20)" \
+    || fail 20.6 "esperava 10000000 em transactions, achei $N_PG20"
+else
+  skip 20.9 "timescaledb fora do ar"
+  skip 20.6 "timescaledb fora do ar"
+fi
+
 echo "----"
 echo "$PASS_N pass, $FAIL_N fail, $SKIP_N skip"
 [ "$FAIL_N" -eq 0 ] || exit 1

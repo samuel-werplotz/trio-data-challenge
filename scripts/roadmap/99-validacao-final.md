@@ -143,11 +143,87 @@ Não faz: não corrige funcionalidade — o que quebrar aqui volta para a etapa 
 
 ## As 5 perguntas previstas (PDF § 7)
 
-1. **"E se o volume triplicasse, o que mudaria na arquitetura?"** — chunk menor no Timescale; mais partições e consumidores; shard no ClickHouse por instituição; compressão mais agressiva. O ponto: a fila no meio já permite escala horizontal sem mudar código.
-2. **"Como adicionaria um novo consumer no ClickHouse sem impactar as aplicações existentes?"** — novo consumer group no mesmo tópico, com offset próprio. É justamente por isso que existe uma fila em vez de conexão direta.
-3. **"Como faria a migração de engine de uma tabela ClickHouse em produção sem downtime?"** — tabela nova com a engine desejada → `INSERT SELECT` do histórico → MV escrevendo nas duas → validar contagens → `RENAME` atômico → remover a antiga após período de segurança.
-4. **"Qual sua estratégia para onboardar um Data Champion novo?"** — dashboards com variáveis em vez de SQL do zero; views prontas com nomes de negócio; dicionário de dados; convenção de nomes; canal de dúvidas. Não se escala treinando um a um, escala-se reduzindo o que é preciso saber.
-5. **"Migrar o legado para Aurora amanhã — plano de 72h?"** — h0-8 inventário · h8-16 Aurora provisionado, restore de snapshot, DMS em CDC · h16-40 validação (contagens, checksums, performance real) · h40-48 ensaio de cutover em ambiente espelho · h48-52 janela real (pausa escritas, lag zero, aponta aplicação) · h52-72 monitoramento com replicação reversa ativa para rollback.
+1. **"E se o volume triplicasse, o que mudaria na arquitetura?"**
+   Quatro movimentos, **nessa ordem** (`ADR.md` § escala): (1) **particionar o
+   sync-worker** por faixa de `source_institution`, com um watermark por
+   partição — N workers sem coordenação entre si, escala linear, sem mudar
+   schema; (2) **aumentar o lote antes da frequência** — o ClickHouse prefere
+   poucos INSERTs grandes; encurtar o ciclo multiplica *parts* e força merges;
+   (3) **deixar o peso nas MVs**, que agregam na ingestão, então o custo cresce
+   com o que entra e não com o acumulado; (4) **só então fila (MSK)**.
+   Sustenta tudo isso a idempotência: `ReplacingMergeTree(_version)`, testado
+   reprocessando a mesma janela sem duplicar.
+   **Números para defender:** teste de saturação em 5 patamares até 60.000
+   linhas num statement, **zero perda**, lag máximo **19,2 s** contra alvo de
+   30 s (`desafio-2/saturacao-resultado.md`). No cenário 10×, o custo sai de
+   ≈$844 para ≈$2.677/mês, e o custo por milhão **cai de $84 para $27**.
+   A fila é o último passo por preço também: **$620/mês, 73% do custo atual da
+   plataforma inteira**.
+
+2. **"Como adicionaria um novo consumer no ClickHouse sem impactar as aplicações existentes?"**
+   Procedimento escrito em `desafio-2/PROCEDIMENTOS-PRODUCAO.md` § 1.
+   Resumo: criar a tabela de destino → **anotar o instante de corte** → criar a
+   MV (**nunca com `POPULATE`**) → backfill só do que é anterior ao corte →
+   validar contra a raw → publicar.
+   **O ponto que prova experiência:** existe um instante — o
+   `CREATE MATERIALIZED VIEW` — que divide o dado entre "a MV pega sozinha" e
+   "preciso de backfill". Errar isso foi o que **duplicou 10M** na etapa 12
+   (`INSERT SELECT` sobre MV já ativa → 20.000.000 agregados). E o inverso
+   aconteceu na 16: `DELETE` só na raw deixou a MV 1 linha à frente. Impacto no
+   existente: nenhum na leitura, +1 gravação por lote na escrita, e rollback é
+   `DROP VIEW` — a raw nunca é tocada.
+
+3. **"Como faria a migração de engine de uma tabela ClickHouse em produção sem downtime?"**
+   Procedimento em `desafio-2/PROCEDIMENTOS-PRODUCAO.md` § 2, com o caso real:
+   `ReplacingMergeTree` → `ReplicatedReplacingMergeTree`.
+   Tabela sombra com a engine de destino (`ORDER BY`/`PARTITION BY` **idênticos**
+   — se mudarem, é reescrita de dado, não troca de engine) → dupla escrita por
+   MV → backfill **por partição** → validação **por partição** (total igual pode
+   esconder uma a mais e outra a menos; em `ReplacingMergeTree` conferir também
+   `count() FINAL`) → **`EXCHANGE TABLES`** → 72 h de janela → `DROP`.
+   **`EXCHANGE TABLES`, não `RENAME`:** o `RENAME` em dois tempos tem um
+   instante em que a tabela **não existe** e toda consulta falha. `EXCHANGE` é
+   atômico. Pré-requisito que quase se esquece: `Replicated*` exige **Keeper de
+   pé antes** — o `CREATE` falha sem ele. E o RBAC é estado à parte, que vive em
+   `/var/lib/clickhouse/access/` e precisa de `ON CLUSTER`.
+
+4. **"Qual sua estratégia para onboardar um Data Champion novo?"**
+   `docs/DATA-CHAMPIONS.md`, escrito para ser lido sem mim por perto.
+   Como pedir acesso (perfil `analytics_ro`, que **existe** e nega o que deve
+   negar) → catálogo das 2 MVs + raw + Dictionary, cada um com **o que responde
+   e o que não responde** → 3 queries-modelo medidas (5 ms, 4 ms, 6 ms) e
+   executadas pela suíte → regra MV vs raw → limites com a **mensagem de erro
+   real** → Hex → escalonamento com dono e prazo.
+   **A parte que economiza mais tempo é a das armadilhas**, todas encontradas
+   executando: `-Merge` obrigatório, `countIfMerge` para coluna gravada com
+   `countIf`, `tuple()` em chave `COMPLEX_KEY_HASHED`, `ILLEGAL_AGGREGATION` em
+   agregação aninhada, e MV-como-gatilho. Cada uma com o erro literal, para
+   achar por `Ctrl+F` quando a query quebra.
+   **Controle de custo é servidor, não convenção:** `max_execution_time=60`,
+   `max_rows_to_read=50M`, `max_memory_usage=4GiB` e quota horária amarrados ao
+   perfil, com `readonly=1` — o usuário não afrouxa o próprio teto.
+   E o trade-off declarado: reconciliação com dado de conta **não** é
+   respondível no ClickHouse, porque PII não vai para lá.
+
+5. **"Migrar o legado para Aurora amanhã — plano de 72h?"**
+   `desafio-1/migration-analysis.md` (210 linhas, 4 sub-itens).
+   h0-8 inventário · h8-16 Aurora provisionado, schema por `pg_dump
+   --schema-only`, replicação lógica nativa (não DMS: origem e destino são
+   PostgreSQL 16, o DMS existe para heterogeneidade) · h16-40 validação com
+   contagem **e checksum** — contagem igual com soma diferente denuncia
+   corrupção de tipo · h40-48 ensaio em espelho · h48-52 corte com lag zero ·
+   h52-72 replicação reversa ativa.
+   **O risco que mais derruba migração de PostgreSQL e quase ninguém cita:**
+   `SERIAL` **não** dessincroniza sozinho — a replicação lógica copia linhas,
+   não o estado das sequências. Sem `setval()` em cada uma antes de liberar
+   escrita, a primeira inserção viola PK. Este projeto já esbarrou nessa classe
+   de erro na etapa 10.
+   **Critério de aborto decidido antes:** divergência de contagem ou checksum →
+   aborta. Lag não zera em 15 min → aborta. Janela de rollback de 72 h com o
+   legado **de pé e read-only**.
+   E o número que a pergunta cobra: Aurora custa **+$26/mês (+10%)** que o RDS
+   hoje e **−$170/mês (−17%)** no cenário 10× — a recomendação se paga por HA e
+   reader endpoint, **não por preço no volume atual**.
 
 > Duração da sessão: **30 a 45 minutos**, dito pelo PDF em § 2.1 e de novo em § 7. O `E13-Apresentacao.md` do vault já foi corrigido com o roteiro de 45 min e a ordem de corte para 30. O § 7 exige **4 blocos**: ambiente rodando, decisões arquiteturais, perguntas de aprofundamento e **discussão do cenário de incidente** — este último é fácil de esquecer no ensaio.
 

@@ -232,6 +232,15 @@ que se combine. `percentile_agg` resolveria trocando exatidão por
 combinabilidade (erro tipicamente < 1%); sem o toolkit, a escolha honesta é
 manter a exatidão e pagar a varredura.
 
+> **Em produção esta limitação não existe.** O `timescaledb_toolkit` vem
+> habilitado no **Timescale Cloud** e é instalável em Aurora/RDS via extensão.
+> Lá o CAgg passa a materializar `percentile_agg(settlement_seconds)`, o P95/P99
+> é lido com `approx_percentile(0.95, latency_agg)` direto do agregado, e a view
+> `v_settlement_latency_percentiles` deixa de ser necessária — some a varredura
+> da hypertable, que hoje é o custo desta escolha. **É limitação do ambiente
+> fixado, não do desenho**: a migração é trocar a definição do CAgg, sem mexer
+> em schema de tabela nem no pipeline.
+
 ### A armadilha do `failed_count` neste CAgg
 
 `cagg_settlement_latency_daily` filtra `WHERE settled_at IS NOT NULL`, e
