@@ -17,7 +17,9 @@ As três são viáveis; mudam o custo, o esforço operacional e o que se ganha.
 
 | Critério | EC2 autogerenciado | RDS PostgreSQL | Aurora PostgreSQL |
 |---|---|---|---|
-| **Custo base** | Menor por hora de instância; paga-se em pessoa | Intermediário; storage provisionado | ~20–30% acima do RDS por vCPU; storage por uso real |
+| **Custo base** | Menor por hora de instância; paga-se em pessoa | Intermediário; storage provisionado | Maior por vCPU; storage por uso real |
+| **Custo medido no volume atual** | ≈ **$140/mês** (`m6g.large` + EBS) | ≈ **$253/mês** (`db.m6g.large` Multi-AZ) | ≈ **$279/mês** (Serverless v2, 2–8 ACU) |
+| **Custo medido no cenário 10×** | ≈ **$560/mês** + réplica manual | ≈ **$1.010/mês** (`db.m6g.2xlarge` Multi-AZ) | ≈ **$840/mês** (Serverless v2, 4–16 ACU) |
 | **Custo real (TCO)** | O maior — inclui plantão, patch, tuning de backup | Médio | Menor em equipe pequena: elimina trabalho, não só servidor |
 | **Escala de leitura** | Réplica manual (streaming), promoção manual | Até 5 réplicas, lag de segundos | Até 15 réplicas, **lag < 100 ms**, reader endpoint único |
 | **HA / RTO** | Patroni ou script próprio; RTO em minutos | Multi-AZ com failover automático; RTO 1–2 min | Failover **< 30 s**; storage já replicado em 3 AZs |
@@ -27,6 +29,18 @@ As três são viáveis; mudam o custo, o esforço operacional e o que se ganha.
 | **Trava de fornecedor** | Nenhuma | Baixa (PostgreSQL puro) | **Média** — storage é proprietário; sair exige dump/restore |
 | **Bloat** | `autovacuum` tunado à mão | Mesmo mecanismo | **Mesmo mecanismo** — Aurora *não* resolve bloat |
 
+> **Base dos valores**: preço de tabela pública `us-east-1`, agosto de 2026, sem
+> Savings Plans nem Reserved Instances. Premissas de dimensionamento linha a
+> linha em [`docs/CUSTO-AWS.md`](../docs/CUSTO-AWS.md). Estimativa de ordem de
+> grandeza para decisão de orçamento — não é cotação.
+
+**A inversão de custo entre os dois cenários é o dado que mais importa aqui.**
+No volume atual o Aurora custa **+$26/mês (+10%)** sobre o RDS; no cenário de
+10× ele custa **−$170/mês (−17%)**. O motivo é o Serverless v2: ele escala para
+baixo em horário ocioso, enquanto o RDS Multi-AZ provisiona para o pico 24/7.
+A afirmação genérica de que "Aurora custa 20–30% a mais" é verdadeira por vCPU
+e falsa como conta mensal — depende inteiramente do perfil de carga.
+
 **Recomendação: Aurora PostgreSQL**, com uma ressalva honesta.
 
 *Por quê:* o legado é a origem do `ref-sync`, e o **reader endpoint** é o ganho
@@ -34,11 +48,18 @@ concreto — hoje toda leitura cai no mesmo nó que atende escrita. O failover
 automático importa mais aqui do que em qualquer outro componente: é instância
 única, sem réplica, e um pagamento não espera failover manual.
 
-*A ressalva:* **86 MB de banco não justificam Aurora por performance.** Se a
-decisão fosse só sobre este volume, RDS Multi-AZ entregaria o mesmo com menos
-custo e sem trava de storage. A justificativa é de **trajetória** — o legado
-cresce e é fonte de sistema de pagamento — não do estado atual. Vender Aurora
-como ganho de performance para 86 MB seria enganoso.
+*A ressalva:* **86 MB de banco não justificam Aurora por performance nem por
+preço.** Se a decisão fosse só sobre este volume, RDS Multi-AZ entregaria o
+mesmo por **$26/mês a menos** e sem trava de storage. A justificativa é de
+**trajetória** — o legado cresce e é fonte de sistema de pagamento — não do
+estado atual. Vender Aurora como ganho de performance para 86 MB seria
+enganoso; vendê-lo como economia hoje seria falso. A economia aparece no
+cenário 10×, e é lá que a recomendação se paga.
+
+Para o **legado especificamente**, o custo é quase irrelevante na decisão: são
+≈ **$44/mês** em Serverless v2 com 0,5 ACU média, porque o banco fica ocioso a
+maior parte do tempo. O que se compra por esse valor é failover automático numa
+instância que hoje é única — não capacidade.
 
 **Quando RDS seria a escolha certa:** se o banco permanecer pequeno e estável,
 se houver exigência de portabilidade entre nuvens, ou se o time já opera RDS e

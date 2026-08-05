@@ -977,6 +977,42 @@ else
   skip 16.12 "clickhouse fora do ar"
 fi
 
+# --- 17 camada-executiva-e-custo ---
+# A banca e de audiencia mista: sem camada executiva, o repo so fala com engenheiro.
+# Os testes guardam as duas propriedades que fazem o documento servir: ele CABE em
+# 1 pagina e tem numero em dolar, nao adjetivo de custo.
+
+check 17.1 "sumario executivo existe" test -f docs/SUMARIO-EXECUTIVO.md
+# 1 pagina impressa ~ 80 linhas. Passou disso, deixou de ser sumario.
+check 17.2 "sumario cabe em 1 pagina (<= 80 linhas)" \
+  bash -c '[ "$(wc -l < docs/SUMARIO-EXECUTIVO.md)" -le 80 ]'
+check 17.3 "sumario tem roadmap 30/60/90" \
+  bash -c 'grep -qi "30 / 60 / 90\|30/60/90" docs/SUMARIO-EXECUTIVO.md'
+# 3 riscos com dono: a tabela precisa das 3 linhas, nao da palavra "risco" solta.
+check 17.4 "sumario declara 3 riscos com dono" \
+  bash -c '[ "$(grep -c "| Eng. de Dados\||| Segurança" docs/SUMARIO-EXECUTIVO.md)" -ge 3 ] \
+        || [ "$(sed -n "/## Os 3 riscos/,/## Roadmap/p" docs/SUMARIO-EXECUTIVO.md | grep -c "^| \*\*")" -ge 3 ]'
+check 17.5 "documento de custo AWS existe" test -f docs/CUSTO-AWS.md
+# Tabela de TCO, nao mencao solta a dinheiro.
+check 17.6 "custo tem tabela em dolar (>= 10 ocorrencias)" \
+  bash -c '[ "$(grep -c "\$\|USD" docs/CUSTO-AWS.md)" -ge 10 ]'
+# O MSK foi adiado por decisao; o custo evitado e o que torna a decisao defensavel.
+check 17.7 "custo do MSK adiado esta precificado" \
+  bash -c 'grep -qi "msk" docs/CUSTO-AWS.md && grep -qi "custo evitado" docs/CUSTO-AWS.md'
+check 17.8 "custo cobre o cenario de 10x" \
+  bash -c 'grep -qi "100.000.000\|100M\|10×" docs/CUSTO-AWS.md'
+# Percentual sem valor absoluto foi exatamente a lacuna apontada na revisao.
+check 17.9 "migration-analysis compara Aurora e RDS em dolar" \
+  bash -c '[ "$(grep -c "\$" desafio-1/migration-analysis.md)" -ge 4 ]'
+# Numero de preco sem regiao e sem data envelhece mal e nao se refaz.
+check 17.10 "regiao e data da tabela de precos declaradas" \
+  bash -c 'grep -qi "us-east-1" docs/CUSTO-AWS.md && grep -qi "2026" docs/CUSTO-AWS.md'
+check 17.11 "README aponta o sumario executivo" \
+  bash -c 'grep -q "SUMARIO-EXECUTIVO" README.md'
+# Ancora de comparacao: sem saber o que ja se paga hoje, o TCO flutua.
+check 17.12 "custo tem base de comparacao do gerenciado atual" \
+  bash -c 'grep -qi "timescale cloud" docs/CUSTO-AWS.md'
+
 echo "----"
 echo "$PASS_N pass, $FAIL_N fail, $SKIP_N skip"
 [ "$FAIL_N" -eq 0 ] || exit 1

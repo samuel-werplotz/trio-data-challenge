@@ -90,6 +90,11 @@ Critérios atendidos → testes no `run_all.sh` → `run_all.sh` sem FAIL → `E
 - [x] 14 ref-sync-api-e-adr · compose
 - [x] 15 observabilidade-runbook-e-incidente · compose
 - [x] 16 fechamento-de-lacunas-do-pdf · compose
+- [x] 17 camada-executiva-e-custo · local
+- [ ] 18 data-champions · B
+- [ ] 19 seguranca-e-governanca · B
+- [ ] 20 lacunas-tecnicas-e-ensaio · B
+- [ ] 21 higiene-de-entrega · local — **executar por último**; renomeia este arquivo para `docs/METODO-DE-EXECUCAO.md`
 - [ ] 99 validacao-final · B
 
 ## 11. Ficha de ambiente

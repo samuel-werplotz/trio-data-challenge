@@ -7,6 +7,10 @@ observabilidade e procedimentos de operação.
 **10.000.000 de transações** carregadas em 12 meses, pipeline rodando, 4
 dashboards e 6 alertas ativos.
 
+> **Tem 2 minutos?** → [`docs/SUMARIO-EXECUTIVO.md`](docs/SUMARIO-EXECUTIVO.md)
+> — o que foi construído, os 5 números medidos, os 3 riscos com dono e o
+> roadmap 30/60/90. Custo em produção: [`docs/CUSTO-AWS.md`](docs/CUSTO-AWS.md).
+
 ---
 
 ## Quick Start
