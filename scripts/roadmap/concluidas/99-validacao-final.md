@@ -43,26 +43,30 @@ Não faz: não corrige funcionalidade — o que quebrar aqui volta para a etapa 
 7. Rodar `run_all.sh` inteiro pela última vez.
 
 ## CRITÉRIOS DE ACEITE
-- [ ] Sequência do zero completa sem intervenção manual, com tempo de cada passo registrado
-- [ ] Os 7 critérios do PDF § 6.1 com evidência preenchida
-- [ ] README raiz responde as 6 perguntas de E13
-- [ ] `REPORT.md` sem número inventado — tudo medido
-- [ ] `run_all.sh` sem nenhum `FAIL`
-- [ ] As 5 limitações assumidas estão declaradas no repositório entregue
+- [x] Sequência do zero completa, com tempo por passo registrado — **≈ 6 min** no total. **Não passou "sem intervenção manual" na primeira tentativa**: reprovou 22 testes e expôs 4 passos que só existiam fora do repositório. O `scripts/bootstrap.sh` é o que fecha isso — ver desvio 1
+- [x] Os 7 critérios do PDF § 6.1 com evidência preenchida, coletada **na execução do zero** — teste `99.3`
+- [x] README responde as 6 perguntas de E13, com os tempos medidos publicados — testes `99.5`/`99.12`
+- [x] `REPORT.md` sem número inventado; a premissa errada da ficha (~20 min de seed) foi corrigida para o medido (168 s) — teste `99.11`
+- [x] `run_all.sh` sem nenhum `FAIL` — **256 pass, 0 fail, 3 skip**, sobre o ambiente reconstruído do zero
+- [x] Limitações assumidas declaradas — a tabela abaixo, mais as 3 novas que esta etapa acrescentou
+- [x] Os 3 SKIP explicados: `make` ausente **neste** Windows (`winget` falhou por rede). Não são falha — os alvos equivalentes rodam por comando direto
 
 ---
 
 ## Os 7 critérios de aceitação mínimos (PDF § 6.1)
 
+Evidência coletada na **execução do zero de 2026-08-05** (`nuke` → `up` → seed →
+CAggs → backfill → backup), não em ambiente pré-existente.
+
 | # | Critério (literal do PDF) | Etapa que entrega | Evidência |
 |---|---|---|---|
-| 1 | `docker-compose up -d` sobe todo o ambiente sem erros | 02, 03 | `<PREENCHER>` |
-| 2 | Scripts de seed rodam e populam os bancos com volume relevante | 05, 10 | `<PREENCHER>` |
-| 3 | Queries do Desafio 1 executam com sucesso e têm `EXPLAIN ANALYZE` documentado | 06, 07 | `<PREENCHER>` |
-| 4 | Pelo menos um pipeline (TimescaleDB → ClickHouse) funciona end-to-end de forma demonstrável | 12, 13.5 | `<PREENCHER>` |
-| 5 | Pelo menos um dashboard Grafana está funcional consultando ClickHouse | 15 | `<PREENCHER>` |
-| 6 | Documentação cobre decisões técnicas com justificativas | 09, 14, 15, 16 | `<PREENCHER>` |
-| 7 | Análise de migração PostgreSQL → Aurora está presente e fundamentada | 10, 16 | `<PREENCHER>` |
+| 1 | `docker-compose up -d` sobe todo o ambiente sem erros | 02, 03 | **20 s** do `up` ao último healthcheck verde, com volumes zerados. `scripts/health-check.sh`: **9/9 verdes**, "Ambiente íntegro" |
+| 2 | Scripts de seed rodam e populam os bancos com volume relevante | 05, 10 | **168 s** para 10.000.000 de transações + 500.000 contas + 1.442.430 reconciliações; legado com 15/480/50.000/80.000. Idempotente (2ª execução sai sem regravar) |
+| 3 | Queries do Desafio 1 executam com sucesso e têm `EXPLAIN ANALYZE` documentado | 06, 07 | `desafio-1/queries/explains/q{1..4}_{before,after}.txt` + `legacy_q{1,2}_*`. Q1 **12.115 ms → 23 ms (521×)**, Q3 via CAgg **383×**; o índice que **não** melhorou está na mesma tabela do `REPORT.md` |
+| 4 | Pelo menos um pipeline (TimescaleDB → ClickHouse) funciona end-to-end de forma demonstrável | 12, 13.5, 20.5 | `desafio-2/demo-sync-worker.sh` (INSERT→`pending`, UPDATE→`settled`, dedup por `FINAL`). Freshness **~10 s**; teste de saturação em 5 patamares até 60.000 linhas num statement, **zero perda** (`desafio-2/saturacao-resultado.md`) |
+| 5 | Pelo menos um dashboard Grafana está funcional consultando ClickHouse | 15 | **5 dashboards** provisionados, confirmados pelo health-check após a subida do zero; Prometheus com **7 alvos ativos** |
+| 6 | Documentação cobre decisões técnicas com justificativas | 09, 14–21 | `ADR.md` (com **consequências negativas**), `REPORT.md`, `PROCEDIMENTOS-PRODUCAO.md`, `SEGURANCA-E-GOVERNANCA.md`, `DATA-CHAMPIONS.md`. Toda limitação assumida está declarada na tabela abaixo |
+| 7 | Análise de migração PostgreSQL → Aurora está presente e fundamentada | 10, 16, 17 | `desafio-1/migration-analysis.md` (210 linhas, 4 sub-itens) com **custo em dólar** nos 2 cenários; bloat de **90,9%** induzido e declarado como evidência |
 
 ## Mapa requisito → arquivo entregue
 
@@ -102,6 +106,9 @@ Não faz: não corrige funcionalidade — o que quebrar aqui volta para a etapa 
 | Bloat do legado é induzido | Precisamos de um problema real para o dashboard mostrar — declarado abertamente | `migration-analysis.md`, dashboard do legado |
 | P95/P99 de latência não é materializado em CAgg | `timescaledb_toolkit` (que traz `percentile_agg`) não existe na imagem fixada `timescale/timescaledb:latest-pg16`; trocar a imagem violaria a reprodutibilidade. Percentil não é somável, então não há como materializá-lo sem o esboço TDigest. | S03 § plano B → `04_caggs_policies.sql`, `REPORT.md` § Limitação declarada |
 | Retenção de 90 dias do raw fica desligada | O desafio pede 12 meses de dado E retenção de 90 dias; aplicar a política apagaria 9 meses. A política existe e é a correta para produção. | `04_caggs_policies.sql`, `retention-demo.sh`, `REPORT.md` § Retenção |
+| O `init/` sozinho não deixa o ambiente completo | `refresh_continuous_aggregate` não roda dentro de bloco de transação, e o `docker-entrypoint-initdb.d` executa cada arquivo numa — os CALLs de refresh são pulados **em silêncio**. Compressão, stanzas de backup e bloat também são pós-seed por natureza. | `scripts/bootstrap.sh` (idempotente), README § Quick Start |
+| MV não se desduplica com `OPTIMIZE` | A MV dispara por inserção, então o `AggregatingMergeTree` já contou a versão duplicada; ele não tem `_version` para colapsar. Só reconstruindo a partir da raw com `FINAL`. | `bootstrap.sh` (comentado no passo do backfill), `docs/DATA-CHAMPIONS.md` § 4 |
+| Bloat do legado precisa ser induzido a cada ambiente novo | É evidência deliberada da análise Aurora (90,9% de linhas mortas), não estado natural do seed. | `desafio-1/scripts/induzir-bloat-legado.sh`, `migration-analysis.md` |
 | `failed_count`/`total_count` do CAgg de latência não medem falha | O CAgg filtra `WHERE settled_at IS NOT NULL` e nenhuma transação `failed` tem `settled_at` — as colunas de S03 são estruturalmente 0. Taxa de falha vem do `cagg_volume_hourly`. | `04_caggs_policies.sql` (comentário no DDL), `REPORT.md` § A armadilha do `failed_count` |
 
 ## Desvios do plano registrados durante a execução
@@ -263,16 +270,26 @@ git reset --hard <sha do checkpoint da etapa 15>
 ```
 
 ## STATUS
-Estado: BLOQUEADA
-Premissas assumidas: —
-Desvios do plano: —
+Estado: CONCLUÍDA
+
+Premissas assumidas:
+- **A execução do zero é o único teste que vale para o critério nº 1.** Ele é binário e o avaliador vai rodá-lo. Validar em ambiente construído incrementalmente é validar outra coisa.
+- **Passo manual não documentado é passo que não existe.** Os 4 que a etapa encontrou funcionavam havia dias no volume vivo — e nenhum sobreviveria a um clone. O critério passou a ser: se não está em `init/` ou num script versionado, não conta como entregue.
+- **Reportar o resultado real da primeira execução, não o da terceira.** As 22 falhas iniciais estão registradas aqui e no `LOG` porque são o achado da etapa. Esconder e mostrar só o 256/0 final seria a mesma desonestidade de vender o Aurora como economia.
+
+Desvios do plano:
+1. **A sequência do zero reprovou 22 testes na primeira execução** — o oposto do que o `PASSO 1` presumia. Quatro passos existiam só na memória de quem construiu: materialização dos CAggs (o `refresh_continuous_aggregate` **não roda dentro de transação**, e o `init/` executa cada arquivo numa — os CALLs eram pulados em silêncio), compressão inicial, criação das stanzas do pgBackRest e o RBAC do ClickHouse. **O RBAC é o mais desconfortável: eu o criei na etapa 19 e confirmei que persistia no volume — persistir não é existir no repositório.** Resolvido com `init/clickhouse/02_rbac.sql`, `desafio-3/backup/init-stanzas.sh`, `desafio-1/scripts/induzir-bloat-legado.sh` e `scripts/bootstrap.sh`, que amarra tudo num comando idempotente.
+2. **Dois defeitos pré-existentes apareceram, ambos invisíveis no ambiente antigo.** (a) O seed do legado quebrava com `invalid input syntax for type interval`: `random() * 1800 || ' days'` vira notação científica quando `random()` cai abaixo de ~1e-4, e o erro derrubava o `DO $$` inteiro deixando as **4 tabelas vazias** — falha intermitente, em 2 lugares do arquivo. (b) `health-check.sh` reportava **4 falhas falsas**: consultava uma tabela que nunca existiu (`institutions`), cobrava os 3 containers do CDC descartado e chamava o MinIO por `http` quando ele serve TLS. Era literalmente a primeira coisa que o avaliador rodaria.
+3. **`OPTIMIZE ... FINAL` deduplica a raw e não as MVs — e não existe merge que resolva.** A MV disparou uma vez por versão inserida, então o `AggregatingMergeTree` contou a duplicata **de forma permanente**; ele não tem `_version` para colapsar. É a terceira forma da armadilha das etapas 12 e 16. A única saída é reconstruir as 2 MVs a partir da raw já deduplicada, e isso entrou no `bootstrap.sh` com o motivo comentado.
+4. **Teste `E0.3` reescrito por asserir a coisa errada.** Exigia "< 200 segmentos de WAL" e reprovava um ambiente **saudável**: depois do seed o `pg_wal` fica em 3,8 GB, abaixo do `max_wal_size` de 4 GB, e o Postgres não tem por que encolher. O risco real é **arquivamento parado** — passou a exigir `failed_count = 0` e uso dentro do `max_wal_size`.
+5. **A premissa de tempo do seed errou por 7×.** A ficha registrava "~20 min", estimativa anterior à existência do gerador e nunca reconferida; o medido foi **168 s**. Corrigido na ficha e publicado no README.
 
 ## FECHAMENTO
-- [ ] Critérios atendidos
-- [ ] Testes no run_all.sh
-- [ ] run_all.sh sem FAIL
-- [ ] ESTADO HERDADO da próxima preenchido
-- [ ] Bloco no LOG-EXECUCAO.md
-- [ ] Desvio? → atualizar 99-validacao-final.md
-- [ ] Commit checkpoint
-- [ ] Mover pra concluidas/. Marcar [x] no CLAUDE.md
+- [x] Critérios atendidos
+- [x] Testes no run_all.sh (bloco `# --- 99 validacao-final ---`, 9 testes)
+- [x] run_all.sh sem FAIL — **256 pass, 0 fail, 3 skip**, sobre ambiente do zero
+- [x] Não há próxima etapa — esta é a última
+- [x] Bloco no LOG-EXECUCAO.md
+- [x] Desvios registrados acima
+- [x] Commit checkpoint
+- [x] Mover pra concluidas/. Marcar [x] na esteira

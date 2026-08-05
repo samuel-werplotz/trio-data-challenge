@@ -122,7 +122,7 @@ Critérios atendidos → testes no `run_all.sh` → `run_all.sh` sem FAIL → `E
 - [x] 20 lacunas-tecnicas-e-ensaio · B
 - [x] 20.5 watermark-composto · B — defeito achado na 20
 - [x] 21 higiene-de-entrega · local
-- [ ] 99 validacao-final · B
+- [x] 99 validacao-final · B
 
 ## 11. Ficha de ambiente
 - `scripts/ambiente/DOCKER-LOCAL.md`. Com `<PREENCHER>` na ficha, etapa `carga-real` fica `BLOQUEADA`.

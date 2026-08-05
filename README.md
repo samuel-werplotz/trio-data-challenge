@@ -40,10 +40,26 @@ troca de engine sem downtime).
 ```bash
 cp .env.example .env
 docker compose up -d
+bash scripts/bootstrap.sh
 ```
 
-Sobe os 13 serviços. O `seed` é **idempotente** — se o dado já existe, ele
-registra e sai sem regravar. A primeira execução carrega os 10M em ~2 min.
+O `up` sobe os 13 serviços e carrega os 10M. O `bootstrap.sh` completa o que o
+`init/` não consegue fazer sozinho — materialização dos CAggs (que não roda
+dentro de transação), compressão inicial, backfill do ClickHouse, perfil de
+acesso e stanzas de backup. É idempotente: rodar de novo não estraga nada.
+
+**Tempos medidos numa execução do zero** (volumes apagados, 2026-08-05):
+
+| Passo | Tempo |
+|---|---|
+| `up` até todos os healthchecks verdes | **20 s** |
+| Seed dos 10M (automático, em paralelo) | **168 s** |
+| CAggs + compressão de 331 chunks | **82 s** |
+| Backfill do ClickHouse | **58 s** |
+| Backup full dos 3 bancos | **53 s** |
+| **Total, do zero ao ambiente completo** | **≈ 6 min** |
+
+O `seed` é **idempotente** — se o dado já existe, registra e sai sem regravar.
 
 ```bash
 # Acompanhar até tudo ficar healthy

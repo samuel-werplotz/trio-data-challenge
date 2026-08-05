@@ -82,8 +82,11 @@ BEGIN
         'Usuário Legado ' || g,
         'usuario' || g || '@exemplo.com',
         CASE WHEN g % 50 = 0 THEN 'blocked' ELSE 'active' END,
-        now() - (random() * 1800 || ' days')::interval,
-        CASE WHEN g % 10 = 0 THEN NULL ELSE now() - (random() * 90 || ' days')::interval END
+        -- Mesma armadilha da carga de contas abaixo: concatenar `random()` em
+        -- texto pode produzir notação científica e quebrar o cast para
+        -- interval. Multiplicar o interval não passa por texto.
+        now() - (random() * 1800) * INTERVAL '1 day',
+        CASE WHEN g % 10 = 0 THEN NULL ELSE now() - (random() * 90) * INTERVAL '1 day' END
     FROM generate_series(1, 50000) g;
 
     -- 80.000 contas — 1.6 conta/usuário em média, distribuídas nas 15
@@ -103,7 +106,14 @@ BEGIN
         (ARRAY['checking','savings'])[1 + g % 2],
         CASE WHEN g % 40 = 0 THEN 'blocked' ELSE 'active' END,
         round((random() * 50000)::numeric, 2),
-        now() - (random() * 1800 || ' days')::interval,
-        now() - (random() * 30 || ' days')::interval
+        -- `random() * N || ' days'` quebra quando random() devolve um valor
+        -- pequeno o bastante para virar notação científica na conversão para
+        -- texto: `5.005684263093002e-05 days` é `invalid input syntax for type
+        -- interval`. A falha é INTERMITENTE (só ocorre abaixo de ~1e-4) e
+        -- derrubava o seed inteiro do legado, deixando as 4 tabelas vazias —
+        -- pego na etapa 99, rodando a sequência do zero. Multiplicar o
+        -- interval evita a ida e volta por texto.
+        now() - (random() * 1800) * INTERVAL '1 day',
+        now() - (random() * 30) * INTERVAL '1 day'
     FROM generate_series(1, 80000) g, u, i;
 END $$;

@@ -558,8 +558,20 @@ check E0.1 "nenhum replication slot orfao (retinha 17,7 GB de WAL)" \
 check E0.2 "se archive_mode=on, entao pgbackrest existe na imagem" \
   bash -c 'AM=$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "show archive_mode" 2>/dev/null);
            [ "$AM" != "on" ] || docker exec trio-timescaledb which pgbackrest >/dev/null 2>&1'
-check E0.3 "pg_wal sob controle (< 200 segmentos)" \
-  bash -c '[ "$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "select count(*) from pg_ls_waldir()" 2>/dev/null)" -lt 200 ]'
+# O risco real do WAL nao e o NUMERO de segmentos — e o arquivamento parado,
+# que impede o Postgres de reciclar e enche o disco ate derrubar o banco.
+# A versao anterior asseria "< 200 segmentos" e reprovava um ambiente saudavel
+# recem-carregado: depois do seed de 10M o pg_wal fica em ~3,8 GB, abaixo do
+# max_wal_size de 4 GB, e o Postgres nao tem motivo para encolher. Passou a
+# asserir as duas condicoes que de fato importam (etapa 99).
+check E0.3 "arquivamento de WAL saudavel e pg_wal dentro do max_wal_size" \
+  bash -c 'FAILED=$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc \
+             "select failed_count from pg_stat_archiver" 2>/dev/null | tr -d "\r ");
+           MAXW=$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc \
+             "select setting::int from pg_settings where name = '"'"'max_wal_size'"'"'" 2>/dev/null | tr -d "\r ");
+           USED=$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc \
+             "select (count(*) * 16) from pg_ls_waldir()" 2>/dev/null | tr -d "\r ");
+           [ "${FAILED:-1}" = "0" ] && [ "${USED:-99999}" -le "$(( ${MAXW:-4096} + 512 ))" ]'
 check E0.4 "transactions com exatamente 10M (sem linha de teste sobrando)" \
   bash -c '[ "$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "select count(*) from transactions" 2>/dev/null)" = "10000000" ]'
 check E0.5 "nenhuma linha sintetica de diagnostico em transactions" \
@@ -1285,8 +1297,10 @@ check 20.8 "roteiro tem a resposta de 20s para o P95 artefato do gerador" \
 check 20.8b "roteiro cobre os 4 blocos exigidos pelo PDF, incluindo incidente" \
   bash -c 'grep -qi "incidente" docs/HA-E-ROTEIRO-DEMO.md \
         && grep -qi "roteiro de demonstra" docs/HA-E-ROTEIRO-DEMO.md'
+# Caminho resolvido nas duas posicoes: a etapa 99 fechou e foi para concluidas/.
 check 20.10 "as 5 perguntas do PDF tem resposta desenvolvida" \
-  bash -c '[ "$(grep -c "^[0-9]\. \*\*\"" scripts/roadmap/99-validacao-final.md)" -ge 5 ]'
+  bash -c 'F=$(ls scripts/roadmap/99-*.md scripts/roadmap/concluidas/99-*.md 2>/dev/null | head -1);
+           [ -n "$F" ] && [ "$(grep -c "^[0-9]\. \*\*\"" "$F")" -ge 5 ]'
 check 20.11 "plano de HA do ClickHouse escrito" \
   bash -c 'grep -qi "keeper" docs/HA-E-ROTEIRO-DEMO.md'
 check 20.12 "script do cenario de Q4 existe" test -f desafio-1/scripts/q4-cenario-demo.sh
@@ -1340,6 +1354,33 @@ check 21.10 "links do README apontam para arquivos que existem" \
     for L in $(grep -oE "\]\((docs|desafio-[123]|scripts)/[^)#]*\)" README.md | tr -d "()" | sed "s/^\]//"); do
       [ -e "$L" ] || { echo "quebrado: $L"; ERR=1; };
     done; exit $ERR'
+
+# --- 99 validacao-final ---
+# A sequencia do zero e o criterio de aceite nº 1 do PDF, e e binario. Estes
+# testes guardam o que a execucao do zero de 2026-08-05 revelou: 4 passos que
+# so existiam na cabeca de quem construiu o projeto e sumiam num volume novo.
+
+check 99.7 "bootstrap.sh existe (fecha a sequencia do zero)" test -f scripts/bootstrap.sh
+check 99.8 "RBAC do ClickHouse esta versionado, nao so no volume" \
+  bash -c 'test -f init/clickhouse/02_rbac.sql && grep -q "analytics_ro" init/clickhouse/02_rbac.sql'
+check 99.9 "criacao das stanzas do pgBackRest esta escrita" \
+  bash -c 'test -f desafio-3/backup/init-stanzas.sh && grep -q "stanza-create" desafio-3/backup/init-stanzas.sh'
+check 99.10 "inducao de bloat do legado esta escrita" \
+  test -f desafio-1/scripts/induzir-bloat-legado.sh
+check 99.3 "os 7 criterios do PDF tem evidencia preenchida" \
+  bash -c 'F=$(ls scripts/roadmap/99-*.md scripts/roadmap/concluidas/99-*.md 2>/dev/null | head -1);
+           [ -n "$F" ] && ! sed -n "/^| [1-7] |/p" "$F" | grep -q "PREENCHER"'
+# Ignora a linha 3, que ENUNCIA a regra do marcador em vez de ser um campo em
+# aberto — grep cru casava com a propria documentacao da regra.
+check 99.4 "ficha de ambiente sem campo em aberto" \
+  bash -c '! grep "<PREENCHER>" scripts/ambiente/DOCKER-LOCAL.md | grep -qv "permanece\|BLOQUEADA"'
+check 99.5 "README e REPORT existem" bash -c 'test -f README.md -a -f desafio-1/REPORT.md'
+# O tempo do seed na ficha era estimativa (~20 min) e errou por 7x. Numero de
+# documento que a banca le precisa ser o medido.
+check 99.11 "ficha traz o tempo MEDIDO do seed, nao a estimativa antiga" \
+  bash -c 'grep -q "168 s" scripts/ambiente/DOCKER-LOCAL.md'
+check 99.12 "README publica os tempos da execucao do zero" \
+  bash -c 'grep -qi "execução do zero" README.md'
 
 echo "----"
 echo "$PASS_N pass, $FAIL_N fail, $SKIP_N skip"

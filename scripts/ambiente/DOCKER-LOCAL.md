@@ -25,5 +25,6 @@ Ambiente real de execução. **Enquanto houver `<PREENCHER>` neste arquivo, toda
 ## Notas
 
 - MinIO fica em **9002**, não em 9000: a 9000 é a porta nativa do ClickHouse (decisão de S08).
-- Seed de 10M custa ~20 min (premissa registrada). Por isso as etapas que dependem da carga completa estão separadas das que só precisam do schema — iterar numa não força repetir o seed.
+- Seed de 10M custa **168 s (~2,8 min)** — medido na execução do zero da etapa 99, com cronômetro. A premissa original registrada aqui era "~20 min", estimativa conservadora feita antes de existir gerador: errou por **7×** para mais. A separação entre etapas que precisam da carga completa e as que só precisam do schema continua valendo, mas o custo de repetir o seed é muito menor do que se supunha.
+- **Sequência completa do zero: ≈ 6 min** (`up` 20 s · seed 168 s · CAggs e compressão 82 s · backfill 58 s · backup 53 s). Reproduzível por `docker compose up -d && bash scripts/bootstrap.sh`.
 - **Risco conhecido — RAM abaixo da premissa de S08**: máquina real tem 8.3 GB alocados ao Docker, não os 32 GB que S08 assume. Perfil `core` (4 serviços de imagem pronta) já validado sem problema. Perfil `full` declara ~20 GB de teto — pode não caber inteiro de uma vez. Decisão: seguir sem redesenhar memória agora; se algum container morrer por OOM numa etapa de carga real (05, 12, 13, 15), tratar ali com o sintoma em mãos — provável mitigação: não subir o perfil `full` inteiro simultaneamente, subir por subconjunto conforme a etapa precisar.
