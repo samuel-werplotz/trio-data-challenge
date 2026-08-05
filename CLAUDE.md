@@ -85,22 +85,22 @@ Critérios atendidos → testes no `run_all.sh` → `run_all.sh` sem FAIL → `E
 - [x] 10 legado-e-migracao-aurora · compose
 - [x] 11 schema-clickhouse · compose
 - [x] 12 backfill-e-query-subsegundo · B
-- [x] 13 pipeline-cdc · B — **DESCARTADA**, causa-raiz provada; substituída pela 13.5
-- [x] 13.5 sync-worker-e-backup · B — executada fora da esteira como E0/E1/E2/E4
+- [x] 13 pipeline-cdc · B — **DESCARTADA**, substituída pela 13.5
+- [x] 13.5 sync-worker-e-backup · B
 - [x] 14 ref-sync-api-e-adr · compose
 - [x] 15 observabilidade-runbook-e-incidente · compose
 - [x] 16 fechamento-de-lacunas-do-pdf · compose
 - [x] 17 camada-executiva-e-custo · local
-- [x] 17.5 correcao-do-dictionary · B — criada durante a 18; defeito real (Dictionary resolvia 33,55%)
+- [x] 17.5 correcao-do-dictionary · B — defeito achado na 18
 - [x] 18 data-champions · B
 - [x] 19 seguranca-e-governanca · B
-- [ ] 20 lacunas-tecnicas-e-ensaio · B
-- [ ] 21 higiene-de-entrega · local — **executar por último**; renomeia este arquivo para `docs/METODO-DE-EXECUCAO.md`
+- [x] 20 lacunas-tecnicas-e-ensaio · B
+- [x] 20.5 watermark-composto · B — defeito achado na 20
+- [ ] 21 higiene-de-entrega · local — **por último**; renomeia este arquivo
 - [ ] 99 validacao-final · B
 
 ## 11. Ficha de ambiente
-- Ficha: `scripts/ambiente/DOCKER-LOCAL.md`.
-- Enquanto houver `<PREENCHER>` na ficha, **toda etapa de trilha `carga-real` permanece `BLOQUEADA`**.
+- `scripts/ambiente/DOCKER-LOCAL.md`. Com `<PREENCHER>` na ficha, etapa `carga-real` fica `BLOQUEADA`.
 
 ## 12. Estilo de resposta
 - Direto. Sem preâmbulo, sem prosa de transição, sem repetir o que foi pedido.

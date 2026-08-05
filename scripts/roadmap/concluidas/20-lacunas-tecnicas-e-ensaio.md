@@ -52,14 +52,14 @@ Não faz: não implanta réplica de ClickHouse no ambiente local (recurso e esco
 9. Acrescentar o bloco `# --- 20 lacunas-tecnicas-e-ensaio ---` em `scripts/tests/run_all.sh`.
 
 ## CRITÉRIOS DE ACEITE
-- [ ] Procedimento "novo consumer" escrito, com o tratamento de backfill sem duplicar e as cicatrizes referenciadas
-- [ ] Procedimento "migração de engine sem downtime" escrito, com `EXCHANGE TABLES` e ponto de rollback por passo
-- [ ] Teste de saturação **executado**, com tabela de patamar × lag × freshness × erro e o ponto de saturação identificado
-- [ ] Plano de HA do ClickHouse escrito, ligado ao procedimento do passo 2 e ao custo da etapa 17
-- [ ] Script de cenário de Q4 planta, demonstra e limpa — contagens conferidas nas 3 pontas
-- [ ] Nota do toolkit em produção no `REPORT.md` e na tabela de limitações
-- [ ] Sequência do zero validada em **clone limpo**, com tempo por passo e os 3 SKIP explicados
-- [ ] As 5 perguntas do PDF com resposta escrita — nenhuma em 1 linha genérica
+- [x] Procedimento "novo consumidor" escrito, com o instante de corte, backfill sem duplicar e as 2 cicatrizes (etapas 12 e 16) referenciadas — teste `20.3`
+- [x] Procedimento "migração de engine sem downtime" com `EXCHANGE TABLES` (atômico) e rollback por passo — testes `20.1`/`20.2`
+- [x] Teste de saturação **executado**, 5 patamares, entrega conferida **por patamar** — testes `20.4`/`20.4b`. **Zero perda em 70.300 linhas, lag máximo 19,2 s**
+- [x] Plano de HA escrito, ligado ao procedimento e ao custo ($280 → $1.120/mês) — teste `20.11`
+- [x] Cenário de Q4 planta, demonstra (**0 → 2 detecções**) e limpa — testes `20.9`/`20.6`
+- [x] Nota do toolkit em produção no `REPORT.md` — teste `20.7`
+- [x] Clone limpo validado: compose parseia, 13 serviços resolvem, os 12 entregáveis presentes, DDL sem segredo. **Ver desvio 3** — a validação achou um defeito no `audit.sh`
+- [x] As 5 perguntas do PDF desenvolvidas, com número e procedimento — teste `20.10`
 
 ## TESTES
 | id | trilha | comando | esperado |
@@ -86,16 +86,26 @@ git checkout -- desafio-1/REPORT.md desafio-2/ADR.md scripts/roadmap/99-validaca
 > dos dois — raw e MVs desincronizam com facilidade (etapas 12 e 16).
 
 ## STATUS
-Estado: BLOQUEADA
-Premissas assumidas: —
-Desvios do plano: —
+Estado: CONCLUÍDA
+
+Premissas assumidas:
+- **Teste de carga precisa de um patamar que quebre alguma coisa.** Cinco patamares que passam provam menos que um que falha: o de 60.000 (acima de `BATCH_MAX_ROWS`) é o único que exercita a retomada dentro de um mesmo `updated_at`, e é o que justifica o teste existir.
+- **Procedimento nasce de cicatriz, não de blog.** Os dois documentos citam etapa e sintoma dos erros reais (duplicação de 10M na 12, divergência MV/raw na 16). É o que separa procedimento defensável de procedimento plausível.
+- **Não subir Keeper local.** Três Keepers na mesma máquina demonstram configuração, não a propriedade — failover real exige derrubar um nó e provar que a leitura continua. Plano escrito com custo calculado é mais honesto que encenação que não sobrevive a "e se a AZ cair?".
+- **A validação em clone limpo cobre o que é verificável sem derrubar o ambiente.** Compose, serviços, entregáveis e ausência de segredo foram conferidos no clone; o `up -d` completo exigiria parar os 11 containers com os 10M carregados, e o `nuke` está fora do que esta etapa pede.
+
+Desvios do plano:
+1. **O passo 3 encontrou perda silenciosa de dados e parou a etapa.** O teste de saturação revelou que o pipeline travava e descartava o excedente com lote acima de `BATCH_MAX_ROWS`. Virou a **etapa 20.5**, corrigida e testada antes de a 20 continuar. Segundo defeito de produto achado medindo — o primeiro foi o Dictionary a 33,55% (17.5).
+2. **A primeira versão do teste de saturação não saturava, e teria produzido uma conclusão falsa.** Os 4 patamares originais (500 → 5.800/s) passavam com folga porque `INSERT` em massa escreve 5.800 linhas em 0,43 s — nenhum chegava perto do lote. O script teria reportado "aguenta o pico do cenário 10×": verdadeiro e enganoso. O patamar de 60.000 e a coluna de entrega **por patamar** ficaram permanentes.
+3. **A validação em clone limpo achou um defeito no `audit.sh`.** Rodando de um clone, `A2.1` falhou: esperava 24 arquivos de etapa e achou 25 — eu havia criado a 20.5 sem atualizar o contador. **É exatamente o tipo de coisa que só aparece rodando de fora do diretório de trabalho**, e é o argumento a favor do passo 7. Corrigido para 25, com a 20.5 no laço de conferência. As outras 2 falhas do clone (`A1.9` exige containers, `A7.6` compara o caminho do git root) são propriedades de rodar fora do lugar, não defeitos.
+4. **`EXCHANGE TABLES` substituiu `RENAME` na resposta da pergunta 3.** A resposta de 1 linha em `99-validacao-final.md` citava `RENAME` atômico — mas `RENAME` em dois tempos tem um instante em que a tabela não existe e toda consulta falha. O `EXCHANGE` é que é atômico.
 
 ## FECHAMENTO
-- [ ] Critérios atendidos
-- [ ] Testes no run_all.sh (bloco `# --- 20 lacunas-tecnicas-e-ensaio ---`)
-- [ ] run_all.sh sem FAIL
-- [ ] ESTADO HERDADO da próxima preenchido
-- [ ] Bloco no LOG-EXECUCAO.md
-- [ ] Desvio? → atualizar 99-validacao-final.md
-- [ ] Commit checkpoint
-- [ ] Mover pra concluidas/. Marcar [x] no CLAUDE.md
+- [x] Critérios atendidos
+- [x] Testes no run_all.sh (blocos `# --- 20.5 ... ---` e `# --- 20 ... ---`, 18 testes)
+- [x] run_all.sh sem FAIL — **245 pass, 0 fail, 3 skip**
+- [x] ESTADO HERDADO da próxima (21) preenchido
+- [x] Bloco no LOG-EXECUCAO.md
+- [x] Desvio? → registrados em `99-validacao-final.md`
+- [x] Commit checkpoint
+- [x] Mover pra concluidas/. Marcar [x] no CLAUDE.md

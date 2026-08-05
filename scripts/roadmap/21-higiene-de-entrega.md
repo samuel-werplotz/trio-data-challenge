@@ -17,7 +17,18 @@ Revisão de entrega § 4.6 (artefatos de processo expostos) e § 4.5 última lin
 - [ ] **Decisão do usuário sobre a branch.** A Seção 8 do `CLAUDE.md` proíbe trabalhar em `main`/`master` "sem instrução explícita". Renomear `wip/trio-challenge` → `main` é exatamente isso. Confirmar antes de executar; a etapa não decide sozinha.
 
 ## ESTADO HERDADO
-Verificado ao fechar a etapa 16 (atualizar ao fechar a 20, se a 20 rodar antes):
+Verificado ao fechar as **etapas 20.5 e 20**:
+- **Baseline da suíte: 245 pass / 0 fail / 3 skip** (os 3 SKIP são `make`).
+- **`docs/` agora tem 6 arquivos**: `SUMARIO-EXECUTIVO`, `CUSTO-AWS`, `DATA-CHAMPIONS`, `SEGURANCA-E-GOVERNANCA`, `HA-E-ROTEIRO-DEMO` e `INVENTARIO-STARTER`. O passo 4 (README com os 6 documentos que importam) tem material — mas **`INVENTARIO-STARTER.md` é andaime**, não entregável: decidir se vai para `docs/processo/`.
+- **O clone limpo já foi exercitado nesta etapa** e é o precedente direto do passo 3 da 21: `git clone` para diretório temporário, `docker compose config -q`, conferência dos entregáveis. **Achou um defeito real** (`A2.1` desatualizado) — repetir depois de mover arquivos é obrigatório, não opcional.
+- **`audit.sh` `A2.1` agora espera 25 etapas** e o laço confere `17.5` e `20.5`. Mover arquivos para `docs/processo/` **não** muda esse número (ele conta `scripts/roadmap/`), mas mexer em `CLAUDE.md` mexe: o `audit.sh` lê as marcações da Seção 10, e renomear o arquivo para `docs/METODO-DE-EXECUCAO.md` **vai quebrar o audit** se as referências não forem varridas junto. É o passo 3 da 21, e é onde a etapa quebra se for feita no automático.
+- **Referências novas a varrer no passo 3**, criadas pelas etapas 17–20: `docs/SUMARIO-EXECUTIVO.md` linka `CUSTO-AWS` e `desafio-1/REPORT.md`; `DATA-CHAMPIONS` linka `SEGURANCA-E-GOVERNANCA`; `HA-E-ROTEIRO-DEMO` linka `desafio-2/PROCEDIMENTOS-PRODUCAO.md` e `CUSTO-AWS`; `REPORT.md` linka `docs/DATA-CHAMPIONS.md`. **São links relativos entre `docs/` e a raiz** — mover qualquer um exige reconferir os dois lados.
+- **O README ainda linka `AUDITORIA-E-REPLANEJAMENTO.md`** na seção "Documentos que valem a leitura", ao lado dos entregáveis. É o caso mais visível do gap 4.6.
+- **2 defeitos reais foram achados e corrigidos** nas etapas 17.5 e 20.5, ambos registrados no `LOG-EXECUCAO.md` e no `99-validacao-final.md`. **Esse rastro é o ativo de defesa mais forte da entrega** contra "isso é saída de LLM" — a 21 precisa deixá-lo achável, não escondê-lo junto do andaime.
+- **`docs/HA-E-ROTEIRO-DEMO.md` § Parte 2 já é o roteiro de apresentação**, com a resposta pronta para abrir o `git log`. O passo 4 da 21 deve linká-lo.
+- Ambiente: 11 containers, 10.000.000 nas 3 pontas, legado 480/80.000/50.000/15.
+
+Verificado ao fechar a etapa 16 (segue válido):
 - **Raiz do repositório hoje**: `README.md`, `CLAUDE.md` (9,4 KB), `AUDITORIA-E-REPLANEJAMENTO.md` (41 KB / 475 linhas), `MEMORIAL_TECNICO.md` (33 KB), `ETAPA13-ESTADO-PAUSADO.md` (4,5 KB), `PREMISSAS-VERIFICADAS.md` (8,8 KB), `Makefile`, `docker-compose.yml`, `.env.example` — mais `desafio-1/2/3`, `init/`, `scripts/`, `docs/`.
 - **`docs/` está quase vazio** (só `INVENTARIO-STARTER.md` e `.gitkeep`) e é o destino natural. As etapas 17–20 adicionam 5 documentos lá — **esta etapa fecha a organização depois deles, não antes**, senão o índice nasce desatualizado.
 - **Referências cruzadas existem e vão quebrar se o `git mv` for cego**: o `README.md` linka `AUDITORIA-E-REPLANEJAMENTO.md`; `scripts/tests/audit.sh` lê arquivos de `scripts/roadmap/` e as marcações da Seção 10 do `CLAUDE.md`; vários arquivos de etapa citam `AUDITORIA-E-REPLANEJAMENTO.md § FASE 3`. **Mover sem varrer as referências quebra o `audit.sh`.**
