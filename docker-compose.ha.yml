@@ -1,0 +1,160 @@
+# docker-compose.ha.yml — ClickHouse replicado com Keeper (risco nº 1 do
+# SUMARIO-EXECUTIVO fechado em configuração, não só em plano).
+#
+# NÃO faz parte do `docker compose up -d` do desafio. O ambiente principal roda
+# ClickHouse em nó único de propósito (ver docs/HA-E-ROTEIRO-DEMO.md § Parte 1):
+# o critério de aceite nº 1 do PDF é o `up` subir tudo sem erro, e cada peça a
+# mais é uma chance a mais de ele falhar na frente da banca.
+#
+# Este arquivo existe para responder à pergunta "e a alta disponibilidade?" com
+# configuração executável em vez de promessa.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.ha.yml up -d
+#
+# O QUE ESTA CONFIGURAÇÃO PROVA E O QUE NÃO PROVA
+# ------------------------------------------------
+# PROVA:  a topologia (Keeper com quórum + 2 réplicas), o DDL `ON CLUSTER`, a
+#         macro por nó, o caminho de replicação em ZooKeeper e o RBAC replicado.
+# NÃO PROVA: tolerância a falha de infraestrutura real. Os 3 Keepers e as 2
+#         réplicas rodam na MESMA máquina — derrubar um container prova que
+#         containers reiniciam, não que a AZ pode cair. Em produção: 3 Keepers
+#         em 3 AZs distintas e réplicas em AZs separadas (docs/CUSTO-AWS.md).
+#
+# POR QUE 3 KEEPERS E NÃO 1: quórum é maioria (N/2 + 1). Com 1 nó não há
+# tolerância nenhuma; com 2, a perda de um deixa 1 de 2 — que não é maioria e
+# trava a escrita. 3 é o menor número que sobrevive à perda de um nó.
+
+services:
+
+  # ===========================================================================
+  # ClickHouse Keeper — coordenação da replicação (substituto do ZooKeeper)
+  # ===========================================================================
+  # Keeper, não ZooKeeper: mesmo protocolo do ponto de vista do ClickHouse, sem
+  # JVM para operar e mantido pelo mesmo projeto. Para instalação nova não há
+  # motivo para escolher ZooKeeper.
+  clickhouse-keeper-1:
+    image: clickhouse/clickhouse-keeper:24.8
+    container_name: trio-keeper-1
+    restart: unless-stopped
+    volumes:
+      - keeper1_data:/var/lib/clickhouse-keeper
+      - ./init/keeper/keeper-1.xml:/etc/clickhouse-keeper/keeper_config.xml:ro
+    healthcheck:
+      # 'ruok' responde 'imok' quando o nó está no quórum. É o healthcheck
+      # canônico do protocolo — mais informativo que checar a porta aberta.
+      test: ["CMD-SHELL", "echo ruok | timeout 2 bash -c 'cat > /dev/tcp/localhost/9181' && echo ok || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  clickhouse-keeper-2:
+    image: clickhouse/clickhouse-keeper:24.8
+    container_name: trio-keeper-2
+    restart: unless-stopped
+    volumes:
+      - keeper2_data:/var/lib/clickhouse-keeper
+      - ./init/keeper/keeper-2.xml:/etc/clickhouse-keeper/keeper_config.xml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | timeout 2 bash -c 'cat > /dev/tcp/localhost/9181' && echo ok || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  clickhouse-keeper-3:
+    image: clickhouse/clickhouse-keeper:24.8
+    container_name: trio-keeper-3
+    restart: unless-stopped
+    volumes:
+      - keeper3_data:/var/lib/clickhouse-keeper
+      - ./init/keeper/keeper-3.xml:/etc/clickhouse-keeper/keeper_config.xml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | timeout 2 bash -c 'cat > /dev/tcp/localhost/9181' && echo ok || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # ===========================================================================
+  # Réplica 1 — estende o serviço `clickhouse` do compose principal
+  # ===========================================================================
+  # A ORDEM IMPORTA: `CREATE ... Replicated*` FALHA se o Keeper não estiver no
+  # ar, porque a engine registra o caminho da tabela no Keeper na criação.
+  # Por isso o depends_on espera os 3 healthy, não só "started".
+  clickhouse:
+    depends_on:
+      clickhouse-keeper-1: {condition: service_healthy}
+      clickhouse-keeper-2: {condition: service_healthy}
+      clickhouse-keeper-3: {condition: service_healthy}
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+      - ./init/clickhouse:/docker-entrypoint-initdb.d:ro
+      - ./init/clickhouse-config/backup.xml:/etc/clickhouse-server/config.d/backup.xml:ro
+      - ./init/clickhouse-config/named_collections.xml:/etc/clickhouse-server/config.d/named_collections.xml:ro
+      - ./init/clickhouse-config/prometheus.xml:/etc/clickhouse-server/config.d/prometheus.xml:ro
+      # Aponta para os Keepers e declara o cluster. Só existe no modo HA.
+      - ./init/keeper/cluster.xml:/etc/clickhouse-server/config.d/cluster.xml:ro
+      # Identidade DESTE nó: shard 01, réplica 01. É o que o {replica} do
+      # caminho no Keeper resolve — cada réplica precisa de um valor distinto.
+      - ./init/keeper/macros-replica-1.xml:/etc/clickhouse-server/config.d/macros.xml:ro
+    # 6G no modo nó único, 2,5G aqui. A soma do compose principal (TimescaleDB
+    # 4G + ClickHouse 6G) já ocupa a máquina de desenvolvimento inteira; somar
+    # 3 Keepers e uma segunda réplica derruba o nó por OOM (exit 137 — medido).
+    # Em produção o dimensionamento é outro: cada réplica em instância própria,
+    # com a memória do cenário de custo em docs/CUSTO-AWS.md.
+    deploy:
+      resources:
+        limits:
+          memory: 2500M
+
+  # ===========================================================================
+  # Réplica 2 — o segundo nó do mesmo shard
+  # ===========================================================================
+  clickhouse-replica-2:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: trio-clickhouse-r2
+    restart: unless-stopped
+    ports:
+      - "8124:8123"   # HTTP  (8123 já é da réplica 1 no host)
+      - "9001:9000"   # Native
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-trio}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-trio2024}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_DB: trio_analytics
+    volumes:
+      - clickhouse_r2_data:/var/lib/clickhouse
+      - clickhouse_r2_logs:/var/log/clickhouse-server
+      # SEM o bind de ./init/clickhouse: o DDL `ON CLUSTER` roda UMA vez, a
+      # partir da réplica 1, e o Keeper propaga. Rodar o init nos dois nós
+      # criaria a mesma tabela duas vezes e é a origem clássica de divergência.
+      - ./init/clickhouse-config/backup.xml:/etc/clickhouse-server/config.d/backup.xml:ro
+      - ./init/clickhouse-config/named_collections.xml:/etc/clickhouse-server/config.d/named_collections.xml:ro
+      - ./init/clickhouse-config/prometheus.xml:/etc/clickhouse-server/config.d/prometheus.xml:ro
+      - ./init/keeper/cluster.xml:/etc/clickhouse-server/config.d/cluster.xml:ro
+      - ./init/keeper/macros-replica-2.xml:/etc/clickhouse-server/config.d/macros.xml:ro
+    ulimits:
+      nofile: {soft: 262144, hard: 262144}
+    deploy:
+      resources:
+        limits:
+          memory: 2500M
+    depends_on:
+      clickhouse-keeper-1: {condition: service_healthy}
+      clickhouse-keeper-2: {condition: service_healthy}
+      clickhouse-keeper-3: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client -u $${CLICKHOUSE_USER:-trio} --password $${CLICKHOUSE_PASSWORD:-trio2024} -q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+volumes:
+  keeper1_data:
+  keeper2_data:
+  keeper3_data:
+  clickhouse_r2_data:
+  clickhouse_r2_logs:

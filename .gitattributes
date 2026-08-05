@@ -1,0 +1,38 @@
+# Normalização de fim de linha.
+#
+# Todo shell script deste repositório roda DENTRO de container Linux (bash dos
+# demos, entrypoints, healthchecks) ou é chamado por `docker exec`. Um .sh com
+# CRLF falha lá com erro que não aponta para a causa — o clássico
+# `bash\r: No such file or directory`, porque o \r vira parte do nome do
+# interpretador na linha do shebang.
+#
+# Sem este arquivo, quem clonar no Windows com core.autocrlf=true (o default do
+# Git for Windows) recebe exatamente isso. Forçar LF nos tipos que cruzam a
+# fronteira para o container elimina a classe inteira de problema, independente
+# da configuração local de quem clona.
+
+# Default: o Git decide o que é texto, e normaliza para LF no repositório.
+* text=auto eol=lf
+
+# Explícito para o que roda dentro do container — não depender da heurística.
+*.sh      text eol=lf
+*.py      text eol=lf
+*.sql     text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.xml     text eol=lf
+*.json    text eol=lf
+*.conf    text eol=lf
+*.mmd     text eol=lf
+Dockerfile text eol=lf
+Makefile  text eol=lf
+
+# Binários: nunca normalizar.
+*.png     binary
+*.jpg     binary
+*.pdf     binary
+*.zip     binary
+*.gz      binary
+
+# Certificado: LF. O .crt é lido pelo pgBackRest dentro do container.
+*.crt     text eol=lf

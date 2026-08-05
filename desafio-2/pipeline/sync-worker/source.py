@@ -29,7 +29,7 @@ COLUMNS = (
 #
 # A hypertable é particionada por created_at. Um filtro só em updated_at não dá
 # ao planner como descartar chunk nenhum — o plano mostra "Chunks excluded
-# during startup: 0" e ele abre os 338. Medido em PREMISSAS-VERIFICADAS.md § P2b:
+# during startup: 0" e ele abre os 338. Medido:
 #
 #     só updated_at            -> Seq Scan + Sort, 85.587 buffers
 #     updated_at + created_at  -> Index Scan + Merge Append, 17 buffers  (~5.000x)

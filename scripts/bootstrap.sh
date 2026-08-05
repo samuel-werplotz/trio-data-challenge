@@ -18,12 +18,25 @@
 set -uo pipefail
 
 PASSO=0
-titulo() { PASSO=$((PASSO+1)); printf '\n\033[1m[%d/7] %s\033[0m\n' "$PASSO" "$1"; }
+titulo() { PASSO=$((PASSO+1)); printf '\n\033[1m[%d/8] %s\033[0m\n' "$PASSO" "$1"; }
 FALHAS=0
 erro() { printf '\033[31m  FALHOU: %s\033[0m\n' "$1"; FALHAS=$((FALHAS+1)); }
 
 PGTS="docker compose exec -T timescaledb psql -q -U trio -d trio_transactions"
 CH="docker compose exec -T clickhouse clickhouse-client --user trio --password ${CLICKHOUSE_PASSWORD:-trio2024}"
+
+titulo "Certificado do MinIO"
+# A chave privada não é versionada (.gitignore), então num clone limpo ela não
+# existe — e o MinIO monta essa pasta como /root/.minio/certs. Sem certificado
+# ele não serve HTTPS, o healthcheck nunca fica verde, o minio-init não cria o
+# bucket e o archive_command do WAL falha nos dois Postgres. Checar aqui troca
+# esse encadeamento por uma linha de saída.
+if [ -f desafio-3/backup/minio-certs/private.key ]; then
+  echo "  já existe — pulado"
+else
+  echo "  ausente (clone limpo) — gerando"
+  bash desafio-3/backup/gen-certs.sh 2>&1 | tail -2 || erro "gen-certs"
+fi
 
 titulo "Ambiente de pé e saudável"
 docker compose up -d >/dev/null 2>&1

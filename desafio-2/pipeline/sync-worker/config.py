@@ -40,7 +40,7 @@ class Config:
     # Janela de created_at do ciclo normal. NÃO é cosmético: a hypertable é
     # particionada por created_at, então sem este predicado o planner não exclui
     # nenhum chunk e varre os 338 (medido: 85.587 buffers vs 17 com o filtro).
-    # Ver PREMISSAS-VERIFICADAS.md § P2b.
+    # Medicao em desafio-1/REPORT.md § Ambiente.
     CREATED_AT_WINDOW_DAYS = int(os.environ.get("CREATED_AT_WINDOW_DAYS", "7"))
 
     # A janela acima é o que torna o ciclo barato, mas ela cega o worker para

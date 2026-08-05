@@ -1,0 +1,38 @@
+<clickhouse>
+    <!-- keeper-1.xml — nó 1 de 3 do quórum do ClickHouse Keeper.
+         Os três arquivos são idênticos exceto por <server_id>, que precisa
+         casar com o <id> correspondente em <raft_configuration>. Um server_id
+         repetido faz dois nós disputarem a mesma identidade e o quórum nunca
+         estabiliza — é o erro de configuração mais comum aqui. -->
+    <logger>
+        <level>information</level>
+        <console>true</console>
+    </logger>
+
+    <listen_host>0.0.0.0</listen_host>
+
+    <keeper_server>
+        <tcp_port>9181</tcp_port>
+        <server_id>1</server_id>
+        <log_storage_path>/var/lib/clickhouse-keeper/coordination/log</log_storage_path>
+        <snapshot_storage_path>/var/lib/clickhouse-keeper/coordination/snapshots</snapshot_storage_path>
+
+        <coordination_settings>
+            <operation_timeout_ms>10000</operation_timeout_ms>
+            <!-- Tempo sem heartbeat até o nó ser considerado morto e uma nova
+                 eleição começar. 30s é o default e é adequado dentro de uma
+                 região; entre AZs distantes, subir para 45-60s evita eleição
+                 desnecessária por variação de latência de rede. -->
+            <session_timeout_ms>30000</session_timeout_ms>
+            <raft_logs_level>warning</raft_logs_level>
+        </coordination_settings>
+
+        <!-- O quórum. TODOS os três nós listam a MESMA configuração: é assim
+             que cada um sabe com quem falar para eleger o líder. -->
+        <raft_configuration>
+            <server><id>1</id><hostname>clickhouse-keeper-1</hostname><port>9234</port></server>
+            <server><id>2</id><hostname>clickhouse-keeper-2</hostname><port>9234</port></server>
+            <server><id>3</id><hostname>clickhouse-keeper-3</hostname><port>9234</port></server>
+        </raft_configuration>
+    </keeper_server>
+</clickhouse>

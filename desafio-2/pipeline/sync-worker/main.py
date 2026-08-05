@@ -8,7 +8,7 @@ reler a mesma janela, e a releitura é absorvida pelo ReplacingMergeTree.
 Por que micro-batch e não CDC: publish_via_partition_root não funciona sobre
 hypertable (relkind='r' — não é tabela particionada nativa do PostgreSQL),
 então o Debezium nunca recebe as escritas dos chunks. Diagnóstico completo em
-AUDITORIA-E-REPLANEJAMENTO.md § 4.1; micro-batch é opção de primeira classe no
+desafio-2/ADR.md § Contexto; micro-batch é opção de primeira classe no
 PDF § 4.2 A.1, não plano B.
 """
 import logging

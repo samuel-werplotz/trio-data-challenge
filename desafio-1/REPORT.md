@@ -208,19 +208,64 @@ SELECT bucket::date, source_institution, settled_count,
  ORDER BY bucket DESC, source_institution;
 ```
 
-Saída real (2026-08-04, segundos):
+Saída real (2026-08-05, segundos), **Pix**:
 
 | dia | instituição | liquidadas | P95 | P99 |
 |---|---|---|---|---|
-| 2026-08-04 | 001 | 246.488 | 55.101,4 | 114.519,8 |
-| 2026-08-04 | 033 | 42.029 | 56.627,2 | 114.910,8 |
-| 2026-08-04 | 077 | 28.849 | 55.698,9 | 118.384,2 |
-| 2026-08-04 | 104 | 53.564 | 54.075,5 | 114.837,3 |
+| 2026-08-05 | 001 | 141.625 | **3,20** | 4,87 |
+| 2026-08-05 | 033 | 24.221 | **3,21** | 4,70 |
+| 2026-08-05 | 077 | 16.559 | **3,29** | 4,86 |
+| 2026-08-05 | 104 | 30.800 | **3,23** | 4,80 |
 
-Os valores altos (P95 ≈ 15h) são propriedade do **dataset sintético**, não da
-consulta: o gerador distribui `settled_at` ao longo de dias, não de segundos.
-A forma da métrica é a que o requisito pede; a magnitude reflete o dado que
-existe.
+Por instrumento, média das instituições nos últimos 7 dias:
+
+| tipo | P95 | P99 | Ordem de grandeza |
+|---|---|---|---|
+| **pix** | **3,80 s** | 5,62 s | segundos |
+| **card** | 12,83 s | 23,64 s | dezenas de segundos |
+| **ted** | 14.794 s (4h07) | 25.412 s | horas |
+| **boleto** | 169.780 s (47h) | 220.507 s | dias |
+
+### O bug que este número escondia — agregação sem `type`
+
+**A versão anterior desta view reportava P95 ≈ 55.000 s (15h) para toda
+instituição, inclusive as que liquidam Pix em 3 segundos.** O diagnóstico
+inicial foi de que era artefato do gerador sintético. **Estava errado — o
+gerador sempre esteve certo**, com latência log-normal calibrada por tipo
+(`distributions.py`: Pix mediana 1,2 s, TED 45 min, boleto 18 h).
+
+O defeito estava na **chave de agrupamento da view**: ela agrupava por
+`(bucket, source_institution)` e **omitia `type`**. Isso jogava as quatro
+distribuições — separadas por até cinco ordens de grandeza — dentro do mesmo
+conjunto ordenado do `percentile_cont`. Como boleto e TED ocupam toda a cauda
+superior, o P95 do conjunto misturado **é essencialmente o P95 do boleto**, e o
+Pix desaparecia dentro do percentil 60.
+
+A prova, medida lado a lado no mesmo dia e nas mesmas instituições:
+
+| instituição | P95 misturado (view antiga) | P95 do Pix (view corrigida) | Fator |
+|---|---|---|---|
+| 001 | 56.176,4 s | **3,20 s** | **17.555×** |
+| 033 | 56.562,8 s | **3,21 s** | 17.621× |
+| 077 | 54.322,6 s | **3,29 s** | 16.511× |
+| 104 | 55.261,3 s | **3,23 s** | 17.108× |
+
+**O número nunca esteve aritmeticamente errado — ele respondia a pergunta
+errada.** "P95 de latência de liquidação" só tem significado dentro de um mesmo
+instrumento: um SLA que mistura Pix com boleto não é um SLA, é uma média de
+coisas incomparáveis. O CAgg irmão (`cagg_settlement_latency_daily`) **já
+agrupava por `type` desde o início**; era só a view de leitura que perdia a
+dimensão — e por isso o erro passou por revisão de schema sem ser notado.
+
+A view antiga foi preservada como `v_settlement_latency_percentiles_all_types`,
+com nome explícito: quem a consulta sabe que está olhando distribuições
+misturadas, o que a nomenclatura anterior escondia.
+
+**A classe de erro vale mais que a correção.** Não é bug de sintaxe, de tipo nem
+de performance — nenhum teste de integridade o pegaria, porque a query sempre
+retornou o percentil correto do conjunto que lhe foi dado. É erro de
+**modelagem semântica**, do tipo que só aparece quando alguém olha o resultado e
+pergunta "15 horas para um Pix?". Foi assim que ele foi encontrado.
 
 **O que se perde:** os percentis não vêm pré-computados, então essa query
 ainda toca a hypertable. **Por que não dá para materializar mesmo assim:**

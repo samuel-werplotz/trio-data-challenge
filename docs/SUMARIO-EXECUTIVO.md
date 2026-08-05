@@ -28,7 +28,7 @@ acumulado.
 
 | Risco | Impacto se materializar | Dono | Mitigação e prazo |
 |---|---|---|---|
-| **ClickHouse é nó único, sem réplica** | Perda do motor analítico até reconstruir (~1 min de backfill, mas dashboards e Data Champions param) | Eng. de Dados | Migrar para `ReplicatedReplacingMergeTree` com Keeper; procedimento sem downtime escrito e ensaiado — **60 dias** |
+| **ClickHouse é nó único, sem réplica** | Perda do motor analítico até reconstruir (~1 min de backfill, mas dashboards e Data Champions param) | Eng. de Dados | **Já resolvido em configuração**: `docker-compose.ha.yml` sobe 3 Keepers + 2 réplicas e `scripts/tests/ha-smoke.sh` comprova failover real (11/11). Falta só promovê-lo a padrão em produção — **60 dias** |
 | **Pipeline sem teste de saturação** | Freshness de 10 s foi medida em regime ocioso; sob pico real o lag é desconhecido | Eng. de Dados | Teste de carga em patamares até 5.800 escritas/s, com o ponto de saturação documentado — **30 dias** |
 | **Sem trilha de auditoria de leitura de PII** | Numa fiscalização, não há como responder quem consultou dados de titular | Segurança / Dados | Log de acesso a `accounts` + matriz de perfis por tabela, mapeada à Res. BCB 4.658 — **30 dias** |
 
@@ -44,7 +44,9 @@ patamar de quebra documentado. Guia do Data Champion publicado, com limites de
 custo de query aplicados no servidor.
 
 **60 dias — resiliência**
-ClickHouse replicado, migrado sem downtime pelo procedimento de tabela sombra +
+ClickHouse replicado promovido a padrão — a topologia já existe e foi
+comprovada (`docker-compose.ha.yml` + `ha-smoke.sh`, 11/11 incluindo failover);
+falta a migração das tabelas pelo procedimento de tabela sombra +
 `EXCHANGE TABLES`. Legado migrado para Aurora (plano de 72 h já escrito, com
 critério de aborto e janela de rollback de 72 h). Drill de restore semanal
 automatizado, com alarme se o RTO passar de 5 minutos.

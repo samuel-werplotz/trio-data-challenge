@@ -25,6 +25,27 @@ Volume real carregado e medido neste repositório:
 O problema é servir leitura analítica sobre dado transacional que muda o tempo
 todo, sem que a carga analítica caia sobre o banco que processa pagamento.
 
+### SLOs — o contrato que esta arquitetura assume
+
+Números medidos viram promessa só quando alguém declara o alvo, a consequência
+de furá-lo e quanto de folga existe. Estes são os três que governam o pipeline:
+
+| SLO | Alvo | Medido hoje | Error budget | O que dispara |
+|---|---|---|---|---|
+| **Freshness** — atraso do dado no ClickHouse | p99 < 60 s | ~10 s (41 s no pior patamar de saturação) | 1 % do mês ≈ 7 h | `PipelineParado` em 5 min (alerta nº 1) |
+| **Disponibilidade da API** — `/ops/*` responde 2xx | 99,9 % mensal | nó único: sem réplica | ≈ 43 min/mês | Alarme de 5xx e de task morta no ECS |
+| **Latência da query de painel** — Pix 24h vs D-1 | p95 < 1000 ms | **7–8 ms** | folga de 2 ordens de grandeza | Regressão acima de 200 ms indica MV não sendo usada |
+
+**Por que freshness é p99 e não média:** média esconde a parada. Um pipeline que
+fica 2 h fora e volta ainda exibe média boa no dia — foi exatamente o incidente
+SEV-1 do Desafio 3. O que dói é a cauda, e é ela que o SLO precisa cobrar.
+
+**O SLO que hoje não é cumprível é o de disponibilidade**, e está declarado como
+risco nº 1 no [sumário executivo](../docs/SUMARIO-EXECUTIVO.md): com ClickHouse
+em nó único não há como sustentar 99,9 %. O modo HA (`docker-compose.ha.yml`,
+comprovado por `scripts/tests/ha-smoke.sh`) é o que fecha essa lacuna — por isso
+ele está no roadmap de 60 dias, e não como "melhoria futura" genérica.
+
 ### O que aconteceu com o CDC (e por que isso importa aqui)
 
 O desenho original era Debezium (`pgoutput`) → Redpanda → consumidor Python.

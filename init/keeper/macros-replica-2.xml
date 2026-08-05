@@ -1,0 +1,19 @@
+<clickhouse>
+    <!-- macros-replica-2.xml — identidade DESTE nó dentro do cluster.
+         As macros são substituídas no caminho do Keeper quando a tabela
+         Replicated* é criada:
+
+           ReplicatedReplacingMergeTree(
+               '/clickhouse/tables/{shard}/nome_da_tabela',  <- mesmo nos 2 nós
+               '{replica}')                                  <- DIFERENTE em cada
+
+         Dois nós com o MESMO {replica} tentam assumir a mesma identidade no
+         Keeper: o segundo falha com "Replica already exists". Dois nós com
+         {shard} diferente não replicam entre si — viram shards separados, e o
+         dado se divide em vez de se duplicar. Silencioso e pior. -->
+    <macros>
+        <shard>01</shard>
+        <replica>replica-2</replica>
+        <cluster>trio_cluster</cluster>
+    </macros>
+</clickhouse>

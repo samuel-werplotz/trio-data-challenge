@@ -79,7 +79,35 @@ WITH NO DATA;
 -- Leitura dos percentis (plano B). `percentile_cont` é exata mas exige todas
 -- as linhas ordenadas em memória — é justamente por isso que não pode ser
 -- materializada num CAgg, e por isso ela vive aqui, numa view comum.
+--
+-- `type` NA CHAVE DE AGRUPAMENTO, e isso não é detalhe: os quatro instrumentos
+-- têm SLA de liquidação separados por ordens de grandeza — Pix liquida em
+-- ~1,2s (mediana), TED em ~45min, boleto em ~18h. Agrupar só por instituição
+-- misturava as quatro distribuições numa só, e o P95 resultante era dominado
+-- pela cauda do boleto: reportava ~15h de latência para instituições cujo Pix
+-- liquida em segundos. O número não estava errado aritmeticamente — respondia
+-- a pergunta errada. "P95 de liquidação" só tem sentido dentro de um mesmo
+-- instrumento. O CAgg irmão (`cagg_settlement_latency_daily`) já agrupava por
+-- `type`; era esta view que perdia a dimensão.
 CREATE OR REPLACE VIEW v_settlement_latency_percentiles AS
+SELECT
+    time_bucket('1 day', created_at) AS bucket,
+    source_institution,
+    type,
+    count(*) AS settled_count,
+    percentile_cont(0.95) WITHIN GROUP (
+        ORDER BY EXTRACT(EPOCH FROM (settled_at - created_at))) AS p95_seconds,
+    percentile_cont(0.99) WITHIN GROUP (
+        ORDER BY EXTRACT(EPOCH FROM (settled_at - created_at))) AS p99_seconds
+FROM transactions
+WHERE settled_at IS NOT NULL
+GROUP BY bucket, source_institution, type;
+
+-- Visão consolidada por instituição, para quando a pergunta é "qual o SLA
+-- geral desta instituição". Mantida SEPARADA e com nome explícito: quem lê
+-- `_all_types` sabe que está olhando distribuições misturadas, o que a view
+-- anterior escondia.
+CREATE OR REPLACE VIEW v_settlement_latency_percentiles_all_types AS
 SELECT
     time_bucket('1 day', created_at) AS bucket,
     source_institution,

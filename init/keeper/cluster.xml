@@ -1,0 +1,103 @@
+<clickhouse>
+    <!-- cluster.xml — só é montado no modo HA (docker-compose.ha.yml).
+         Declara onde está o Keeper e qual a topologia do cluster. -->
+
+    <!-- Onde as tabelas Replicated* registram seu estado. Sem este bloco,
+         `CREATE TABLE ... ReplicatedMergeTree` falha com
+         "Can't create replicated table without ZooKeeper". -->
+    <zookeeper>
+        <node><host>clickhouse-keeper-1</host><port>9181</port></node>
+        <node><host>clickhouse-keeper-2</host><port>9181</port></node>
+        <node><host>clickhouse-keeper-3</host><port>9181</port></node>
+    </zookeeper>
+
+    <remote_servers>
+        <!-- 1 shard x 2 réplicas: o cenário de HA do volume ATUAL. Replicação
+             resolve disponibilidade, não capacidade — os 10M cabem folgados
+             num nó. O passo seguinte (2 shards x 2 réplicas) só entra no
+             cenário 10x, quando o dado deixa de caber confortavelmente.
+             Ver docs/HA-E-ROTEIRO-DEMO.md. -->
+        <trio_cluster>
+            <shard>
+                <!-- true: o INSERT numa réplica é replicado pelo Keeper, não
+                     reenviado pela tabela Distributed. Evita escrita dupla. -->
+                <internal_replication>true</internal_replication>
+                <replica>
+                    <host>clickhouse</host>
+                    <port>9000</port>
+                    <user>trio</user>
+                    <!-- Credencial da réplica. No desafio é a senha local
+                         descartável; em produção este bloco é gerado a partir
+                         do Secrets Manager na subida do nó, como já é feito com
+                         named_collections.xml (ver docs/SEGURANCA-E-GOVERNANCA).
+                         `from_env` foi testado e rejeitado: nesta versão o
+                         ClickHouse recusa a substituição quando o elemento tem
+                         valor inline, e o servidor entra em loop de restart. -->
+                    <password>trio2024</password>
+                </replica>
+                <replica>
+                    <host>clickhouse-replica-2</host>
+                    <port>9000</port>
+                    <user>trio</user>
+                    <!-- Credencial da réplica. No desafio é a senha local
+                         descartável; em produção este bloco é gerado a partir
+                         do Secrets Manager na subida do nó, como já é feito com
+                         named_collections.xml (ver docs/SEGURANCA-E-GOVERNANCA).
+                         `from_env` foi testado e rejeitado: nesta versão o
+                         ClickHouse recusa a substituição quando o elemento tem
+                         valor inline, e o servidor entra em loop de restart. -->
+                    <password>trio2024</password>
+                </replica>
+            </shard>
+        </trio_cluster>
+    </remote_servers>
+
+    <!-- Distribui a leitura entre as réplicas em vez de martelar sempre a
+         primeira da lista. `nearest_hostname` é estável (não sorteia a cada
+         query), o que preserva o cache de página do nó escolhido.
+
+         DENTRO DE <profiles><default>, e não no nível raiz: `load_balancing` é
+         setting de USUÁRIO, não de servidor. No topo do config o ClickHouse
+         recusa a subir com UNKNOWN_ELEMENT_IN_CONFIG — erro que custa um loop
+         de restart até alguém ler o .err.log, porque o stdout do container só
+         mostra "Logging errors to ...". -->
+    <profiles>
+        <default>
+            <load_balancing>nearest_hostname</load_balancing>
+        </default>
+    </profiles>
+
+    <!-- ========================================================================
+         RBAC REPLICADO — por que este bloco está COMENTADO
+         ========================================================================
+         O problema é real: usuário, perfil e quota vivem em
+         /var/lib/clickhouse/access/, ou seja, no disco de CADA nó. Sem
+         replicar, o Data Champion autentica numa réplica e recebe
+         "authentication failed" na outra, de forma intermitente e sem padrão
+         aparente — um dos incidentes mais difíceis de diagnosticar.
+
+         A solução canônica é o bloco abaixo. Ele foi ESCRITO, TESTADO e
+         DESATIVADO, e a razão importa:
+
+         Declarar <user_directories> SUBSTITUI a configuração de acesso padrão
+         da imagem Docker em vez de complementá-la. O entrypoint do container
+         cria o usuário a partir de CLICKHOUSE_USER/CLICKHOUSE_PASSWORD por um
+         caminho que este bloco desmonta, e o servidor morre na inicialização
+         antes de escrever no log (exit 137, sem stack trace — diagnosticado
+         por bisseção: removido o bloco, o nó sobe; recolocado, morre).
+
+         Em produção o bloco vale, porque lá o usuário NÃO vem do entrypoint
+         do Docker: vem provisionado por IaC ou pelo próprio users.xml, e a
+         substituição deixa de ser conflito. No desafio, manter o ambiente de
+         pé com um comando vale mais que demonstrar RBAC replicado.
+
+    <user_directories>
+        <users_xml>
+            <path>/etc/clickhouse-server/users.xml</path>
+        </users_xml>
+        <replicated>
+            <zookeeper_path>/clickhouse/access/</zookeeper_path>
+        </replicated>
+    </user_directories>
+    -->
+</clickhouse>

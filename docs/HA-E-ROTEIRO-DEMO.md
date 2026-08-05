@@ -67,13 +67,70 @@ cluster ele precisa de `ON CLUSTER` ou de `replicated` no `user_directories` —
 senão o Data Champion autentica numa réplica e falha na outra. Verificado na
 etapa 19: o RBAC sobreviveu à recriação do container porque está no volume.
 
-### Por que não Keeper local, mesmo sendo possível
+### O modo HA existe, roda e foi medido
 
-Subir 3 Keepers em Docker demonstraria a configuração, **não a propriedade**: um
-failover real exige derrubar um nó e provar que a leitura continua — e com todos
-os nós na mesma máquina, o teste prova apenas que containers reiniciam. Preferi
-o plano escrito e o custo calculado a uma encenação que não sobreviveria a
-"e se a AZ inteira cair?".
+O plano acima **não ficou só no papel**. `docker-compose.ha.yml` sobe a
+topologia completa — 3 Keepers em quórum + 2 réplicas — e
+`scripts/tests/ha-smoke.sh` prova que ela replica de verdade:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.ha.yml up -d
+bash scripts/tests/ha-smoke.sh
+```
+
+**Resultado medido: 11 verificações, 0 falhas.**
+
+| Verificação | Resultado |
+|---|---|
+| Réplicas 1 e 2 conectadas ao Keeper | ✅ |
+| `trio_cluster` com 2 réplicas, macros `{replica}` distintas e `{shard}` igual | ✅ |
+| DDL `ON CLUSTER` propagou sem ser executado na réplica 2 | ✅ |
+| 3 linhas escritas em r1 apareceram em r2 | ✅ |
+| Replicação **bidirecional** (escrita em r2 chegou em r1) | ✅ |
+| **Leitura continua com a réplica 1 derrubada** | ✅ |
+| **Escrita continua com a réplica 1 derrubada** (quórum mantido) | ✅ |
+| **Réplica 1 recuperou sozinha o que perdeu** ao voltar | ✅ |
+
+Fica **fora** do `up` padrão de propósito: o critério de aceite nº 1 do PDF é o
+ambiente subir com um comando, e cada peça a mais é uma chance a mais de falhar
+na frente da banca. Mas a resposta para "e a alta disponibilidade?" agora é um
+comando, não uma promessa.
+
+### O que este teste prova e o que não prova
+
+Ser honesto aqui vale mais que o teste em si:
+
+| Prova | Não prova |
+|---|---|
+| Topologia, quórum, DDL `ON CLUSTER`, macros | Tolerância a falha de **infraestrutura real** |
+| Replicação bidirecional e recuperação automática | Sobrevivência à queda de uma **AZ inteira** |
+| Que a leitura e a escrita sobrevivem à perda de 1 de 2 réplicas | Latência de replicação sob carga de produção |
+
+Os 3 Keepers e as 2 réplicas rodam na **mesma máquina**: derrubar um container
+prova que o mecanismo de replicação funciona, não que o data center pode cair.
+Em produção são 3 Keepers em 3 AZs e réplicas em AZs separadas — o custo está
+em [CUSTO-AWS](CUSTO-AWS.md).
+
+### Três armadilhas que só apareceram montando isto
+
+Nenhuma está na documentação oficial de forma óbvia, e as três custaram loop de
+restart até a causa aparecer:
+
+| Sintoma | Causa | Correção |
+|---|---|---|
+| Loop de restart, sem erro no stdout | `load_balancing` no **nível raiz** do config — é setting de **usuário** | Movido para `<profiles><default>` |
+| Loop de restart após declarar RBAC replicado | `<user_directories>` **substitui** a configuração de acesso e desmonta o usuário criado pelo entrypoint do Docker | Bloco mantido **comentado**, com o porquê; em produção não há conflito |
+| `from_env` na senha da réplica | A versão recusa a substituição quando o elemento tem valor inline | Senha direta; em produção vem do Secrets Manager |
+
+**A lição operacional das três é a mesma:** o ClickHouse falha na inicialização
+com `exit 137` e o stdout do container só mostra *"Logging errors to
+/var/log/..."*. A causa real está **dentro do volume**, em
+`clickhouse-server.err.log` — quem não souber ir buscar lá fica cego.
+
+```bash
+docker run --rm -v trio-data-challenge_clickhouse_logs:/l alpine \
+  tail -30 /l/clickhouse-server.err.log
+```
 
 ---
 
@@ -98,18 +155,33 @@ hesitação: a hesitação é o que transforma dúvida em desconfiança.
 
 ---
 
-**1. "O P95 de liquidação é 15 horas?!"**
+**1. "O P95 de liquidação era 15 horas?"**
 
-> «É artefato do gerador, e está declarado no REPORT. O seed distribui
-> `settled_at` ao longo de uma janela larga para criar variância nos
-> dashboards — não modela o SLA real do Pix, que é de segundos. O que a métrica
-> **prova** é que o cálculo de percentil por instituição funciona sobre 10
-> milhões de linhas em 3,4 ms. Se o dado fosse real, o número seria outro; o
-> caminho seria o mesmo.»
+Esta é a melhor pergunta que podem fazer, porque a resposta é uma correção real.
 
-Se insistirem: o número vem de `v_settlement_latency_percentiles`, e
-`failed_count` é estruturalmente 0 porque o CAgg filtra `settled_at IS NOT NULL`
-— também declarado.
+> «Era, e estava errado — mas não pelo motivo que eu supus primeiro. Minha
+> hipótese inicial foi 'artefato do gerador sintético'. Fui verificar e o
+> gerador estava certo: Pix com mediana de 1,2 s, TED 45 min, boleto 18 h,
+> log-normal por tipo. **O bug estava na chave de agrupamento da view**: ela
+> agrupava por dia e instituição e **omitia o `type`**, jogando as quatro
+> distribuições no mesmo `percentile_cont`. Como boleto e TED ocupam toda a
+> cauda, o P95 do conjunto misturado era o P95 do boleto. Corrigido, o Pix é
+> **3,20 s** contra os 56.176 s de antes — fator de 17.555×.»
+
+O ponto a cravar em seguida:
+
+> «O número nunca esteve aritmeticamente errado. Ele respondia a pergunta
+> errada — 'P95 de liquidação' só tem sentido dentro de um mesmo instrumento.
+> É erro de modelagem semântica: nenhum teste de integridade pegaria, porque a
+> query sempre devolveu o percentil correto do conjunto que recebeu. Só aparece
+> quando alguém olha o resultado e desconfia.»
+
+Se insistirem: `failed_count` no CAgg é estruturalmente 0 porque ele filtra
+`settled_at IS NOT NULL` — também declarado no REPORT, com aviso no próprio DDL.
+
+> **Não deixe passar a oportunidade:** esta pergunta é a chance de mostrar que a
+> primeira explicação foi confortável e errada, e que investigar em vez de
+> aceitar trocou uma desculpa por uma correção.
 
 ---
 

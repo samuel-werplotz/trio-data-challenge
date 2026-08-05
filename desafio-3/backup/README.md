@@ -16,6 +16,24 @@ Tudo aqui foi executado neste ambiente. Os números são medidos.
 
 O MinIO fala o protocolo S3 e serve HTTPS. É **o mesmo caminho de código** que rodaria contra o S3 real: migrar para produção é trocar endpoint, região e credencial — nenhuma linha de lógica muda.
 
+### Pré-requisito num clone limpo: gerar o certificado
+
+```bash
+bash desafio-3/backup/gen-certs.sh
+```
+
+O `pgBackRest` com `repo1-type=s3` **sempre** fala TLS (`repo-storage-port` tem default 443 e não há opção de pedir HTTP puro), então o MinIO precisa servir HTTPS — e para isso precisa de um par certificado/chave.
+
+A **chave privada não é versionada** (`.gitignore`). Chave privada em repositório não se versiona nem em ambiente de brinquedo: o hábito é o que falha depois, em produção. O custo dessa escolha é este passo extra, e ele é explícito no Quick Start do README.
+
+Sem rodar isto antes do primeiro `up`, o efeito é encadeado e o sintoma não aponta para a causa: MinIO sem certificado → healthcheck HTTPS nunca fica verde → `minio-init` não cria o bucket → `archive_command` falha a cada segmento de WAL → os dois Postgres param de reciclar WAL. O `bootstrap.sh` checa e gera se faltar, mas ele roda **depois** do `up` — por isso o passo aparece antes no README.
+
+O script também copia o CA público para as imagens do TimescaleDB e do legado (é assim que o pgBackRest **valida** o certificado do MinIO, em vez de desligar a verificação). Se regenerar o certificado com os bancos já construídos, reconstrua-os:
+
+```bash
+docker compose --profile core build timescaledb postgres-legado
+```
+
 ---
 
 ## 1. TimescaleDB — o banco transacional principal
