@@ -5,14 +5,14 @@
 ![Docker Compose](https://img.shields.io/badge/Docker%20Compose-13%20servi%C3%A7os-2496ED?logo=docker&logoColor=white)
 ![Transações](https://img.shields.io/badge/transa%C3%A7%C3%B5es-10.000.000-2d5016)
 ![Query](https://img.shields.io/badge/Q1-12.115ms%20%E2%86%92%2023ms%20(521%C3%97)-1f4e5f)
-![Testes](https://img.shields.io/badge/testes-171%20passando-2d5016)
+![Testes](https://img.shields.io/badge/testes-264%20verifica%C3%A7%C3%B5es-2d5016)
 
 Plataforma de dados para infraestrutura de pagamentos: **TimescaleDB**
 transacional → **ClickHouse** analítico, com **PostgreSQL legado** como fonte de
 referência, observabilidade, backup testado e procedimentos de operação.
 
 **10.000.000 de transações** em 12 meses, pipeline com freshness de ~10 s, 4
-dashboards, 6 alertas e 171 testes de regressão. Sobe com um comando.
+dashboards, 6 alertas e 264 verificações de regressão. Sobe com um comando.
 
 ---
 
@@ -305,6 +305,21 @@ estimativa **não** cobre.
 
 ## Serviços
 
+### O que abre no navegador
+
+| Abra em | O que é | Acesso |
+|---|---|---|
+| **http://localhost:3000** | **Grafana** — os 4 dashboards | `admin` / `admin` |
+| http://localhost:8000/docs | API (Swagger, com todos os endpoints) | — |
+| http://localhost:9090/alerts | Prometheus — as 6 regras de alerta | — |
+| https://localhost:9001 | Console do MinIO — os backups | `trio` / `trio12345` |
+
+> **A raiz da API (`localhost:8000`) responde 404** — ela só publica rotas
+> específicas. Use `/docs` para navegar, ou `curl` nos endpoints direto.
+> E **o Grafana é a 3000**, não a 8000.
+
+### Todas as portas
+
 | Serviço | Porta | Descrição |
 |---|---|---|
 | TimescaleDB | `5432` | Transacional (hypertable, CAggs, compressão) |
@@ -371,9 +386,15 @@ O custo em dólar de promover isso a padrão está em
 ## Testes
 
 ```bash
-bash scripts/tests/run_all.sh   # 171 testes de regressão do produto
+bash scripts/tests/run_all.sh   # 264 verificações de regressão do produto
 bash scripts/tests/ha-smoke.sh  # 11 verificações do modo HA (exige o compose HA)
 ```
+
+**A suíte leva ~3 min, e isso é de propósito:** antes de medir qualquer coisa,
+ela espera cada serviço ficar saudável (até 60 s por serviço, configurável em
+`READY_TIMEOUT_S`). A versão anterior decidia no primeiro instante e por isso
+dava resultado diferente conforme o momento — 253/2/9 numa execução e 261/0/3
+minutos depois, sem nenhuma mudança no repositório.
 
 `SKIP` indica pré-condição ausente no ambiente (ex.: `make` não instalado neste
 Windows), **não** falha.

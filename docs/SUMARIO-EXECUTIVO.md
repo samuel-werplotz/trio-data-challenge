@@ -8,7 +8,7 @@ transacional, replicadas para ClickHouse analítico por um pipeline próprio, co
 observabilidade, backup testado e procedimentos de operação escritos.
 
 Sobe com **um comando** (`docker compose up -d`) e se verifica com outro
-(`bash scripts/tests/run_all.sh` — 171 testes). Detalhe técnico em
+(`bash scripts/tests/run_all.sh` — 264 verificações). Detalhe técnico em
 [`desafio-1/REPORT.md`](../desafio-1/REPORT.md) e
 [`desafio-2/ADR.md`](../desafio-2/ADR.md).
 
