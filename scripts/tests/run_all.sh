@@ -864,6 +864,15 @@ if container_up ref-sync && container_up clickhouse; then
     bash -c 'curl -s localhost:8002/metrics | grep -q "refsync_dictionary_age_seconds"'
   check 14.21 "ref-sync concluiu ao menos um ciclo com sucesso" \
     bash -c 'curl -s localhost:8002/metrics | grep -q "refsync_last_success_timestamp [0-9]"'
+  # 14.22: guarda a correcao do falso positivo. refsync_dictionary_age_seconds
+  # mede a idade do DADO e cresce sozinha num legado estatico — usa-la no alerta
+  # dispara com o worker saudavel e, pior, CONGELA se o worker morrer. O alerta
+  # tem de olhar a idade da ultima VERIFICACAO, que cresce quando o worker para.
+  check 14.22 "ref-sync expoe a idade da ultima verificacao (base do alerta)" \
+    bash -c 'curl -s localhost:8002/metrics | grep -q "^refsync_check_age_seconds"'
+  check 14.23 "alerta do Dictionary usa check_age, nao dictionary_age" \
+    bash -c 'grep -A2 "alert: DicionarioDesatualizado" init/prometheus/alert_rules.yml \
+           | grep -q "expr: refsync_check_age_seconds"'
   # 14.4: mudança no legado chega ao Dictionary. Faz UPDATE, força o ciclo e
   # RESTAURA o valor original — teste não pode deixar resíduo no dado.
   # O valor de restauração é LIDO do banco antes do UPDATE, não escrito no
@@ -890,7 +899,7 @@ if container_up ref-sync && container_up clickhouse; then
     skip 14.4 "legado sem seed"
   fi
 else
-  for t in 14.4 14.20 14.21; do skip "$t" "ref-sync ou clickhouse fora do ar"; done
+  for t in 14.4 14.20 14.21 14.22 14.23; do skip "$t" "ref-sync ou clickhouse fora do ar"; done
 fi
 
 # --- 15 observabilidade-runbook-e-incidente ---

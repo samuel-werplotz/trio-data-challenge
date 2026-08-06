@@ -15,7 +15,7 @@ este documento é o porquê de cada uma.
 | 1 | Pipeline parado | `sync_last_success_timestamp` **e** `sync_lag_seconds` | > 300s **com** lag > 60s | **SEV-1** | Acorda o plantão |
 | 2 | Lag crescente | `sync_lag_seconds` | > 60s por 5 min | SEV-2 | Investiga o consumidor |
 | 3 | Erros no pipeline | `sync_errors_total` | qualquer erro em 15 min | SEV-3 | Investiga em horário comercial |
-| 4 | Dicionário desatualizado | `refsync_dictionary_age_seconds` | > 900s por 5 min | SEV-3 | Verifica ref-sync e legado |
+| 4 | Dicionário desatualizado | `refsync_check_age_seconds` | > 900s por 5 min | SEV-3 | Verifica ref-sync e legado |
 | 5 | Storage alto | `node_filesystem_avail_bytes` | > 85% de uso por 10 min | SEV-2 | Dispara o [runbook](../runbook.md) |
 | 6 | Alvo de coleta fora | `up` | `== 0` por 5 min | SEV-2 | Restaura a coleta |
 
@@ -98,7 +98,7 @@ recorrente, alguém precisa olhar sem urgência" — é coberto por
 
 | Campo | Valor |
 |---|---|
-| **Métrica** | `refsync_dictionary_age_seconds` |
+| **Métrica** | `refsync_check_age_seconds` — idade da última **verificação**, não do dado |
 | **Threshold** | > 900s (15 min = 3 ciclos perdidos) por 5 min |
 | **Severidade** | SEV-3 |
 | **Ação esperada** | Verificar o container `ref-sync` e a conectividade com o legado |
@@ -107,6 +107,35 @@ recorrente, alguém precisa olhar sem urgência" — é coberto por
 O `dict_institutions` alimenta a decisão de roteamento da API. Desatualizado
 significa decidir com cadastro velho. **3 ciclos, não 1:** um ciclo falho é
 ruído (o retry cobre), três seguidos é padrão.
+
+### A métrica que este alerta NÃO usa, e por quê
+
+A primeira versão media `refsync_dictionary_age_seconds` — segundos desde o
+`max(updated_at)` do legado. **Era falso positivo permanente**, e foi encontrado
+com o ambiente rodando: num legado que não muda, essa série cresce
+indefinidamente enquanto o `ref-sync` verifica pontualmente a cada 5 min
+(`docker logs trio-ref-sync` mostrando `unchanged`).
+
+O defeito mais grave não é o falso positivo. É que, se o worker **morresse**, a
+série congelaria no último valor em vez de continuar crescendo — ela dispara
+igual no caso bom e no ruim, e portanto **não distingue nada**.
+
+`refsync_check_age_seconds` mede a idade da última verificação bem-sucedida, é
+avaliada a cada scrape, e cresce exatamente quando o worker para de checar. É a
+mesma escolha de `sync_last_success_timestamp` no pipeline principal: **medir
+progresso, não ausência de mudança**.
+
+As duas séries continuam existindo, porque respondem perguntas diferentes:
+
+| Série | Responde | Serve para |
+|---|---|---|
+| `refsync_dictionary_age_seconds` | "o cadastro que a API lê está velho?" | Painel |
+| `refsync_check_age_seconds` | "o worker ainda está checando?" | **Alerta** |
+
+**Divisão com o alerta nº 6** (`AlvoDeColetaFora`), verificada em teste: com o
+container parado a série some — não há quem raspar — e quem dispara é o nº 6.
+Com o processo vivo e travado, a série cresce e é este alerta que pega. Os dois
+juntos cobrem o espaço; nenhum sozinho cobriria.
 
 Vale notar o que **não** é: o `LIFETIME(MIN 240 MAX 360)` do Dictionary recarrega
 sozinho mesmo com o `ref-sync` fora do ar. Este alerta pega o caso em que a

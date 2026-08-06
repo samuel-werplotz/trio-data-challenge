@@ -64,18 +64,36 @@ groups:
           acao: "Investigar em horário comercial; o retry pode estar absorvendo"
 
       # --- 4. Dado de referência velho ---
-      # O Dictionary serve decisão de roteamento na API. Velho demais significa
-      # decidir com cadastro desatualizado.
+      # O Dictionary serve decisão de roteamento na API, então parar de
+      # sincronizá-lo significa decidir com cadastro possivelmente desatualizado.
+      #
+      # A expressão mede a idade da última VERIFICAÇÃO, não a do dado. A versão
+      # anterior usava refsync_dictionary_age_seconds (segundos desde o
+      # max(updated_at) do legado) e era falso positivo permanente: num legado
+      # que não muda, essa série cresce indefinidamente com o worker saudável.
+      # Pior — se o ref-sync morresse, ela CONGELARIA no último valor em vez de
+      # crescer. Disparava igual no caso bom e no ruim, e não distinguia nada.
+      #
+      # refsync_check_age_seconds é avaliada a cada scrape: cresce quando o
+      # worker para de checar, que é o risco real. Mesma lógica do
+      # sync_last_success_timestamp do pipeline principal — medir progresso, não
+      # ausência de mudança.
+      #
+      # Divisão de responsabilidade com AlvoDeColetaFora, verificada em teste:
+      #   container PARADO      -> a série some (não há quem raspar) e quem
+      #                            dispara é AlvoDeColetaFora (up == 0)
+      #   processo VIVO e travado -> a série cresce e é ESTE alerta que pega
+      # Os dois juntos cobrem o espaço; nenhum sozinho cobriria.
       # 900s = 3 ciclos de 5 min perdidos: 1 ciclo falho é ruído, 3 é padrão.
       - alert: DicionarioDesatualizado
-        expr: refsync_dictionary_age_seconds > 900
+        expr: refsync_check_age_seconds > 900
         for: 5m
         labels:
           severity: SEV-3
           componente: pipeline-referencia
         annotations:
-          resumo: "dict_institutions sem refletir o legado há mais de 15 min"
-          descricao: "Idade do dado de referência: {{ $value }}s."
+          resumo: "ref-sync sem concluir ciclo há mais de 15 min"
+          descricao: "Última verificação do Dictionary há {{ $value }}s."
           acao: "Verificar ref-sync e conectividade com o legado"
 
   - name: infraestrutura
