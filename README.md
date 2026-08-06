@@ -1,11 +1,75 @@
 # Trio Data Challenge — Engenheiro de Dados Sênior
 
+![TimescaleDB](https://img.shields.io/badge/TimescaleDB-PG16-FDB515?logo=postgresql&logoColor=white)
+![ClickHouse](https://img.shields.io/badge/ClickHouse-anal%C3%ADtico-FFCC01?logo=clickhouse&logoColor=black)
+![Docker Compose](https://img.shields.io/badge/Docker%20Compose-13%20servi%C3%A7os-2496ED?logo=docker&logoColor=white)
+![Transações](https://img.shields.io/badge/transa%C3%A7%C3%B5es-10.000.000-2d5016)
+![Query](https://img.shields.io/badge/Q1-12.115ms%20%E2%86%92%2023ms%20(521%C3%97)-1f4e5f)
+![Testes](https://img.shields.io/badge/testes-171%20passando-2d5016)
+
 Plataforma de dados para infraestrutura de pagamentos: **TimescaleDB**
 transacional → **ClickHouse** analítico, com **PostgreSQL legado** como fonte de
 referência, observabilidade, backup testado e procedimentos de operação.
 
 **10.000.000 de transações** em 12 meses, pipeline com freshness de ~10 s, 4
 dashboards, 6 alertas e 171 testes de regressão. Sobe com um comando.
+
+---
+
+## A plataforma em um diagrama
+
+O que roda hoje, neste `docker-compose`. Os tempos nas setas são **medidos**
+neste ambiente, não alvos de projeto.
+
+```mermaid
+flowchart LR
+    subgraph fontes["Fontes de dados"]
+        TS[("TimescaleDB<br/>transactions 10M<br/>hypertable 1d · 338 chunks")]
+        LEG[("PostgreSQL legado<br/>partner_institutions")]
+    end
+
+    subgraph pipelines["Pipelines"]
+        SW["sync-worker<br/>micro-batch por watermark<br/>ciclo 10s"]
+        RS["ref-sync<br/>batch 5 min"]
+    end
+
+    subgraph analitico["Camada analítica"]
+        CH[("ClickHouse<br/>transactions_raw<br/>ReplacingMergeTree")]
+        MV["MVs AggregatingMergeTree<br/>daily_by_institution<br/>status_funnel"]
+        DICT["dict_institutions<br/>Dictionary"]
+    end
+
+    subgraph consumidores["Aplicações consumidoras"]
+        API["API FastAPI :8000"]
+        GRAF["Grafana :3000<br/>4 dashboards"]
+        ROUTER["Roteamento de Pix<br/>decisão automatizada"]
+    end
+
+    TS -->|"SELECT incremental<br/>freshness ~10s"| SW
+    SW -->|"INSERT batch<br/>≤ 50k linhas/ciclo"| CH
+    LEG -->|"detecção de mudança"| RS
+    RS -->|"RELOAD DICTIONARY<br/>≤ 5 min"| DICT
+
+    CH --> MV
+    MV -->|"agregado · p50 ~8ms"| API
+    DICT -->|"dictGetOrDefault"| API
+    MV --> GRAF
+    API -->|"success_rate + P95"| ROUTER
+
+    classDef fonte fill:#1f4e5f,stroke:#0d2b35,color:#fff
+    classDef pipe fill:#7a4b1e,stroke:#3d2510,color:#fff
+    classDef anal fill:#2d5016,stroke:#152a09,color:#fff
+    classDef cons fill:#4a2d5e,stroke:#241730,color:#fff
+
+    class TS,LEG fonte
+    class SW,RS pipe
+    class CH,MV,DICT anal
+    class API,GRAF,ROUTER cons
+```
+
+Versão completa, com observabilidade e backup:
+[`desafio-2/diagrams/`](desafio-2/diagrams/) — inclui também a arquitetura AWS
+de destino e o mapa de pontos de falha.
 
 ---
 
