@@ -92,7 +92,7 @@ de destino e o mapa de pontos de falha.
 > `docker compose up` funciona, os dois scripts não, e o ambiente sobe **pela
 > metade, sem aviso**. Em Linux e macOS, qualquer terminal serve.
 
-### Os quatro comandos, ≈ 6 minutos do zero
+### Os cinco comandos, ≈ 7 minutos do zero
 
 Rode-os **na raiz do repositório** (a pasta que contém `docker-compose.yml`):
 
@@ -101,17 +101,25 @@ cp .env.example .env
 bash desafio-3/backup/gen-certs.sh
 docker compose up -d
 bash scripts/bootstrap.sh
+bash desafio-3/backup/backup-all.sh full
 ```
 
 | Comando | O que faz | Quando repetir |
 |---|---|---|
-| `gen-certs.sh` | Gera o certificado HTTPS do MinIO. **Segundos** | Uma vez por clone |
+| `gen-certs.sh` | Gera o certificado HTTPS do MinIO e reconstrói as imagens dos dois Postgres com o CA novo. **~1 min** | Uma vez por clone |
 | `docker compose up -d` | Sobe os 13 serviços e carrega os 10M | Sempre |
 | `bootstrap.sh` | Materializa CAggs, comprime, faz o backfill do ClickHouse, cria perfil de acesso e stanzas de backup | Sempre — é idempotente |
+| `backup-all.sh full` | Primeiro backup full dos 3 bancos (~50 s) | Uma vez; depois, quando quiser |
 
 Se algum passo falhar no meio, **rode `bash scripts/bootstrap.sh` de novo**: ele
 é idempotente, checa o que já existe e refaz só o que falta — inclusive o
 certificado, se o passo 2 tiver sido pulado.
+
+> **Por que o backup é um passo separado:** os outros quatro entregam o ambiente
+> funcionando; este entrega a *evidência* de que a estratégia de recuperação
+> existe. Sem ele o ambiente roda igual, mas 4 testes da suíte falham por não
+> encontrar backup no repositório — e o `restore-drill.sh` não tem de onde
+> restaurar.
 
 **Por que o certificado vem antes do `up`:** a chave privada não é versionada
 (`.gitignore`), então num clone limpo ela não existe. Sem ela o MinIO não sobe,
@@ -126,12 +134,13 @@ Sem os CAggs, a query Q1 continua levando 12 segundos em vez de 23 ms.
 
 | Passo | Tempo |
 |---|---|
+| `gen-certs.sh` + rebuild das imagens dos bancos | **~60 s** |
 | `up` até todos os healthchecks verdes | **20 s** |
 | Seed dos 10M (automático, em paralelo) | **168 s** |
 | CAggs + compressão de 331 chunks | **82 s** |
 | Backfill do ClickHouse | **58 s** |
 | Backup full dos 3 bancos | **53 s** |
-| **Total, do zero ao ambiente completo** | **≈ 6 min** |
+| **Total, do zero ao ambiente completo** | **≈ 7 min** |
 
 ### Verificação rápida
 

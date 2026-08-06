@@ -63,10 +63,19 @@ N_COMP=$($PGTS -tAc "SELECT count(*) FROM (SELECT compress_chunk(c, if_not_compr
 echo "  chunks comprimidos: ${N_COMP:-0}"
 
 titulo "Backfill do ClickHouse"
-if [ "$($CH -q 'SELECT count() FROM trio_analytics.transactions_raw' 2>/dev/null | tr -d '\r ')" = "0" ]; then
+# A guarda compara com a ORIGEM, não com zero. O motivo é uma condição de
+# corrida real, encontrada testando o caminho de um clone limpo: o sync-worker
+# sobe junto no `up` e já ingere em tempo real enquanto o seed carrega. Quando o
+# bootstrap chega aqui, o destino tem algumas milhares de linhas — nunca zero.
+# Com a guarda antiga (`= 0`), o backfill era PULADO e o ambiente terminava com
+# ~4 mil linhas no ClickHouse em vez de 10 milhões, sem nenhum erro na saída.
+CH_N=$($CH -q 'SELECT count() FROM trio_analytics.transactions_raw' 2>/dev/null | tr -d '\r ')
+TS_N=$($PGTS -tAc 'SELECT count(*) FROM transactions' 2>/dev/null | tr -d '\r ')
+if [ "${CH_N:-0}" -lt "${TS_N:-1}" ] 2>/dev/null; then
+  echo "  destino com ${CH_N:-0} de ${TS_N:-?} — rodando backfill"
   bash scripts/backfill-clickhouse.sh 2>&1 | tail -2
 else
-  echo "  destino já populado — pulado"
+  echo "  destino já completo (${CH_N} linhas) — pulado"
 fi
 # O sync-worker ingere durante o seed, então o backfill relê algumas linhas que
 # já entraram: `count()` fica acima de 10M com versões duplicadas pendentes de
