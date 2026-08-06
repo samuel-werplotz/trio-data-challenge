@@ -387,7 +387,7 @@ if seed_done; then
   [ "$N_EO" = "2" ] && ok 08.8 "end_offset de 1h nas 2 políticas de refresh" \
     || fail 08.8 "esperava 2 refreshes com end_offset 1h, achei ${N_EO:-erro}"
 
-  # segmentby/orderby exatamente como S03 — é a decisão que define a taxa.
+  # segmentby/orderby exatamente como especificado — é a decisão que define a taxa.
   SEG=$(psql_ts "SELECT string_agg(attname, ', ' ORDER BY segmentby_column_index) FROM timescaledb_information.compression_settings WHERE hypertable_name='transactions' AND segmentby_column_index IS NOT NULL")
   [ "$SEG" = "source_institution, type" ] && ok 08.9 "segmentby = source_institution, type" \
     || fail 08.9 "segmentby inesperado: ${SEG:-erro}"

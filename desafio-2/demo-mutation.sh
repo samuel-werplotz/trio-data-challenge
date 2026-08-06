@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# demo-mutation.sh — demonstração de mutação CDC ponta a ponta (S05 §
+# demo-mutation.sh — demonstração de mutação CDC ponta a ponta (
 # Demonstração de mutação). O passo 7 é o mais valioso: mostra 2 linhas
 # físicas para o mesmo tx_id ANTES do merge, prova que se entende o
 # mecanismo do ReplacingMergeTree em vez de ter copiado uma receita.

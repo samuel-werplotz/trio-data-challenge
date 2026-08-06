@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run-explains.sh — ritual de medição de S06 § O método.
+# run-explains.sh — ritual de medição: 4 execuções, 1ª descartada, mediana das 3.
 # Para cada query: roda 4x, descarta a 1ª (aquece o cache), guarda a mediana
 # das 3 restantes, salva o EXPLAIN da última execução (mesmo plano, já quente)
 # em qN_<suffix>.txt com Buffers: shared hit vs read visível.

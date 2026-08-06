@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# health-check.sh — prova em uma passada se o ambiente está íntegro (S08).
+# health-check.sh — prova em uma passada se o ambiente está íntegro.
 # Uma linha por verificação (✓/✗), exit code agregado. Primeiro comando da demo.
 set -uo pipefail
 

@@ -20,7 +20,7 @@
 | Chunks totais em `transactions` | 338 (1 dia cada) |
 | Chunks com 6+ meses (candidatos) | **156** |
 | Espaço que ocupam | **1.111 MB** |
-| Compressão vigente | 5,5× no total |
+| Compressão vigente | 5,0× no total (23,5× só na tabela) |
 
 ---
 
@@ -184,7 +184,7 @@ SELECT decompress_chunk('_timescaledb_internal._hyper_1_1349_chunk');
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1349_chunk');
 ```
 
-> **Atenção ao custo:** descomprimir infla o chunk ~5,5× de forma transitória.
+> **Atenção ao custo:** descomprimir infla o chunk ~5× de forma transitória.
 > A 92% de uso, faça **um por vez** e confira o espaço entre cada um. Se o
 > objetivo for só liberar espaço (o caso deste cenário), **pule esta etapa** —
 > vá direto ao 3.3, que não precisa descomprimir.
