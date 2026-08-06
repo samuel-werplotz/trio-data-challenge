@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # backfill-clickhouse.sh — backfill dos 10M de transactions do TimescaleDB
-# para o ClickHouse (S05 § Backfill inicial), direto via postgresql(), sem
+# para o ClickHouse, direto via postgresql(), sem
 # passar pelo Kafka. Roda em blocos mensais (12 chamadas), não uma inserção
 # única, para não estourar memória e para poder retomar de onde parou se
 # um mês falhar. Idempotente por mês: ReplacingMergeTree deduplica por
@@ -20,7 +20,7 @@ set -euo pipefail
 CH="docker compose exec -T clickhouse clickhouse-client --user trio --password trio2024"
 
 # 12 meses do dataset real (set/2025 a ago/2026) — não os "ago/2025 a jul/2026"
-# do exemplo ilustrativo de S05, que usava datas genéricas.
+# do exemplo ilustrativo original, que usava datas genéricas.
 MESES=(
   2025-09-01 2025-10-01 2025-11-01 2025-12-01
   2026-01-01 2026-02-01 2026-03-01 2026-04-01

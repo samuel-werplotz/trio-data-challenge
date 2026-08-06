@@ -39,7 +39,35 @@ check() {
 
 has_docker()    { command -v docker >/dev/null 2>&1; }
 has_make()      { command -v make >/dev/null 2>&1; }  # ausente neste ambiente Windows (winget falhou por rede)
-container_up()  { has_docker && [ -n "$(docker compose ps -q "$1" 2>/dev/null)" ]; }
+# container_up exige PRONTO, nao apenas existente. `docker compose ps -q` devolve
+# o id de um container que ainda esta em `starting`, ou em loop de restart — e
+# testes guardados por ele viravam FAIL em vez de SKIP quando a suite rodava
+# logo apos o `up`, com o ambiente ainda assentando. Foi visto num clone limpo:
+# 253 pass / 2 fail / 9 skip numa execucao e 261 / 0 / 3 minutos depois, sem
+# nenhuma mudanca no repositorio. Resultado que oscila e pior que resultado
+# ruim: quem roda no momento errado nao sabe que basta esperar.
+#
+# Espera ate READY_TIMEOUT_S por saude, em vez de decidir no primeiro instante.
+# Container sem healthcheck declarado: basta estar `running`.
+READY_TIMEOUT_S="${READY_TIMEOUT_S:-60}"
+container_up() {
+  has_docker || return 1
+  local cid; cid="$(docker compose ps -q "$1" 2>/dev/null)"
+  [ -n "$cid" ] || return 1
+  local deadline=$(( $(date +%s) + READY_TIMEOUT_S ))
+  while :; do
+    local state health
+    state="$(docker inspect -f '{{.State.Status}}' "$cid" 2>/dev/null)"
+    health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null)"
+    case "$health" in
+      healthy)          return 0 ;;
+      none)             [ "$state" = "running" ] && return 0 ;;
+      unhealthy)        return 1 ;;
+    esac
+    [ "$(date +%s)" -lt "$deadline" ] || return 1
+    sleep 2
+  done
+}
 seed_done()     {
   container_up timescaledb || return 1
   [ "$(docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc \
@@ -359,7 +387,7 @@ if seed_done; then
   [ "$N_EO" = "2" ] && ok 08.8 "end_offset de 1h nas 2 políticas de refresh" \
     || fail 08.8 "esperava 2 refreshes com end_offset 1h, achei ${N_EO:-erro}"
 
-  # segmentby/orderby exatamente como S03 — é a decisão que define a taxa.
+  # segmentby/orderby exatamente como especificado — é a decisão que define a taxa.
   SEG=$(psql_ts "SELECT string_agg(attname, ', ' ORDER BY segmentby_column_index) FROM timescaledb_information.compression_settings WHERE hypertable_name='transactions' AND segmentby_column_index IS NOT NULL")
   [ "$SEG" = "source_institution, type" ] && ok 08.9 "segmentby = source_institution, type" \
     || fail 08.9 "segmentby inesperado: ${SEG:-erro}"
@@ -836,6 +864,15 @@ if container_up ref-sync && container_up clickhouse; then
     bash -c 'curl -s localhost:8002/metrics | grep -q "refsync_dictionary_age_seconds"'
   check 14.21 "ref-sync concluiu ao menos um ciclo com sucesso" \
     bash -c 'curl -s localhost:8002/metrics | grep -q "refsync_last_success_timestamp [0-9]"'
+  # 14.22: guarda a correcao do falso positivo. refsync_dictionary_age_seconds
+  # mede a idade do DADO e cresce sozinha num legado estatico — usa-la no alerta
+  # dispara com o worker saudavel e, pior, CONGELA se o worker morrer. O alerta
+  # tem de olhar a idade da ultima VERIFICACAO, que cresce quando o worker para.
+  check 14.22 "ref-sync expoe a idade da ultima verificacao (base do alerta)" \
+    bash -c 'curl -s localhost:8002/metrics | grep -q "^refsync_check_age_seconds"'
+  check 14.23 "alerta do Dictionary usa check_age, nao dictionary_age" \
+    bash -c 'grep -A2 "alert: DicionarioDesatualizado" init/prometheus/alert_rules.yml \
+           | grep -q "expr: refsync_check_age_seconds"'
   # 14.4: mudança no legado chega ao Dictionary. Faz UPDATE, força o ciclo e
   # RESTAURA o valor original — teste não pode deixar resíduo no dado.
   # O valor de restauração é LIDO do banco antes do UPDATE, não escrito no
@@ -862,7 +899,7 @@ if container_up ref-sync && container_up clickhouse; then
     skip 14.4 "legado sem seed"
   fi
 else
-  for t in 14.4 14.20 14.21; do skip "$t" "ref-sync ou clickhouse fora do ar"; done
+  for t in 14.4 14.20 14.21 14.22 14.23; do skip "$t" "ref-sync ou clickhouse fora do ar"; done
 fi
 
 # --- 15 observabilidade-runbook-e-incidente ---

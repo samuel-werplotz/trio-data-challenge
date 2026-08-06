@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# lgpd-erasure-demo.sh — prova o procedimento `anonimizar_conta` (S09) fim a
+# lgpd-erasure-demo.sh — prova o procedimento `anonimizar_conta` fim a
 # fim: PII some da origem, histórico transacional permanece, auditoria fica
 # registrada. Mesmo padrão do retention-demo.sh (etapa 08): dado sintético
 # descartável, nunca uma conta real das 500k seedadas.
@@ -68,7 +68,7 @@ $PSQL -c "SELECT id, holder_name, holder_document, status FROM accounts WHERE id
 step "3. Executando anonimizar_conta($ACCOUNT_ID, ...)"
 $PSQL -c "CALL anonimizar_conta($ACCOUNT_ID, 'demo-script');"
 
-step "4. Checklist de verificação (S09 § Checklist)"
+step "4. Checklist de verificação"
 
 # 1. A PII sumiu da origem?
 HOLDER=$($PSQL_TA -c "SELECT holder_name FROM accounts WHERE id=$ACCOUNT_ID")
