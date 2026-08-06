@@ -564,14 +564,24 @@ check E0.2 "se archive_mode=on, entao pgbackrest existe na imagem" \
 # recem-carregado: depois do seed de 10M o pg_wal fica em ~3,8 GB, abaixo do
 # max_wal_size de 4 GB, e o Postgres nao tem motivo para encolher. Passou a
 # asserir as duas condicoes que de fato importam (etapa 99).
+# E0.3 mede se o arquivamento funciona AGORA, nao se nunca falhou. `failed_count`
+# e cumulativo desde o boot e nunca zera sozinho: num ambiente do zero o Postgres
+# ja tenta arquivar WAL enquanto o MinIO ainda esta subindo, entao dezenas de
+# falhas transitorias sao esperadas e o Postgres reenvia sozinho. Exigir
+# failed_count=0 reprovava ambiente saudavel para sempre — visto num clone limpo
+# com 506 arquivados, ultima falha 10 min ANTES do ultimo sucesso.
+# O criterio correto: houve sucesso, e o ultimo sucesso e mais recente que a
+# ultima falha (ou nunca houve falha).
 check E0.3 "arquivamento de WAL saudavel e pg_wal dentro do max_wal_size" \
-  bash -c 'FAILED=$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc \
-             "select failed_count from pg_stat_archiver" 2>/dev/null | tr -d "\r ");
+  bash -c 'OK=$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc \
+             "select archived_count from pg_stat_archiver" 2>/dev/null | tr -d "\r ");
+           RECENTE=$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc \
+             "select coalesce(last_archived_time > last_failed_time, last_failed_time is null, false) from pg_stat_archiver" 2>/dev/null | tr -d "\r ");
            MAXW=$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc \
              "select setting::int from pg_settings where name = '"'"'max_wal_size'"'"'" 2>/dev/null | tr -d "\r ");
            USED=$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc \
              "select (count(*) * 16) from pg_ls_waldir()" 2>/dev/null | tr -d "\r ");
-           [ "${FAILED:-1}" = "0" ] && [ "${USED:-99999}" -le "$(( ${MAXW:-4096} + 512 ))" ]'
+           [ "${OK:-0}" -gt 0 ] 2>/dev/null && [ "${RECENTE:-f}" = "t" ] && [ "${USED:-99999}" -le "$(( ${MAXW:-4096} + 512 ))" ]'
 check E0.4 "transactions com exatamente 10M (sem linha de teste sobrando)" \
   bash -c '[ "$(docker exec trio-timescaledb psql -U trio -d trio_transactions -tAc "select count(*) from transactions" 2>/dev/null)" = "10000000" ]'
 check E0.5 "nenhuma linha sintetica de diagnostico em transactions" \
