@@ -142,6 +142,35 @@ Sem os CAggs, a query Q1 continua levando 12 segundos em vez de 23 ms.
 | Backup full dos 3 bancos | **53 s** |
 | **Total, do zero ao ambiente completo** | **≈ 7 min** |
 
+### Voltando depois — o ambiente já existe
+
+Os cinco comandos acima são para o **primeiro acesso**. Depois que o ambiente
+existe, parar e voltar leva segundos e **preserva tudo** — os dados vivem em
+volumes Docker, não nos containers.
+
+```bash
+docker compose stop     # pausa tudo, libera CPU/RAM. ~6 s
+docker compose up -d    # volta de onde parou. ~13 s
+```
+
+Não é preciso repetir seed, `bootstrap.sh` nem backup. **Medido num ciclo
+completo:** 10.000.000 nas duas pontas, CAggs materializados e a suíte em
+`263 pass, 0 fail` depois do retorno.
+
+| Comando | O que faz | Dado |
+|---|---|---|
+| `docker compose stop` | Para os containers | **Preservado** |
+| `docker compose up -d` | Religa | **Preservado** |
+| `docker compose down` | Remove os containers | **Preservado** (volumes ficam) |
+| `docker compose down -v` | Remove containers **e volumes** | **APAGADO** — recomeça do zero |
+
+> **Use `down -v` só quando quiser testar o caminho do zero.** Depois dele, a
+> sequência completa de 5 comandos roda de novo, em ~7 min.
+
+Se o Docker Desktop for reiniciado ou a máquina desligar, os containers sobem
+sozinhos (`restart: unless-stopped`); se não subirem, `docker compose up -d`
+resolve.
+
 ### Verificação rápida
 
 ```bash
