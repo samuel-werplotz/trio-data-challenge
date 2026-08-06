@@ -39,7 +39,35 @@ check() {
 
 has_docker()    { command -v docker >/dev/null 2>&1; }
 has_make()      { command -v make >/dev/null 2>&1; }  # ausente neste ambiente Windows (winget falhou por rede)
-container_up()  { has_docker && [ -n "$(docker compose ps -q "$1" 2>/dev/null)" ]; }
+# container_up exige PRONTO, nao apenas existente. `docker compose ps -q` devolve
+# o id de um container que ainda esta em `starting`, ou em loop de restart — e
+# testes guardados por ele viravam FAIL em vez de SKIP quando a suite rodava
+# logo apos o `up`, com o ambiente ainda assentando. Foi visto num clone limpo:
+# 253 pass / 2 fail / 9 skip numa execucao e 261 / 0 / 3 minutos depois, sem
+# nenhuma mudanca no repositorio. Resultado que oscila e pior que resultado
+# ruim: quem roda no momento errado nao sabe que basta esperar.
+#
+# Espera ate READY_TIMEOUT_S por saude, em vez de decidir no primeiro instante.
+# Container sem healthcheck declarado: basta estar `running`.
+READY_TIMEOUT_S="${READY_TIMEOUT_S:-60}"
+container_up() {
+  has_docker || return 1
+  local cid; cid="$(docker compose ps -q "$1" 2>/dev/null)"
+  [ -n "$cid" ] || return 1
+  local deadline=$(( $(date +%s) + READY_TIMEOUT_S ))
+  while :; do
+    local state health
+    state="$(docker inspect -f '{{.State.Status}}' "$cid" 2>/dev/null)"
+    health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null)"
+    case "$health" in
+      healthy)          return 0 ;;
+      none)             [ "$state" = "running" ] && return 0 ;;
+      unhealthy)        return 1 ;;
+    esac
+    [ "$(date +%s)" -lt "$deadline" ] || return 1
+    sleep 2
+  done
+}
 seed_done()     {
   container_up timescaledb || return 1
   [ "$(docker compose exec -T timescaledb psql -q -U trio -d trio_transactions -tAc \
