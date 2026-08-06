@@ -75,7 +75,26 @@ de destino e o mapa de pontos de falha.
 
 ## Quick Start
 
-Quatro comandos, ≈ 6 minutos do zero:
+### Antes: onde rodar
+
+| Requisito | Detalhe |
+|---|---|
+| **Docker Desktop** (ou Docker Engine) | Rodando, com **≥ 8 GB** disponíveis para containers — o TimescaleDB usa até 4 GB e o ClickHouse até 6 GB no pico |
+| **Um shell com `bash`** | Os scripts deste repositório são `.sh` |
+| Disco | ~6 GB (10M linhas + índices + ClickHouse + backups) |
+
+> **No Windows, use o Git Bash** — ele vem com o Git e já tem tudo o que os
+> scripts precisam. Abra "Git Bash" pelo menu Iniciar e navegue até esta pasta.
+>
+> **Não use PowerShell nem CMD para os comandos `bash ...`**: o PowerShell
+> costuma resolver `bash` para o WSL, e se a distro não estiver instalada o
+> comando falha com `execvpe(/bin/bash) failed: No such file or directory` — o
+> `docker compose up` funciona, os dois scripts não, e o ambiente sobe **pela
+> metade, sem aviso**. Em Linux e macOS, qualquer terminal serve.
+
+### Os quatro comandos, ≈ 6 minutos do zero
+
+Rode-os **na raiz do repositório** (a pasta que contém `docker-compose.yml`):
 
 ```bash
 cp .env.example .env
@@ -89,6 +108,10 @@ bash scripts/bootstrap.sh
 | `gen-certs.sh` | Gera o certificado HTTPS do MinIO. **Segundos** | Uma vez por clone |
 | `docker compose up -d` | Sobe os 13 serviços e carrega os 10M | Sempre |
 | `bootstrap.sh` | Materializa CAggs, comprime, faz o backfill do ClickHouse, cria perfil de acesso e stanzas de backup | Sempre — é idempotente |
+
+Se algum passo falhar no meio, **rode `bash scripts/bootstrap.sh` de novo**: ele
+é idempotente, checa o que já existe e refaz só o que falta — inclusive o
+certificado, se o passo 2 tiver sido pulado.
 
 **Por que o certificado vem antes do `up`:** a chave privada não é versionada
 (`.gitignore`), então num clone limpo ela não existe. Sem ela o MinIO não sobe,
