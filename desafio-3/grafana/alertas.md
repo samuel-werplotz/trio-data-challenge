@@ -220,3 +220,37 @@ escolha depende do volume: `PutMetricData` direto do worker (simples, custa por
 chamada) ou o **CloudWatch Agent com o receiver Prometheus**, que faz scrape do
 `/metrics` que já existe e republica. A segunda preserva o formato atual — os
 mesmos dashboards e as mesmas expressões continuam valendo.
+
+---
+
+## Como estas regras são testadas
+
+Existir, carregar e estar saudável são três propriedades que o
+`DicionarioDesatualizado` cumpria **enquanto media a série errada**. Por isso há
+teste unitário das regras, não só da presença delas:
+
+```bash
+bash scripts/tests/alertas-test.sh
+```
+
+`promtool test rules` avalia cada regra contra séries sintéticas com **tempo
+simulado** — é o que torna viável exercitar um `for: 10m` em milissegundos, e
+testar cenários (worker morto, erro no pipeline, alvo fora) sem quebrar nada no
+ambiente real.
+
+São **11 casos** em `init/prometheus/alert_tests.yml`, e cada regra tem os dois
+lados:
+
+| Regra | Dispara quando | E fica quieta quando |
+|---|---|---|
+| PipelineParado | Sem gravar **e** com lag | Sem gravar **sem** lag (ocioso) |
+| LagCrescente | Lag 90 s, após o `for: 5m` | Lag 10 s, dentro do alvo |
+| ErrosNoPipeline | Contador subindo | Contador parado em zero |
+| DicionarioDesatualizado | `check_age` crescendo | Worker checando em legado estático |
+| AlvoDeColetaFora | `up == 0` | `up == 1` |
+
+**O par negativo importa tanto quanto o positivo.** O caso
+"DicionarioDesatualizado NÃO dispara com worker saudável em legado estático" é
+literalmente o falso positivo que existia — reverter o alerta para a métrica
+antiga faz **os dois** casos dessa regra falharem, verificado por teste de
+mutação.

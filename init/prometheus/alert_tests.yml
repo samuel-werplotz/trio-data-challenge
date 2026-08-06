@@ -1,0 +1,179 @@
+# alert_tests.yml — teste unitário das 6 regras de alerta.
+#
+# Por que isto existe: a suíte já verificava que as regras EXISTEM, CARREGAM e
+# estão saudáveis. Nenhum teste provava que elas DISPARAM quando deveriam — e
+# essa é exatamente a lacuna que deixou passar o falso positivo do
+# DicionarioDesatualizado, que estava carregado, sintaticamente correto, e
+# media a série errada.
+#
+# `promtool test rules` avalia as regras contra séries sintéticas, sem tocar o
+# ambiente. É o único jeito prático de testar um `for: 10m` sem esperar 10
+# minutos: o tempo aqui é simulado.
+#
+# Rodar:  bash scripts/tests/alertas-test.sh
+rule_files:
+  - alert_rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  # ---------------------------------------------------------------- SEV-1
+  - interval: 1m
+    name: PipelineParado exige as DUAS condicoes
+    input_series:
+      # Worker sem gravar ha muito tempo (timestamp fixo e antigo) E lag alto.
+      - series: 'sync_last_success_timestamp'
+        values: '0+0x20'
+      - series: 'sync_lag_seconds'
+        values: '120+0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PipelineParado
+        exp_alerts:
+          - exp_labels:
+              severity: SEV-1
+              componente: pipeline
+            exp_annotations:
+              resumo: "Pipeline sem gravar há mais de 5 min com lag acumulado"
+              descricao: "sync_last_success_timestamp não avança há 600s e há dado represado na origem. Origem pode estar saudável — o sintoma é invisível pelo lado da aplicação."
+              acao: "Acordar o plantão. Ver desafio-3/incident-response.md"
+
+  - interval: 1m
+    name: PipelineParado NAO dispara so com last_success velho
+    input_series:
+      # Sem gravar, mas SEM trabalho represado: e ambiente ocioso, nao falha.
+      # E o cenario real deste repositorio depois que o seed termina.
+      - series: 'sync_last_success_timestamp'
+        values: '0+0x20'
+      - series: 'sync_lag_seconds'
+        values: '0+0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PipelineParado
+        exp_alerts: []
+
+  # ---------------------------------------------------------------- SEV-2
+  - interval: 1m
+    name: LagCrescente dispara acima de 60s, e so apos o for
+    input_series:
+      - series: 'sync_lag_seconds'
+        values: '90+0x20'
+    alert_rule_test:
+      # for: 5m — em 3 min ainda esta pending, nao firing
+      - eval_time: 3m
+        alertname: LagCrescente
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: LagCrescente
+        exp_alerts:
+          - exp_labels:
+              severity: SEV-2
+              componente: pipeline
+            exp_annotations:
+              resumo: "Lag do sync-worker acima de 60s por 5 min"
+              descricao: "Lag atual: 90s. Alvo de freshness é < 30s."
+              acao: "Investigar duração do ciclo e volume por lote no dashboard Pipeline"
+
+  - interval: 1m
+    name: LagCrescente ignora lag dentro do alvo
+    input_series:
+      - series: 'sync_lag_seconds'
+        values: '10+0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: LagCrescente
+        exp_alerts: []
+
+  # ---------------------------------------------------------------- SEV-3
+  - interval: 1m
+    name: ErrosNoPipeline dispara com qualquer erro na janela
+    input_series:
+      # Contador que sobe 1 por minuto: increase()[15m] > 0
+      - series: 'sync_errors_total{type="clickhouse"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: ErrosNoPipeline
+        exp_alerts:
+          - exp_labels:
+              severity: SEV-3
+              componente: pipeline
+              type: clickhouse
+            exp_annotations:
+              resumo: "sync-worker registrando erros (clickhouse)"
+              descricao: "15 erro(s) nos últimos 15 min."
+              acao: "Investigar em horário comercial; o retry pode estar absorvendo"
+
+  - interval: 1m
+    name: ErrosNoPipeline fica quieto sem erro
+    input_series:
+      - series: 'sync_errors_total{type="clickhouse"}'
+        values: '0+0x20'
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: ErrosNoPipeline
+        exp_alerts: []
+
+  # -------------------------------------------------- a regra que foi corrigida
+  - interval: 1m
+    name: DicionarioDesatualizado dispara quando o ref-sync PARA de checar
+    input_series:
+      # check_age crescendo: o worker nao conclui ciclo ha muito tempo.
+      - series: 'refsync_check_age_seconds'
+        values: '900+60x20'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: DicionarioDesatualizado
+        exp_alerts:
+          - exp_labels:
+              severity: SEV-3
+              componente: pipeline-referencia
+            exp_annotations:
+              resumo: "ref-sync sem concluir ciclo há mais de 15 min"
+              descricao: "Última verificação do Dictionary há 1380s."
+              acao: "Verificar ref-sync e conectividade com o legado"
+
+  - interval: 1m
+    name: DicionarioDesatualizado NAO dispara com worker saudavel em legado estatico
+    input_series:
+      # O caso que gerava falso positivo na versao antiga: o ref-sync checa a
+      # cada 5 min (check_age reseta), mas o DADO nunca muda (dictionary_age
+      # cresce sem parar). A regra tem de olhar so a primeira serie.
+      - series: 'refsync_check_age_seconds'
+        values: '60 120 180 240 300 0 60 120 180 240 300 0 60 120 180 240'
+      - series: 'refsync_dictionary_age_seconds'
+        values: '10000+60x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: DicionarioDesatualizado
+        exp_alerts: []
+
+  # ---------------------------------------------------------- infraestrutura
+  - interval: 1m
+    name: AlvoDeColetaFora dispara quando um alvo para de responder
+    input_series:
+      - series: 'up{job="sync-worker", instance="sync-worker:8001"}'
+        values: '0+0x20'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: AlvoDeColetaFora
+        exp_alerts:
+          - exp_labels:
+              severity: SEV-2
+              componente: observabilidade
+              job: sync-worker
+              instance: sync-worker:8001
+            exp_annotations:
+              resumo: "Prometheus não coleta sync-worker há 5 min"
+              descricao: "Sem esta série, os alertas que dependem dela ficam cegos."
+              acao: "Verificar o container do alvo e a rede entre ele e o Prometheus"
+
+  - interval: 1m
+    name: AlvoDeColetaFora fica quieto com tudo no ar
+    input_series:
+      - series: 'up{job="sync-worker", instance="sync-worker:8001"}'
+        values: '1+0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AlvoDeColetaFora
+        exp_alerts: []

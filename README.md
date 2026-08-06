@@ -155,7 +155,7 @@ docker compose up -d    # volta de onde parou. ~13 s
 
 Não é preciso repetir seed, `bootstrap.sh` nem backup. **Medido num ciclo
 completo:** 10.000.000 nas duas pontas, CAggs materializados e a suíte em
-`263 pass, 0 fail` depois do retorno.
+`264 pass, 0 fail` depois do retorno.
 
 | Comando | O que faz | Dado |
 |---|---|---|
@@ -415,8 +415,9 @@ O custo em dólar de promover isso a padrão está em
 ## Testes
 
 ```bash
-bash scripts/tests/run_all.sh   # 264 verificações de regressão do produto
-bash scripts/tests/ha-smoke.sh  # 11 verificações do modo HA (exige o compose HA)
+bash scripts/tests/run_all.sh    # 264 verificações de regressão do produto
+bash scripts/tests/alertas-test.sh # 11 casos: as 6 regras disparam e silenciam
+bash scripts/tests/ha-smoke.sh   # 11 verificações do modo HA (exige o compose HA)
 ```
 
 **A suíte leva ~3 min, e isso é de propósito:** antes de medir qualquer coisa,

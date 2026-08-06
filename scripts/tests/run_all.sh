@@ -981,12 +981,21 @@ if container_up prometheus; then
     bash -c 'R=$(curl -s localhost:9090/api/v1/rules);
              [ "$(echo "$R" | grep -o "\"type\":\"alerting\"" | wc -l)" -eq 6 ] \
              && ! echo "$R" | grep -q "\"health\":\"err\""'
+  # 15.21: 15.17 e 15.3 provam que as regras EXISTEM e carregam. Este prova que
+  # elas DISPARAM — a propriedade que faltava, e que deixou passar o falso
+  # positivo do DicionarioDesatualizado (carregado, sintaticamente correto,
+  # medindo a serie errada). O promtool avalia contra series sinteticas com
+  # tempo SIMULADO: um `for: 10m` roda em milissegundos, e da para exercitar
+  # worker morto e erro no pipeline sem quebrar nada no ambiente real.
+  # Os 11 casos estao em init/prometheus/alert_tests.yml.
+  check 15.21 "as 6 regras disparam e silenciam como especificado" \
+    bash -c 'MSYS_NO_PATHCONV=1 docker exec trio-prometheus promtool test rules /etc/prometheus/alert_tests.yml >/dev/null 2>&1'
   # Prometheus sem prometheus.yml sobe e reinicia em loop — era o estado antes
   # desta etapa. Um restart count alto denuncia a regressao.
   check 15.20 "prometheus estavel (responde /-/healthy)" \
     bash -c 'curl -sf localhost:9090/-/healthy >/dev/null'
 else
-  for t in 15.2 15.3 15.20; do skip "$t" "prometheus fora do ar"; done
+  for t in 15.2 15.3 15.20 15.21; do skip "$t" "prometheus fora do ar"; done
 fi
 
 # Etapa documental e de provisionamento: nao pode ter tocado o dataset.
