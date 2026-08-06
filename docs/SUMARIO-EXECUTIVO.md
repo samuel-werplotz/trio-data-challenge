@@ -1,5 +1,7 @@
 # Sumário executivo
 
+[← Voltar ao README](../README.md)
+
 Plataforma de dados para infraestrutura de pagamentos, construída e medida em
 ambiente reproduzível: **10 milhões de transações** em 12 meses no TimescaleDB
 transacional, replicadas para ClickHouse analítico por um pipeline próprio, com

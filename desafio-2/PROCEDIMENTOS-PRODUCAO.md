@@ -1,5 +1,7 @@
 # Procedimentos de produção — mudanças sem downtime
 
+[← Voltar ao README](../README.md)
+
 Dois procedimentos que o [`ADR.md`](ADR.md) referencia e que o PDF § 7 cobra
 diretamente: **adicionar um consumidor sem impactar as aplicações** e **migrar
 a engine de uma tabela ClickHouse em produção sem downtime**.
@@ -86,7 +88,7 @@ GROUP BY hour, source_institution, destination_institution;
 ```
 
 **O `WHERE` é o procedimento inteiro.** Sem ele, este é exatamente o comando que
-duplicou 10M na etapa 12. Faça o backfill **por partição** se o volume for
+duplicou 10M neste projeto. Faça o backfill **por partição** se o volume for
 grande — um `INSERT SELECT` sobre 12 meses compete por memória com a ingestão.
 
 **Passo 4 — validar antes de publicar.**
@@ -103,7 +105,7 @@ SELECT count() FROM trio_analytics.transactions_raw;
 ```
 
 Divergiu? **Não corrija por cima.** Trunque a tabela de agregação (a raw fica
-intacta), reveja o corte e refaça o passo 3. Foi assim que a etapa 12 se
+intacta), reveja o corte e refaça o passo 3. Foi assim que o backfill do ClickHouse se
 recuperou.
 
 ### Impacto nas aplicações existentes

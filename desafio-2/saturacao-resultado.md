@@ -1,5 +1,7 @@
 # Teste de saturacao do pipeline — resultado
 
+[← Voltar ao README](../README.md)
+
 Gerado por `scripts/saturacao-pipeline.sh` em 2026-08-05 01:39 UTC.
 Ambiente: Docker local (ver `scripts/ambiente/DOCKER-LOCAL.md`), nao AWS.
 
@@ -46,7 +48,7 @@ lag por memória por ciclo.
 > nenhum desses patamares chega perto do lote. Só o de **60.000** — o único
 > acima de `BATCH_MAX_ROWS` — exercitou a retomada dentro de um mesmo
 > `updated_at`, e foi ele que revelou o deadlock de watermark corrigido na
-> **etapa 20.5** (10.000 de 60.000 linhas perdidas em silêncio).
+> **este teste** (10.000 de 60.000 linhas perdidas em silêncio).
 
 ## O que este teste não mede
 

@@ -1,5 +1,7 @@
 # Resposta a incidente — SEV-1: dashboards de Pix zerados há 2 horas
 
+[← Voltar ao README](../README.md)
+
 > **CENÁRIO (PDF § 5.2 C).** 06h47. Dashboards de Pix mostram volume **ZERO**
 > nas últimas 2h. Aplicações retornam dados desatualizados. Transações estão
 > sendo processadas normalmente no TimescaleDB.

@@ -1,9 +1,11 @@
 # REPORT — Desafio 1: medições antes/depois
 
+[← Voltar ao README](../README.md)
+
 Dataset: 10.000.000 transações, 500.000 contas, 1.442.266 eventos de
 reconciliação, 338 chunks (hypertable de 1 dia), 12 meses.
 
-Protocolo de medição (S06 § O método): cada query roda 4 vezes; a 1ª é
+Protocolo de medição: cada query roda 4 vezes; a 1ª é
 descartada (aquece o cache); registra-se a **mediana das 3 seguintes**.
 `EXPLAIN (ANALYZE, BUFFERS, VERBOSE)` completo em
 `desafio-1/queries/explains/qN_{before,after}.txt`.
@@ -25,8 +27,8 @@ bruto. Índice não resolvia Q1: o `Seq Scan` sobre 2,7 milhões de linhas era
 inerente à pergunta. O CAgg troca isso por uma varredura de ~79 mil buckets
 horários já agregados, e os 95.670 buffers viram 500.
 
-A Q3 aparece duas vezes de propósito. A versão da etapa 07 (índice covering,
-3,3×) e a versão via CAgg (383×) respondem perguntas ligeiramente
+A Q3 aparece duas vezes de propósito. A versão com índice covering (3,3×) e a
+versão via CAgg (383×) respondem perguntas ligeiramente
 diferentes — a do índice ranqueia por **volume financeiro**, a do CAgg por
 **contagem de liquidadas**, porque `amount` não vive no CAgg de latência.
 Não é a mesma query duas vezes: é o trade-off de qual pergunta o agregado
@@ -73,8 +75,8 @@ aqui só custaria escrita e espaço.
 ## Seletividade do índice parcial
 
 `idx_recon_divergent` cobre `WHERE abs(difference) > 0.01`: **114.953 de
-1.442.266 linhas = 7,97%**. É a premissa de seletividade que S06 assume
-(~8%) — um índice parcial que cobrisse a maioria das linhas não teria
+1.442.266 linhas = 7,97%**. Bate com a premissa de ~8% assumida no
+desenho — um índice parcial que cobrisse a maioria das linhas não teria
 vantagem sobre um índice comum.
 
 > Nota de honestidade sobre o dado: a primeira versão do gerador produzia
@@ -82,7 +84,7 @@ vantagem sobre um índice comum.
 > das reconciliações divergirem — toda TED de R$ 100 mil divergia em R$ 100 e
 > o filtro `> 0,01` não filtrava nada. Também gravava `reconciled_at = now()`
 > para todas as linhas, então "últimos 30 dias" incluía 100% da tabela.
-> Ambos corrigidos na etapa 07 (divergência absoluta em centavos, aplicada a
+> Ambos corrigidos no gerador (divergência absoluta em centavos, aplicada a
 > ~8% das linhas; `reconciled_at` derivado de `created_at` + atraso de até
 > 8h), e as medições de Q2 foram **refeitas do zero** — before e after — sobre
 > o dado corrigido. Os números de Q2 nesta tabela são todos pós-correção.
@@ -120,13 +122,13 @@ estão dentro da janela e seguem descomprimidos, por design).
 | Só os dados da tabela | 1.188 MB | 51 MB | **23,5×** |
 | Só os índices | 1.484 MB | 5,3 MB | 287× |
 
-**A taxa total ficou abaixo da expectativa de 10–20× de S03, e o motivo é
-interessante o bastante para estar aqui.** A compressão da *tabela* entregou
-23,5×, acima do previsto. O que puxa o número para baixo é que este dataset
-carrega **1.484 MB de índice para 1.188 MB de dado** — os 4 índices criados na
-etapa 07 pesam mais que a própria tabela. A expectativa de S03 assume a razão
-tabela/índice de uma hypertable sem os índices de otimização que a etapa 07
-acrescentou de propósito.
+**A taxa total ficou abaixo dos 10–20× que a documentação do TimescaleDB leva a
+esperar, e o motivo é interessante o bastante para estar aqui.** A compressão da
+*tabela* entregou 23,5×, acima do previsto. O que puxa o número para baixo é que
+este dataset carrega **1.484 MB de índice para 1.188 MB de dado** — os 4 índices
+criados para otimizar Q2/Q3 pesam mais que a própria tabela. Os 10–20× de
+referência pressupõem a razão tabela/índice de uma hypertable **sem** esses
+índices, que aqui foram acrescentados de propósito.
 
 Ou seja: as duas otimizações do desafio se pagam uma contra a outra. Índice
 acelera query pontual e custa espaço; compressão devolve espaço. A leitura
@@ -181,14 +183,14 @@ enquanto o dataset de 12 meses for o objeto da avaliação.
 
 ## Limitação declarada — P95/P99 sem o toolkit
 
-S03 especifica `percentile_agg` (TDigest) para o CAgg de latência. **A
+O desenho previa `percentile_agg` (TDigest) para o CAgg de latência. **A
 extensão `timescaledb_toolkit` não existe na imagem fixada
 `timescale/timescaledb:latest-pg16`** — verificado: ausente de
 `pg_available_extensions` e sem binários no container. Ela vem nas imagens
 `-ha`, e trocar a imagem violaria a reprodutibilidade que o projeto assumiu
 como requisito.
 
-Adotamos o plano B previsto pelo próprio S03:
+Adotamos o plano B já previsto no desenho:
 
 - O **CAgg materializa o que é somável** — contagens, `sum(latência)`,
   `sum(latência²)`, min e max. Essas colunas rollupam de dia para mês sem
@@ -295,14 +297,14 @@ manter a exatidão e pagar a varredura.
 devolveria `0,0000` para toda instituição: um zero que parece métrica e é só
 o filtro se olhando no espelho.
 
-As colunas foram mantidas porque o schema é contrato de S03, mas ambas levam
+As colunas foram mantidas porque o schema é contrato fechado, mas ambas levam
 comentário de aviso no DDL, e a Q3 via CAgg **não** calcula taxa de falha —
 essa vem do `cagg_volume_hourly`, que agrega por `status` sem filtrar nada.
 
-## ClickHouse — backfill e query sub-segundo (etapa 12)
+## ClickHouse — backfill e query sub-segundo
 
 Backfill direto PostgreSQL→ClickHouse via `postgresql()` table function, em
-12 blocos mensais (S05 § Backfill inicial), sem passar pelo Kafka —
+12 blocos mensais (um por mês do dataset), sem passar pelo Kafka —
 `scripts/backfill-clickhouse.sh`, 56s no total.
 
 | Verificação | Resultado |
@@ -315,12 +317,13 @@ Backfill direto PostgreSQL→ClickHouse via `postgresql()` table function, em
 
 ### A armadilha real: MV já ativa duplica o backfill
 
-As 2 MVs (criadas na etapa 11) são **gatilho de inserção**, não view — e já
-estavam ativas quando o backfill do raw rodou. Elas capturaram sozinhas cada
+As 2 MVs são **gatilho de inserção**, não view — e já estavam ativas, criadas
+junto com o schema, quando o backfill do raw rodou. Elas capturaram sozinhas cada
 um dos 12 blocos mensais inseridos em `transactions_raw`. Rodar o
-`INSERT SELECT` de backfill das MVs *depois* disso (como S04 descreve para o
-cenário "MV criada depois do dado já carregado") duplicou tudo: **20.000.000
-agregados em vez de 10.000.000**, verificado com `countMerge` agrupado.
+`INSERT SELECT` de backfill das MVs *depois* disso — que é o procedimento
+padrão para o cenário "MV criada depois do dado já carregado" — duplicou tudo:
+**20.000.000 agregados em vez de 10.000.000**, verificado com `countMerge`
+agrupado.
 
 Corrigido truncando as 2 tabelas de agregação e rodando o `INSERT SELECT`
 uma única vez, sem novo `INSERT` em `transactions_raw` no meio — aí sim os
@@ -328,12 +331,12 @@ uma única vez, sem novo `INSERT` em `transactions_raw` no meio — aí sim os
 tabela de agregação já tem linhas antes de rodar o `INSERT SELECT`, para não
 reproduzir o erro numa reexecução.
 
-**A lição, além do número:** "MV é gatilho, backfill posterior é obrigatório"
-(S04) é meia verdade sem o contexto de *quando* a MV foi criada em relação
-ao backfill do raw. Aqui a ordem real (schema com MV ativa → backfill do raw)
-é diferente do cenário canônico que S04 descreve (dado já carregado → MV
-criada depois) — e a mesma frase de aviso vira armadilha inversa se aplicada
-sem atenção à ordem real dos eventos.
+**A lição, além do número:** o conselho corrente — "MV é gatilho, então o
+backfill posterior é obrigatório" — é meia verdade sem o contexto de *quando* a
+MV foi criada em relação ao backfill do raw. Aqui a ordem real foi schema com MV
+ativa → backfill do raw, o inverso do cenário canônico (dado já carregado → MV
+criada depois). A mesma frase de aviso vira armadilha se aplicada sem olhar a
+ordem real dos eventos.
 
 ### Query do Grafana em sub-segundo — Pix 24h vs D-1
 
@@ -341,8 +344,8 @@ Requisito do PDF: taxa de sucesso de Pix por instituição por hora nas
 últimas 24h, comparada ao mesmo horário do dia anterior, sub-segundo mesmo
 com centenas de milhões de registros.
 
-Protocolo de S04 § Como medimos: `SET log_queries=1`, `SYSTEM FLUSH LOGS`,
-mediana de 3 execuções (1ª descartada) via `system.query_log`.
+Protocolo: `SET log_queries=1`, `SYSTEM FLUSH LOGS`, mediana de 3 execuções
+(1ª descartada) lida em `system.query_log`.
 
 | Execução | `query_duration_ms` | `read_rows` |
 |---|---|---|
@@ -362,7 +365,7 @@ para os dois períodos (48h com classificação por `if()`, não 2 SELECTs);
 corta a maior parte do dado logo no início; filtro de 48h toca no máximo
 2 partições mensais.
 
-**Correção real sobre a query ilustrativa de S04:** o SQL de referência usa
+**Correção real sobre o SQL de referência do desenho:** ele usa
 `countIfMerge(cnt)` assumindo que `cnt` já veio de um `countIfState`
 filtrado por sucesso. Na nossa `status_funnel`, `status` é coluna do
 `GROUP BY` (uma linha por hora/instituição/status), e `cnt` foi gravado com
@@ -370,7 +373,7 @@ filtrado por sucesso. Na nossa `status_funnel`, `status` é coluna do
 `ILLEGAL_TYPE_OF_ARGUMENT`. A query real deriva "sucesso" filtrando
 `status='settled'` na leitura (`sumIf` sobre o valor já desagregado por
 `countMerge`), não na agregação. Erro pego rodando a query de verdade, não
-copiando o SQL de S04 sem testar.
+copiando o SQL de referência sem testar.
 
 ## Dictionary vs JOIN — quando usar cada um (PDF § 3.2 C.3)
 
@@ -392,13 +395,13 @@ nome em cada linha do resultado. É onde o Dictionary foi posto para trabalhar
 (`/institutions/{code}/health`).
 
 > **Estes números substituem uma medição anterior (2,9× / empate / empate) que
-> estava sistematicamente subestimada.** A medição da etapa 16 rodou contra um
+> estava sistematicamente subestimada.** A primeira medição rodou contra um
 > Dictionary que resolvia apenas **33,55%** das linhas — os códigos do seed do
 > legado (`001`–`015`) não batiam com os das transações (`237`, `341`, `104`…),
 > e só o `001` coincidia. Um lookup que devolve o *default* sai pelo caminho
 > curto e **não paga o custo real da resolução**, então o `dictGet` parecia mais
 > lento do que é e a JOIN — que também não achava nada — parecia competitiva.
-> Corrigido o seed (etapa 17.5), a resolução foi a **100%** e os três padrões
+> Corrigido o seed, a resolução foi a **100%** e os três padrões
 > passaram a favorecer o Dictionary. A lição vale além deste número: **medir
 > sobre dado que não casa mede o caminho de erro, não o caminho de uso.**
 
@@ -472,10 +475,11 @@ que precisa mudar, não o destino.
 
 ## Limitação declarada: `accounts` não vai ao ClickHouse (e o que isso custa)
 
-A tabela `accounts` é a única com PII e **nunca é replicada para o ClickHouse**,
-por desenho de S01. `transactions_raw` referencia o titular apenas por
-`source_account_id` (inteiro). Verificado por varredura de `system.columns` na
-etapa 16: **zero colunas de dado pessoal** no motor analítico.
+A tabela `accounts` é a única com PII e **nunca é replicada para o ClickHouse** —
+decisão tomada no schema, antes de existir pipeline. `transactions_raw`
+referencia o titular apenas por `source_account_id` (inteiro). Verificado por
+varredura de `system.columns`: **zero colunas de dado pessoal** no motor
+analítico.
 
 O ganho é direto — LGPD, superfície de auditoria e o procedimento de eliminação
 ficam contidos num único banco. **O custo, que vale declarar antes que

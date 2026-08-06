@@ -7,18 +7,11 @@ referência, observabilidade, backup testado e procedimentos de operação.
 **10.000.000 de transações** em 12 meses, pipeline com freshness de ~10 s, 4
 dashboards, 6 alertas e 171 testes de regressão. Sobe com um comando.
 
-> **Tem 2 minutos?** → [`docs/SUMARIO-EXECUTIVO.md`](docs/SUMARIO-EXECUTIVO.md)
-> — o que foi construído, os 5 números, os 3 riscos com dono e prazo, e o
-> roadmap 30/60/90.
->
-> **Vai avaliar como isto foi feito?** → [`docs/METODOLOGIA.md`](docs/METODOLOGIA.md)
-> — **usei IA generativa nesta entrega, e este documento explica exatamente
-> como**: arquitetura decidida antes do código, IA restrita a executar dentro de
-> contrato fechado, e todo resultado medido contra os 10M antes de entrar.
-
 ---
 
 ## Quick Start
+
+Quatro comandos, ≈ 6 minutos do zero:
 
 ```bash
 cp .env.example .env
@@ -27,16 +20,20 @@ docker compose up -d
 bash scripts/bootstrap.sh
 ```
 
-O `gen-certs.sh` gera o certificado auto-assinado que o MinIO usa para servir
-HTTPS. **É obrigatório antes do primeiro `up`**: a chave privada não é
-versionada (`.gitignore`), então num clone limpo ela não existe — e sem ela o
-MinIO não sobe, o bucket de backup não é criado e o `archive_command` do WAL
-falha nos dois Postgres. Roda em segundos e só precisa uma vez.
+| Comando | O que faz | Quando repetir |
+|---|---|---|
+| `gen-certs.sh` | Gera o certificado HTTPS do MinIO. **Segundos** | Uma vez por clone |
+| `docker compose up -d` | Sobe os 13 serviços e carrega os 10M | Sempre |
+| `bootstrap.sh` | Materializa CAggs, comprime, faz o backfill do ClickHouse, cria perfil de acesso e stanzas de backup | Sempre — é idempotente |
 
-O `up` sobe os 13 serviços e carrega os 10M. O `bootstrap.sh` completa o que o
-`init/` não consegue sozinho — materialização dos CAggs (que não roda dentro de
-transação), compressão inicial, backfill do ClickHouse, perfil de acesso e
-stanzas de backup. É idempotente, e revalida o certificado antes de tudo.
+**Por que o certificado vem antes do `up`:** a chave privada não é versionada
+(`.gitignore`), então num clone limpo ela não existe. Sem ela o MinIO não sobe,
+o bucket de backup não é criado e o `archive_command` do WAL falha nos dois
+Postgres.
+
+**Por que o `up` sozinho não basta:** a materialização dos continuous aggregates
+não roda dentro de transação, então o `init/` do Postgres não consegue fazê-la.
+Sem os CAggs, a query Q1 continua levando 12 segundos em vez de 23 ms.
 
 **Tempos medidos numa execução do zero** (volumes apagados):
 
@@ -65,6 +62,53 @@ curl -s localhost:8000/ops/volume-now | head -c 300
 bash scripts/tests/run_all.sh
 ```
 
+Depois disso, os dashboards estão em **http://localhost:3000** (`admin`/`admin`)
+— veja a nota logo abaixo sobre por que eles aparecem **parados**.
+
+---
+
+## Os dashboards, e por que eles começam parados
+
+Quatro dashboards provisionados automaticamente, sem importar nada:
+**Trio · Pipeline**, **Trio · TimescaleDB**, **Trio · ClickHouse** e
+**Trio · PostgreSQL Legado**.
+
+> **O painel de Pipeline vai mostrar lag zero e throughput zero — e isso está
+> correto.** O seed carrega 12 meses de histórico e termina; a partir daí nenhuma
+> transação nova entra, então o worker roda seus ciclos de 10 s, não encontra
+> linhas e não grava nada. Pipeline ocioso, não pipeline quebrado.
+
+Para ver os painéis reagirem, gere movimento na origem:
+
+```bash
+# Opção 1 — a demonstração completa: INSERT → pending → UPDATE → settled
+bash desafio-2/demo-sync-worker.sh
+
+# Opção 2 — só volume, para ver os gráficos se moverem
+docker exec trio-timescaledb psql -U trio -d trio_transactions -c \
+  "INSERT INTO transactions (external_id, source_institution, destination_institution,
+                             source_account_id, destination_account_id, amount, type, status)
+   SELECT gen_random_uuid(), '001', '237', 1, 2, 100.50, 'pix', 'pending'
+     FROM generate_series(1,5000)"
+```
+
+Com **Trio · Pipeline** aberto, em ~10 s o lag sobe e volta, o throughput salta,
+e *"tempo desde a última gravação bem-sucedida"* reseta. Esse painel é um
+timestamp que envelhece, não um contador: contador que para de crescer é
+indistinguível de "não houve movimento", enquanto timestamp velho é afirmativo.
+
+---
+
+## Dois atalhos, se o tempo for curto
+
+**Tem 2 minutos?** → [`docs/SUMARIO-EXECUTIVO.md`](docs/SUMARIO-EXECUTIVO.md).
+Os 5 números, os 3 riscos com dono e prazo, e o roadmap 30/60/90.
+
+**Vai avaliar como isto foi feito?** → [`docs/METODOLOGIA.md`](docs/METODOLOGIA.md).
+Usei IA generativa nesta entrega, e esse documento explica exatamente como:
+arquitetura decidida antes do código, IA restrita a executar dentro de contrato
+fechado, e todo resultado medido contra os 10M antes de entrar no repositório.
+
 ---
 
 ## Os documentos que importam
@@ -81,12 +125,14 @@ Na ordem de quem lê. Todo o resto é código ou teste.
 | 6 | [DATA-CHAMPIONS](docs/DATA-CHAMPIONS.md) | Como um analista usa a plataforma sem ajuda |
 | 7 | [SEGURANCA-E-GOVERNANCA](docs/SEGURANCA-E-GOVERNANCA.md) | Perfis, cifra, auditoria de PII, BCB 4.658 |
 | 8 | [desafio-3/incident-response](desafio-3/incident-response.md) | O que fazer às 3h da manhã |
+| 9 | [CUSTO-AWS](docs/CUSTO-AWS.md) | **Quanto isto custa em produção** — US$ 844/mês, e US$ 2.700 no cenário 10× |
 
-Complementos: [CUSTO-AWS](docs/CUSTO-AWS.md) (TCO em USD/mês) ·
-[HA-E-ROTEIRO-DEMO](docs/HA-E-ROTEIRO-DEMO.md) (HA comprovado + roteiro da
-apresentação) ·
+Complementos:
 [PROCEDIMENTOS-PRODUCAO](desafio-2/PROCEDIMENTOS-PRODUCAO.md) (novo consumidor e
-troca de engine sem downtime).
+troca de engine sem downtime — as perguntas 2 e 3 do PDF § 7) ·
+[HA-CLICKHOUSE](docs/HA-CLICKHOUSE.md) (o modo replicado, comprovado por teste
+de failover) ·
+[desafio-3/runbook](desafio-3/runbook.md) (storage em 92%).
 
 ---
 
@@ -98,7 +144,15 @@ troca de engine sem downtime).
 | **Compressão** | **5,0×** (23,5× só na tabela) | 2.674 MB → 536 MB |
 | **Freshness do pipeline** | **~10 s** (alvo < 30 s) | O painel mostra o agora |
 | **RTO / RPO medidos** | **22 s / 60 s** | Restore executado de verdade, com perda simulada |
-| **Custo estimado em produção** | **≈ US$ 844/mês** | ≈ US$ 2.700 no cenário de 10× |
+| **Custo estimado em produção** | **≈ US$ 844/mês** | ≈ US$ 2.700 no cenário de 10× — [abertura linha a linha](docs/CUSTO-AWS.md) |
+
+**Sobre o custo:** o número acima não é chute de ordem de grandeza.
+[`docs/CUSTO-AWS.md`](docs/CUSTO-AWS.md) abre os dois cenários (10M e 100M
+transações/mês) item por item, **com a premissa de dimensionamento ao lado de
+cada linha** — é a premissa que se discute numa aprovação de orçamento, não o
+total. Inclui o que a fila gerenciada custaria (≈ US$ 620/mês, 73% da
+plataforma) e por isso foi adiada, a diferença entre Aurora e RDS, e o que a
+estimativa **não** cobre.
 
 ---
 
@@ -209,6 +263,12 @@ leitura e escrita continuam, e que o nó que volta se recupera sozinho.
 
 Fica fora do `up` padrão de propósito: o critério de aceite nº 1 do PDF é o
 ambiente subir com um comando, e cada peça a mais é uma chance a mais de falhar.
+
+A decisão completa — por que nó único, o que ele custa em minutos de
+indisponibilidade, a sequência de migração e as três armadilhas do Keeper que só
+apareceram montando — está em [`docs/HA-CLICKHOUSE.md`](docs/HA-CLICKHOUSE.md).
+O custo em dólar de promover isso a padrão está em
+[`docs/CUSTO-AWS.md`](docs/CUSTO-AWS.md).
 
 ---
 

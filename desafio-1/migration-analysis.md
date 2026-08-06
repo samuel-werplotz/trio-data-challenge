@@ -1,5 +1,7 @@
 # Migração do legado para Aurora — análise (documento, não executado)
 
+[← Voltar ao README](../README.md)
+
 ## Inventário
 
 | Item | Valor |
@@ -151,7 +153,7 @@ SELECT setval('partner_institutions_id_seq', (SELECT max(id) FROM partner_instit
 SELECT setval('institution_configs_id_seq',  (SELECT max(id) FROM institution_configs));
 ```
 
-> Este projeto já esbarrou nesta classe de erro: na etapa 10, o seed assumia
+> Este projeto já esbarrou nesta classe de erro: o seed do legado assumia
 > `id` contíguo a partir de 1, e `SERIAL` **não é transacional** — um rollback
 > deixou buracos e quebrou a FK. A lição vale igual no cutover.
 
@@ -207,12 +209,12 @@ sem fuso continuam existindo até uma migração de schema deliberada — a dív
 real (fuso horário em sistema de pagamento multi-fuso) é projeto à parte. SQL,
 índices e queries são PostgreSQL-compatíveis e não mudam. O que muda é a
 economia de I/O (storage distribuído via rede, não disco local — vale remedir
-plano após migrar) e o backup, que sai de `pgBackRest` operado (S07 Parte 2)
+plano após migrar) e o backup, que sai de `pgBackRest` operado
 para gerenciado.
 
 ## As 2 queries complexas — antes/depois
 
-Protocolo de S06/S07 (4 execuções, 1ª descartada, mediana das 3 seguintes).
+Protocolo de medição: 4 execuções, 1ª descartada, mediana das 3 seguintes.
 "Antes" = bloat presente, **sem `ANALYZE`** desde a criação; "depois" = mesmo
 bloat físico, só estatísticas atualizadas (nenhum `VACUUM` rodou entre as
 duas medições — isolando o efeito de estimativa, não de espaço).
@@ -224,7 +226,7 @@ duas medições — isolando o efeito de estimativa, não de espaço).
 
 Tempo de Q1 não mudou porque o planner já escolhia `Hash Join` mesmo com a
 estimativa errada — volume baixo demais para virar `Nested Loop` (o pior caso
-de S07). Em produção, com tabelas maiores, é exatamente esse tipo de erro de
+). Em produção, com tabelas maiores, é exatamente esse tipo de erro de
 estimativa que empurra o planner para `Nested Loop` sobre milhões de linhas.
 Reportar o resultado real — sem ganho de tempo, com ganho de estimativa — é
 mais honesto que forçar a narrativa esperada. Arquivos completos:

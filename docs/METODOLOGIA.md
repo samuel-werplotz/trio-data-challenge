@@ -1,5 +1,7 @@
 # Metodologia — como esta entrega foi construída
 
+[← Voltar ao README](../README.md)
+
 > O PDF do desafio (§ 8) diz que não é aceitável *"uso indiscriminado de IA
 > generativa **sem revisão crítica** — queremos ver seu raciocínio e
 > experiência, não output de LLM"*.
@@ -14,7 +16,7 @@
 
 ## 1. A divisão de responsabilidade
 
-A regra que governou os 7 dias, em uma linha:
+A regra que governou os 3 dias, em uma linha:
 
 > **A IA escreve. A arquitetura decide. A medição julga.**
 
@@ -50,7 +52,7 @@ Exemplos do que ficou travado antes de existir código:
 
 ## 3. Como cada mudança entrava no projeto
 
-O ciclo, aplicado a cada uma das 25 etapas:
+O ciclo, aplicado a cada etapa do trabalho:
 
 ```
  1. Especifico  →  escrevo o que deve existir, o critério de aceite e como se mede
@@ -167,7 +169,7 @@ esconder o uso:
 | Ganho real | Comentário |
 |---|---|
 | **Velocidade de boilerplate** | Dockerfiles, parsing de argumentos, formatação de saída de script |
-| **Densidade de documentação** | 4.000 linhas de markdown em 7 dias não sairiam à mão |
+| **Densidade de documentação** | 4.000 linhas de markdown em 3 dias não sairiam à mão |
 | **Varredura de casos de borda** | Sugeriu verificações que eu teria deixado para depois |
 | **Primeira versão de SQL complexo** | As window functions da Q4 saíram mais rápido |
 
@@ -201,13 +203,29 @@ da banca, não.
 ## 8. Sobre o rastro de construção
 
 O repositório de entrega contém **produto**: código, schema, medições,
-procedimentos. O andaime de construção — especificações internas, roadmap das 25
-etapas, log de execução, matriz de rastreabilidade — foi mantido **fora** do
-commit final, porque é registro de processo, não entregável.
+procedimentos. O andaime de construção — especificações internas, roadmap das
+etapas, log de execução — foi mantido **fora** do commit final, porque é registro
+de processo, não entregável.
 
-Ele existe e está preservado. Se houver interesse em ver como a entrega foi
-construída etapa a etapa, incluindo o que quebrou e o que foi decidido em cada
-uma, posso apresentá-lo — mas ele não polui o repositório que a banca avalia.
+**O rastro que ficou é o que a banca pode auditar sozinha:**
+
+```bash
+git log --oneline
+git log --format="%ad" --date=short | sort | uniq -c   # commits por dia
+```
+
+**34 commits em 3 dias corridos** — do primeiro (`1ee1640`, 03/08 21:27) ao
+último (`ff58a41`, 05/08 18:33). Entre eles o `328e8a9`, uma etapa inteira
+**descartada** (o pipeline CDC). O histórico mostra o que foi construído, em que
+ordem, e o que foi jogado fora — sem depender da minha palavra, que é a
+propriedade que importa aqui.
+
+**Sobre o prazo:** 3 dias é o que os carimbos de tempo mostram, e o ritmo só foi
+possível porque a especificação estava fechada antes (§ 2) e porque a IA
+absorveu o boilerplate (§ 6). O que **não** foi comprimido é o passo 5 do ciclo:
+cada número deste repositório foi medido contra os 10 milhões de linhas. Os três
+defeitos da § 4 apareceram justamente aí — velocidade sem medição teria entregue
+os três em silêncio.
 
 ---
 

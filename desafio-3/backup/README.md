@@ -1,5 +1,7 @@
 # Estratégia de Backup e Recovery — os 3 bancos
 
+[← Voltar ao README](../../README.md)
+
 Responde ao PDF § 5.2 A.1: para cada banco, **tipo de backup**, **frequência e retenção**, **script funcional** e **onde armazenaria em produção na AWS**.
 
 Tudo aqui foi executado neste ambiente. Os números são medidos.

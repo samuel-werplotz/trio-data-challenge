@@ -1,5 +1,7 @@
 # Runbook — Storage em 92%: sanitizar e remover chunks antigos sem downtime
 
+[← Voltar ao README](../README.md)
+
 > **CENÁRIO (PDF § 5.2 A.3).** Timescale Cloud com storage em 92%. Chunks
 > comprimidos de 6+ meses precisam ser sanitizados e removidos **sem downtime**
 > e **sem perder dados agregados nos continuous aggregates**.

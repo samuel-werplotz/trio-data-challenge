@@ -16,7 +16,7 @@
              resolve disponibilidade, não capacidade — os 10M cabem folgados
              num nó. O passo seguinte (2 shards x 2 réplicas) só entra no
              cenário 10x, quando o dado deixa de caber confortavelmente.
-             Ver docs/HA-E-ROTEIRO-DEMO.md. -->
+             Ver docs/HA-CLICKHOUSE.md. -->
         <trio_cluster>
             <shard>
                 <!-- true: o INSERT numa réplica é replicado pelo Keeper, não

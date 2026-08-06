@@ -1,5 +1,7 @@
 # As 5 perguntas da apresentação — respostas
 
+[← Voltar ao README](../README.md)
+
 O PDF § 7 antecipa cinco perguntas de aprofundamento. Cada uma abaixo tem a
 resposta curta (o que eu diria em 30 segundos) e o detalhe técnico que sustenta.
 

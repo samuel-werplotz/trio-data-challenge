@@ -1290,17 +1290,21 @@ check 20.4b "saturacao exercita patamar acima de BATCH_MAX_ROWS" \
 check 20.7 "REPORT nota que em producao o toolkit materializa o percentil" \
   bash -c 'grep -q "percentile_agg" desafio-1/REPORT.md \
         && grep -qi "Timescale Cloud" desafio-1/REPORT.md'
-check 20.8 "roteiro tem a resposta de 20s para o P95 artefato do gerador" \
-  bash -c 'grep -qi "artefato do gerador" docs/HA-E-ROTEIRO-DEMO.md'
-check 20.8b "roteiro cobre os 4 blocos exigidos pelo PDF, incluindo incidente" \
-  bash -c 'grep -qi "incidente" docs/HA-E-ROTEIRO-DEMO.md \
-        && grep -qi "roteiro de demonstra" docs/HA-E-ROTEIRO-DEMO.md'
+# 20.8: o roteiro de apresentacao saiu do repositorio (e material de ensaio, nao
+# entregavel). O que a banca precisa achar e a CORRECAO do P95, documentada no
+# REPORT — que e onde a pergunta "o P95 era 15 horas?" se responde por escrito.
+check 20.8 "REPORT documenta a correcao do P95 e o fator medido" \
+  bash -c 'grep -qi "respondia a pergunta" desafio-1/REPORT.md \
+        && grep -q "17.555" desafio-1/REPORT.md'
+check 20.8b "cenario de incidente cobre as 2 pistas do enunciado" \
+  bash -c 'grep -qi "security group" desafio-3/incident-response.md \
+        && grep -qi "compress" desafio-3/incident-response.md'
 # 20.10: as 5 perguntas do PDF sec. 7 sao cobradas contra o documento de
 # entrega (docs/PERGUNTAS-DA-BANCA.md), nao contra o roadmap de processo.
 check 20.10 "as 5 perguntas do PDF tem resposta desenvolvida" \
   bash -c 'test -f docs/PERGUNTAS-DA-BANCA.md && [ "$(grep -c "^## " docs/PERGUNTAS-DA-BANCA.md)" -ge 5 ]'
 check 20.11 "plano de HA do ClickHouse escrito" \
-  bash -c 'grep -qi "keeper" docs/HA-E-ROTEIRO-DEMO.md'
+  bash -c 'grep -qi "keeper" docs/HA-CLICKHOUSE.md'
 check 20.12 "script do cenario de Q4 existe" test -f desafio-1/scripts/q4-cenario-demo.sh
 
 if container_up timescaledb; then

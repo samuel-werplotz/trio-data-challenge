@@ -2,7 +2,7 @@
 # SUMARIO-EXECUTIVO fechado em configuração, não só em plano).
 #
 # NÃO faz parte do `docker compose up -d` do desafio. O ambiente principal roda
-# ClickHouse em nó único de propósito (ver docs/HA-E-ROTEIRO-DEMO.md § Parte 1):
+# ClickHouse em nó único de propósito (ver docs/HA-CLICKHOUSE.md):
 # o critério de aceite nº 1 do PDF é o `up` subir tudo sem erro, e cada peça a
 # mais é uma chance a mais de ele falhar na frente da banca.
 #

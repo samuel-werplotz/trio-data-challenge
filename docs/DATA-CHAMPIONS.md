@@ -1,5 +1,7 @@
 # Guia do Data Champion
 
+[← Voltar ao README](../README.md)
+
 Este guia é para quem vai **consultar** a plataforma analítica sem operá-la.
 Ele responde: como pedir acesso, o que existe para consultar, o que cada tabela
 responde (e o que ela **não** responde), como escrever uma query que não custa

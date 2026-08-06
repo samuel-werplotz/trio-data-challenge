@@ -1,5 +1,7 @@
 # LGPD — sanitização de PII em chunks comprimidos
 
+[← Voltar ao README](../README.md)
+
 > Requisito do desafio: *"Documente como faria a sanitização de chunks
 > comprimidos que contenham dados com PII (ex: solicitação LGPD de exclusão).
 > Considere o impacto da compressão nesse processo."*
@@ -9,7 +11,7 @@
 **Camada 1 — chunk comprimido resiste a alteração.** Um chunk comprimido é
 reorganizado em formato colunar. `UPDATE`/`DELETE` exigem
 `decompress_chunk()` → alterar → `compress_chunk()`. Custo: descomprimir um
-chunk de ~15 MB (nossos chunks de 1 dia após a compressão da etapa 08) gera
+chunk de ~15 MB (nossos chunks de 1 dia, depois de comprimidos) gera
 dezenas de MB temporários; fazer isso em várias centenas de chunks pode não
 caber em disco.
 
@@ -18,14 +20,14 @@ se um continuous aggregate guardar o nome do titular. E CAgg **não é
 alterável diretamente** — só reprocessado a partir do bruto, que você acabou
 de apagar.
 
-**Camada 3 — o dado já foi replicado.** Com CDC rodando (etapa 13), a PII
+**Camada 3 — o dado já foi replicado.** Com um pipeline de replicação rodando, a PII
 chega ao ClickHouse, possivelmente a backups, possivelmente a dashboard em
 cache. Exclusão real é um problema **distribuído**, não local.
 
 ## A arquitetura que evita o problema
 
-Decisão tomada na etapa 04 (`init/timescaledb/01_schema.sql`), antes de a
-compressão ou o CDC existirem — privacidade por design, não remendo depois:
+Decisão tomada no schema (`init/timescaledb/01_schema.sql`), antes de existir
+compressão ou pipeline — privacidade por design, não remendo depois:
 
 ```
 transactions (hypertable, comprimida, zero PII) ──account_id──▶ accounts (tabela comum, toda a PII)
@@ -35,7 +37,7 @@ transactions (hypertable, comprimida, zero PII) ──account_id──▶ accoun
 
 | Tabela | Contém PII? | É comprimida? | Excluir é... |
 |---|---|---|---|
-| `transactions` | **Não** — só `source_account_id`/`destination_account_id` | Sim (etapa 08) | irrelevante |
+| `transactions` | **Não** — só `source_account_id`/`destination_account_id` | Sim | irrelevante |
 | `accounts` | **Sim** — `holder_name`, `holder_document` | **Não** | `UPDATE` simples |
 | `cagg_volume_hourly`, `cagg_settlement_latency_daily` | **Não** — agregam por `type`/`status`/`source_institution` | n/a | irrelevante |
 
@@ -65,7 +67,7 @@ tabela de 500.000 linhas não comprimida — segundos, não horas, e nenhum
 Implementado em `init/timescaledb/05_lgpd_erasure.sql`
 (`lgpd_erasure_log` + `PROCEDURE anonimizar_conta`), demonstrado em
 `desafio-1/scripts/lgpd-erasure-demo.sh` sobre conta sintética descartável
-(mesmo padrão do `retention-demo.sh` da etapa 08 — nunca uma das 500.000
+(mesmo padrão do `retention-demo.sh` — nunca uma das 500.000
 contas reais do seed).
 
 ### Passo 1 — anonimizar na origem
@@ -103,9 +105,9 @@ por definição.
 
 ### Passo 2 — propagar ao ClickHouse: **não é necessário, e isso foi verificado**
 
-> **Executado de ponta a ponta em 2026-08-04** (etapa 16), com o ClickHouse e o
-> pipeline de pé. A conclusão inverteu o que este documento supunha quando foi
-> escrito na etapa 09: **não há PII para propagar**.
+> **Executado de ponta a ponta em 2026-08-04**, com o ClickHouse e o pipeline de
+> pé. A conclusão inverteu o que este documento supunha quando foi escrito, antes
+> de o motor analítico existir: **não há PII para propagar**.
 
 **O que a verificação mostrou.** Nenhuma tabela de `trio_analytics` guarda dado
 pessoal. A varredura por colunas candidatas devolve apenas nomes de
@@ -128,7 +130,7 @@ para o ClickHouse. É consequência direta da decisão de schema, não sorte.
 
 | # | Ação | Resultado |
 |---|---|---|
-| 1 | Criar conta sintética (`id=1000112`) + 1 transação | `holder_name='Titular Teste Etapa 16'`, `holder_document='99988877766'` |
+| 1 | Criar conta sintética (`id=1000112`) + 1 transação | `holder_name='Titular Teste LGPD'`, `holder_document='99988877766'` |
 | 2 | Esperar o sync-worker propagar | Linha chega ao ClickHouse com `source_account_id=1000112`, `amount=123.45` — **sem nome, sem documento** |
 | 3 | `CALL anonimizar_conta(1000112, ...)` | Origem: `ANONIMIZADO` / `ANON-b596276…` |
 | 4 | Reconferir o ClickHouse | Linha **inalterada** — nada a anonimizar, porque nada de pessoal havia chegado |
@@ -140,7 +142,7 @@ para o ClickHouse. É consequência direta da decisão de schema, não sorte.
 melhor procedimento de propagação é o que não precisa existir: se a PII nunca
 sai da origem, a exclusão é atômica em um lugar só, e não há janela em que o
 dado esteja apagado no transacional e vivo no analítico. Foi por isso que
-`transactions` e os CAggs foram desenhados livres de PII desde S01.
+`transactions` e os CAggs foram desenhados livres de PII desde o primeiro schema.
 
 **Quando a propagação seria necessária** — e o procedimento continua válido para
 esse caso: se algum dia uma dimensão com PII for materializada no ClickHouse
@@ -255,7 +257,7 @@ repete o ciclo caro de descomprimir/recomprimir. B resolve o problema mais
 difícil (backups) mas custa complexidade operacional (gestão de chave por
 titular) que não se justifica sem um volume de solicitações que exija isso.
 C tem o menor custo operacional contínuo e resolve o problema **antes de ele
-existir**: a decisão foi tomada no schema (etapa 04), não em resposta a uma
+existir**: a decisão foi tomada no schema, não em resposta a uma
 solicitação real.
 
 ## Tabela de auditoria
@@ -291,8 +293,9 @@ conforme política de retenção.
 ## Checklist de verificação
 
 Executado por `desafio-1/scripts/lgpd-erasure-demo.sh`. **Os 5 itens são
-verificáveis hoje** — na etapa 09 os itens 3 e 4 dependiam de etapas futuras;
-com o ClickHouse e o pipeline de pé, foram executados na etapa 16:
+verificáveis hoje** — quando este documento foi escrito, os itens 3 e 4 ainda
+dependiam de componentes que não existiam; com o ClickHouse e o pipeline de pé,
+foram executados:
 
 ```sql
 -- 1. A PII sumiu da origem?
@@ -303,7 +306,7 @@ SELECT holder_name, holder_document FROM accounts WHERE id = :account_id;
 SELECT count(*) FROM transactions WHERE source_account_id = :account_id;
 -- inalterado
 
--- 3. E no ClickHouse? [VERIFICADO na etapa 16 — nada a propagar]
+-- 3. E no ClickHouse? [VERIFICADO — nada a propagar]
 --    Não existe accounts_dim: nenhuma tabela de trio_analytics guarda PII.
 --    A verificação é pela ausência, e ela é positiva:
 SELECT name FROM system.columns

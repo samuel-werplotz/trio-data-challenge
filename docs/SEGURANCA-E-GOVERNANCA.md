@@ -1,5 +1,7 @@
 # Segurança e governança
 
+[← Voltar ao README](../README.md)
+
 O cliente é **Instituição de Pagamento autorizada pelo Banco Central**. Isso
 muda o padrão: não basta a plataforma funcionar, ela precisa responder *quem
 acessou o quê, quando, e sob qual base legal* — e sobreviver a uma fiscalização.
@@ -16,9 +18,9 @@ sem dizer que é.
 A resposta curta é a coisa mais importante deste documento:
 
 > **PII existe em uma única tabela — `accounts`, no TimescaleDB.**
-> `transactions` e os 2 CAggs são livres de dado pessoal por desenho (S01), e o
+> `transactions` e os 2 CAggs são livres de dado pessoal por desenho, e o
 > **ClickHouse inteiro não guarda nenhuma coluna de PII** — verificado por
-> varredura de `system.columns` na etapa 16. A transação referencia o titular
+> varredura de `system.columns`. A transação referencia o titular
 > apenas por `source_account_id` (inteiro).
 
 Isso encurta a superfície de auditoria a uma tabela em um banco. O custo dessa
@@ -134,19 +136,29 @@ produção. Trocá-la por variável não aumentaria segurança nenhuma aqui e
 quebraria o critério de aceite nº 1 (`docker compose up -d` sem configuração
 prévia). **Declarado em vez de escondido.**
 
-### Uma chave privada no histórico do git — declarada
+### A chave privada do MinIO — fora do versionamento, por construção
 
-A varredura da etapa 21 encontrou `desafio-3/backup/minio-certs/private.key` no
-histórico: foi commitada em `f8a0e2e` e retirada do versionamento em `17a90dc`.
-**Remover num commit posterior não apaga do histórico** — ela continua
-recuperável por `git log`.
+`desafio-3/backup/minio-certs/private.key` está no `.gitignore` e **nunca entrou
+no histórico**. Verificável:
+
+```bash
+git log --all -- desafio-3/backup/minio-certs/private.key   # sem resultado
+git ls-files desafio-3/backup/minio-certs/                  # só public.crt
+```
+
+É por isso que `gen-certs.sh` é obrigatório antes do primeiro `up` num clone
+limpo: a chave não vem no repositório, ela é gerada na máquina de quem clona.
 
 | | |
 |---|---|
 | O que é | Chave de um certificado **autoassinado**, gerado localmente para o MinIO do `docker compose` |
-| Onde vale | Só neste ambiente. Não protege nada fora dele e não tem par em produção |
-| Risco real | **Nenhum** — não dá acesso a sistema, dado ou conta |
-| Por que não reescrevi o histórico | `filter-branch`/`filter-repo` reescreveria os 30 commits e destruiria o rastro do processo, que é evidência de como a entrega foi construída. Trocar um ativo real por um risco nulo é mau negócio |
+| Onde vale | Só no ambiente de quem gerou. Não protege nada fora dele e não tem par em produção |
+| Como se obtém | `bash desafio-3/backup/gen-certs.sh` — segundos, uma vez por clone |
+| Em produção | Certificado de CA real; a chave vive no Secrets Manager, nunca em repositório |
+
+**O `public.crt` está versionado de propósito** — certificado público é para ser
+distribuído, e é o que permite aos dois Postgres confiarem no MinIO sem
+configuração manual.
 
 **Se fosse uma credencial de verdade, a decisão seria a oposta**: rotacionar o
 segredo primeiro (o que invalida o que vazou), depois reescrever o histórico, e
@@ -157,7 +169,7 @@ tratar como incidente. O critério é o que a chave **abre** — aqui, nada.
 
 ## 4. Auditoria de acesso a PII
 
-O projeto registrava o **apagamento** (`lgpd_erasure_log`, etapa 09) e não
+O projeto registrava o **apagamento** (`lgpd_erasure_log`) e não
 registrava a **leitura** — que é a primeira pergunta de uma fiscalização.
 
 ### O que foi implementado
@@ -190,8 +202,7 @@ não deve conseguir existir.
 
 **`pgaudit` seria o caminho canônico e não está disponível**: a extensão não
 consta de `pg_available_extensions` na imagem fixada, e trocar a imagem violaria
-a reprodutibilidade que é requisito do desafio (mesma decisão do `percentile_agg`
-na etapa 08).
+a reprodutibilidade que é requisito do desafio (mesma decisão do `percentile_agg`).
 
 Consequência honesta: esta trilha cobre o **caminho auditado**. Quem tiver
 `SELECT` direto em `accounts` — hoje, o superusuário `trio` — lê sem deixar
@@ -218,7 +229,7 @@ servidor e não depende de o chamador cooperar.
 containers exigiria distribuir CA para 6 serviços e quebraria o `docker compose
 up -d` de um comando (critério de aceite nº 1). A configuração de produção é
 declarada aqui em vez de simulada com um TLS que não se pareceria com o real —
-mesma decisão do alerta `StorageAlto` na etapa 15.
+mesma decisão tomada no alerta `StorageAlto`.
 
 **A chave é gerenciada pelo cliente (CMK), não pela AWS (chave de serviço)**:
 numa IP regulada, poder revogar a chave é o que dá controle efetivo sobre o dado

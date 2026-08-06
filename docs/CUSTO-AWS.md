@@ -1,5 +1,7 @@
 # Custo estimado em AWS — TCO da plataforma
 
+[← Voltar ao README](../README.md)
+
 > **Estimativa, não cotação.** Preços de tabela pública `us-east-1`
 > (Norte da Virgínia), consultados em **agosto de 2026**, sem Savings Plans,
 > Reserved Instances ou desconto de contrato. Preço muda; número sem data
@@ -111,7 +113,7 @@ fila custaria quase tanto quanto todo o resto junto.
 
 Não é economia gratuita: sem fila, um pico que exceda a janela do micro-batch
 vira lag, não buffer. O gatilho de reversão está no ADR (movimento 4), e o
-teste de saturação da etapa 20 é o que dirá em qual patamar ele arma.
+teste de saturação é o que dirá em qual patamar ele arma.
 
 ---
 
@@ -156,7 +158,7 @@ As premissas estão em cada linha justamente para serem recalculadas. O que mais
 move o total, em ordem:
 
 1. **Classe da instância do ClickHouse** — 33% do cenário A. Ajustar depois do
-   teste de saturação da etapa 20, que dirá se `m6i.2xlarge` é folgado ou justo.
+   teste de saturação, que dirá se `m6i.2xlarge` é folgado ou justo.
 2. **ACU médio do Aurora** — Serverless v2 cobra pelo que usa; o valor médio só
    se conhece com uma semana de produção.
 3. **Reserved Instances / Savings Plans** — 1 ano sem entrada corta ~30% do

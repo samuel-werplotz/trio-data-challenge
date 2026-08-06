@@ -1,5 +1,7 @@
 # ADR — Pipeline analítico de transações: TimescaleDB → ClickHouse
 
+[← Voltar ao README](../README.md)
+
 **Status:** Aceito · **Data:** 2026-08-04 · **Escopo:** Desafio 2, Partes B e C
 
 > Este ADR responde as quatro perguntas do PDF § 4.2 C.2 (uma por seção `##`) e
