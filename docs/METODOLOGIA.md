@@ -16,7 +16,7 @@
 
 ## 1. A divisão de responsabilidade
 
-A regra que governou os 3 dias, em uma linha:
+A regra que governou a execução, em uma linha:
 
 > **A IA escreve. A arquitetura decide. A medição julga.**
 
@@ -169,7 +169,7 @@ esconder o uso:
 | Ganho real | Comentário |
 |---|---|
 | **Velocidade de boilerplate** | Dockerfiles, parsing de argumentos, formatação de saída de script |
-| **Densidade de documentação** | 4.000 linhas de markdown em 3 dias não sairiam à mão |
+| **Densidade de documentação** | 4.000 linhas de markdown não sairiam à mão no prazo |
 | **Varredura de casos de borda** | Sugeriu verificações que eu teria deixado para depois |
 | **Primeira versão de SQL complexo** | As window functions da Q4 saíram mais rápido |
 
@@ -211,21 +211,16 @@ de processo, não entregável.
 
 ```bash
 git log --oneline
-git log --format="%ad" --date=short | sort | uniq -c   # commits por dia
 ```
 
-**34 commits em 3 dias corridos** — do primeiro (`1ee1640`, 03/08 21:27) ao
-último (`ff58a41`, 05/08 18:33). Entre eles o `328e8a9`, uma etapa inteira
-**descartada** (o pipeline CDC). O histórico mostra o que foi construído, em que
-ordem, e o que foi jogado fora — sem depender da minha palavra, que é a
-propriedade que importa aqui.
+Mais de trinta commits na ordem em que o trabalho aconteceu, incluindo o
+`328e8a9` — uma etapa inteira **descartada** (o pipeline CDC). O histórico mostra
+o que foi construído, em que ordem, e o que foi jogado fora — sem depender da
+minha palavra, que é a propriedade que importa aqui.
 
-**Sobre o prazo:** 3 dias é o que os carimbos de tempo mostram, e o ritmo só foi
-possível porque a especificação estava fechada antes (§ 2) e porque a IA
-absorveu o boilerplate (§ 6). O que **não** foi comprimido é o passo 5 do ciclo:
-cada número deste repositório foi medido contra os 10 milhões de linhas. Os três
-defeitos da § 4 apareceram justamente aí — velocidade sem medição teria entregue
-os três em silêncio.
+O que o `git log` **não** comprime é o passo 5 do ciclo: cada número deste
+repositório foi medido contra os 10 milhões de linhas. Os três defeitos da § 4
+apareceram justamente aí.
 
 ---
 
